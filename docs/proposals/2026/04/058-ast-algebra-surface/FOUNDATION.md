@@ -327,7 +327,7 @@ This unlocks the algebra's real power for self-referential reasoning:
 
 ```scheme
 ;; A program becomes an atomizable value:
-(:wat::algebra::Atom trained-model-program)   ;; :Atom<Holon>
+(:wat::algebra::Atom trained-model-program)   ;; :Atom<holon::HolonAST>
 
 ;; Programs go in libraries keyed by identity:
 (:wat::std::HashMap
@@ -405,7 +405,7 @@ Every geometric operation on holon vectors applies directly to program vectors:
 
 (topk-similar query corpus 5)     ; five closest programs to query
 
-(:wat::core::filter (:wat::core::lambda ((p :Holon) -> :bool)
+(:wat::core::filter (:wat::core::lambda ((p :holon::HolonAST) -> :bool)
           (:wat::core::> (presence p query-vector) (noise-floor d)))
         program-library)          ; all programs that align with a target direction
 ```
@@ -475,11 +475,11 @@ User input to a wat program is data. It flows through the algebra as a value:
 
 ```scheme
 ;; SAFE — input is data, operated on as data:
-(:wat::core::define (:my::app::process (input :Holon) -> :Holon)
+(:wat::core::define (:my::app::process (input :holon::HolonAST) -> :holon::HolonAST)
   (:wat::std::get input (:wat::algebra::Atom :field)))
 
 ;; SAFE — input composed into a larger data structure:
-(:wat::core::define (:my::app::store-for-later (input :Holon) -> :Holon)
+(:wat::core::define (:my::app::store-for-later (input :holon::HolonAST) -> :holon::HolonAST)
   (:wat::std::HashMap (:wat::core::vec (:wat::core::vec (:wat::algebra::Atom :payload) input))))
 ```
 
@@ -489,7 +489,7 @@ The injection vector — evaluating user input as code — exists only when the 
 
 ```scheme
 ;; UNSAFE — the programmer consciously chose to evaluate user input:
-(:wat::core::define (:my::app::dangerous (user-code :Holon) -> :Holon)
+(:wat::core::define (:my::app::dangerous (user-code :holon::HolonAST) -> :holon::HolonAST)
   (eval user-code))
 ```
 
@@ -639,7 +639,7 @@ redef-mode = :strict         ;; default — name collisions halt startup
 ```scheme
 ;; Build an AST at runtime — perhaps from parsed user input, perhaps from
 ;; a pattern-matching result, perhaps from an LLM's output:
-(:wat::core::let (((composed :Vec<Holon>)
+(:wat::core::let (((composed :Vec<holon::HolonAST>)
        (:wat::core::vec ':wat::std::Difference
              (:wat::core::vec ':wat::algebra::Atom :observed)
              (:wat::core::vec ':wat::algebra::Atom :baseline))))
@@ -674,7 +674,7 @@ This is a SAFE `eval`. An attacker who supplies a malicious AST cannot invoke ar
 
 ```scheme
 (:wat::core::let (((transform :fn(Holon)->Holon)
-       (:wat::core::lambda ((t :Holon) -> :Holon)
+       (:wat::core::lambda ((t :holon::HolonAST) -> :holon::HolonAST)
          (:wat::algebra::Bundle (:wat::core::vec t (:wat::algebra::Atom :tagged))))))
   (transform (:wat::algebra::Atom :input)))
 ```
@@ -831,11 +831,11 @@ Parameters that previously threaded through function signatures disappear. A fun
 
 ```scheme
 ;; Before — d threaded:
-(:wat::core::define (:my::app::encode-price (p :f64) (d :usize) -> :Holon)
+(:wat::core::define (:my::app::encode-price (p :f64) (d :usize) -> :holon::HolonAST)
   (:wat::algebra::Thermometer p 0.0 100000.0 d))
 
 ;; After — d read from ambient config inside Thermometer's implementation:
-(:wat::core::define (:my::app::encode-price (p :f64) -> :Holon)
+(:wat::core::define (:my::app::encode-price (p :f64) -> :holon::HolonAST)
   (:wat::algebra::Thermometer p 0.0 100000.0))
 ```
 
@@ -1469,7 +1469,7 @@ Because memoization is a common pattern — and applications want it in two diff
 
 Both are programmable. The caller supplies:
 
-- The key type (any hashable type — `:Holon`, `:String`, `:i64`, user-defined)
+- The key type (any hashable type — `:holon::HolonAST`, `:String`, `:i64`, user-defined)
 - The value type (any serializable type)
 - The capacity policy (LRU, LFU, unbounded, application-specific)
 - The setup closure (initialize whatever backing store it needs)
@@ -1761,7 +1761,7 @@ None of these need to be primitive. Step (1) is a `:wat::core::map`. Step (2) is
   (:wat::core::lambda (entry)
     (:wat::core::vec (:wat::core::first entry)
                      (presence (:wat::core::first entry) query-vector))))
-;; → :Vec<Pair<Holon,f64>>   — every entry paired with its overlay score
+;; → :Vec<Pair<holon::HolonAST,f64>>   — every entry paired with its overlay score
 ```
 
 No `Cleanup` in the core. The algebra returned the full list of (entry, presence-score) pairs. The caller now decides: top-1 (a fold with max-by-score), top-k (a sort then take), threshold filter (keep entries above `5/sqrt(d)` — the substrate noise floor), a weighted mixture of matches (a Bundle with Blend coefficients), or simply "pass the whole list onward" for a downstream stage. Four different policies, four different caller expressions, same substrate.
@@ -1773,15 +1773,15 @@ No `Cleanup` in the core. The algebra returned the full list of (entry, presence
 Every presence query — membership, retrieval, matching, recognition — returns `:f64`, not `:bool`:
 
 ```scheme
-(:wat::core::define (:my::app::member? (set-thought :Holon) (candidate :Holon) -> :f64)
+(:wat::core::define (:my::app::member? (set-thought :holon::HolonAST) (candidate :holon::HolonAST) -> :f64)
   (presence candidate (encode set-thought)))
 
-(:wat::core::define (:my::app::contains? (bundle-thought :Holon) (candidate :Holon) -> :f64)
+(:wat::core::define (:my::app::contains? (bundle-thought :holon::HolonAST) (candidate :holon::HolonAST) -> :f64)
   (presence candidate (encode bundle-thought)))
 
 (:wat::core::define (:my::app::recognize (observation :Vector)
-                                     (engram-lib :Holon)
-                                     -> :Vec<Pair<Holon,f64>>)
+                                     (engram-lib :holon::HolonAST)
+                                     -> :Vec<Pair<holon::HolonAST,f64>>)
   ;; Return every engram with its presence score. The caller decides
   ;; what to do with the list — top-1, above-threshold, weighted
   ;; bundle, whatever their application demands.
@@ -1798,12 +1798,12 @@ Uniform. Scalar-valued. The caller decides when a score is "enough," and which o
 For data structures where the key is EXACT — not a similarity match — the operation is AST-walking, not presence measurement:
 
 ```scheme
-(:wat::std::get (map-thought :Holon) (key :Holon) -> :Holon)
+(:wat::std::get (map-thought :holon::HolonAST) (key :holon::HolonAST) -> :holon::HolonAST)
 ;; Look up in the HashMap's runtime backing (Rust HashMap), find the entry whose key equals the query key
 ;; (by AST equality, not by vector similarity), return the value AST.
 ```
 
-This is structural retrieval. It uses no vectors, no cosine, no threshold. The runtime materializes the container's efficient Rust backing (HashMap for O(1) lookup, Vec for O(1) indexing, HashSet for O(1) membership); `get` goes through that backing. Succeeds or fails based on AST equality of the locator, not on vector similarity. Returns `:Option<Holon>` — `(Some v)` on hit, `:None` on miss.
+This is structural retrieval. It uses no vectors, no cosine, no threshold. The runtime materializes the container's efficient Rust backing (HashMap for O(1) lookup, Vec for O(1) indexing, HashSet for O(1) membership); `get` goes through that backing. Succeeds or fails based on AST equality of the locator, not on vector similarity. Returns `:Option<holon::HolonAST>` — `(Some v)` on hit, `:None` on miss.
 
 The algebra has two retrieval regimes, clean-separated:
 
@@ -1840,12 +1840,12 @@ These readings coexist. You can do work on either side:
 ```scheme
 ;; Filter a library of programs by alignment with a query:
 (:wat::core::let ((candidates (:wat::core::filter
-                    (:wat::core::lambda ((p :Holon) -> :bool)
+                    (:wat::core::lambda ((p :holon::HolonAST) -> :bool)
                       (:wat::core::> (presence query (encode p)) (noise-floor d)))
                     program-library)))
 
   ;; Run the candidates that aligned:
-  (:wat::core::map (:wat::core::lambda ((p :Holon) -> :Holon) (eval p))
+  (:wat::core::map (:wat::core::lambda ((p :holon::HolonAST) -> :holon::HolonAST) (eval p))
        candidates))
 ```
 
@@ -1912,7 +1912,7 @@ The Rust evaluator runs the wat interpreter. Given a `(defn ...)` and a call sit
 Without type annotations, the evaluator would need to either infer types at every call (slow, lossy) or accept runtime failures (fragile). Typed definitions make dispatch deterministic and verification static.
 
 ```scheme
-(:wat::core::define (:my::ns::amplify (x :Holon) (y :Holon) (s :f64) -> :Holon)
+(:wat::core::define (:my::ns::amplify (x :holon::HolonAST) (y :holon::HolonAST) (s :f64) -> :holon::HolonAST)
   (:wat::algebra::Blend x y 1 s))
 ```
 
@@ -1928,7 +1928,7 @@ The Rust evaluator checks: call-site argument types match parameter types; body'
 
 The type system mirrors the algebra's kinds:
 
-- `:Holon` — any HolonAST node
+- `:holon::HolonAST` — any HolonAST node
 - `:Atom` — specifically an Atom (to read literals via `atom-value`)
 - `:f64`, `:f32` — floating-point primitives (Blend weights, scalar functions)
 - `:i32`, `:i64`, `:usize`, … — integer primitives (Permute steps, nth indices, counts)
@@ -1979,10 +1979,10 @@ A `(define ...)` form is not a specification. It is a **function**. When the wat
 ;; Runs. Returns 7.
 ```
 
-Bodies of type `:Holon` are no different — they execute and return HolonAST values:
+Bodies of type `:holon::HolonAST` are no different — they execute and return HolonAST values:
 
 ```scheme
-(:wat::core::define (:my::app::hello-world (name :Atom) -> :Holon)
+(:wat::core::define (:my::app::hello-world (name :Atom) -> :holon::HolonAST)
   (:wat::std::Sequential (:wat::core::vec (:wat::algebra::Atom "hello") name)))
 
 (:my::app::hello-world (:wat::algebra::Atom :watmin))
@@ -2023,11 +2023,11 @@ Until then, the AST is just data — nested nodes referencing Atoms, Binds, Bund
 
 ### What this means for the two cores
 
-- **Algebra Core** UpperCase forms (`Atom`, `Bind`, `Bundle`, ...) are AST constructors. They return `:Holon`.
+- **Algebra Core** UpperCase forms (`Atom`, `Bind`, `Bundle`, ...) are AST constructors. They return `:holon::HolonAST`.
 - **Language Core** forms (`define`, `lambda`, `let`, `if`, ...) are the machinery that runs. They define and invoke functions.
 - **Stdlib** `(define ...)` forms compose UpperCase expressions inside function bodies. They produce holons when called.
 
-The `:Holon` type is not "the vector" — it is "the HolonAST node that can BE a vector when realized." Users compose holons freely; the machine realizes lazily.
+The `:holon::HolonAST` type is not "the vector" — it is "the HolonAST node that can BE a vector when realized." Users compose holons freely; the machine realizes lazily.
 
 ---
 
@@ -2316,7 +2316,7 @@ The language core from 058 and this FOUNDATION polish pass:
 
 Plus the syntactic feature pervading all of the above:
 
-- **Type annotations** (`:Holon`, `:f64`, `:i32`, `:bool`, `:Vec<T>`, `:fn(args)->return`, keyword-path user types) — required on `define` and `lambda` signatures; carried on `struct`/`enum`/`newtype` field declarations. `:Holon` is an enum with 6 variants (Atom, Bind, Bundle, Permute, Thermometer, Blend) — functions operating on `:Holon` pattern-match to select variant behavior.
+- **Type annotations** (`:holon::HolonAST`, `:f64`, `:i32`, `:bool`, `:Vec<T>`, `:fn(args)->return`, keyword-path user types) — required on `define` and `lambda` signatures; carried on `struct`/`enum`/`newtype` field declarations. `:holon::HolonAST` is an enum with 6 variants (Atom, Bind, Bundle, Permute, Thermometer, Blend) — functions operating on `:holon::HolonAST` pattern-match to select variant behavior.
 
 Other host-Lisp forms (`let`, `let*`, `if`, `cond`, `match`, `begin`, arithmetic, comparison, etc.) are **substrate-inherited** — wat inherits them from its Lisp host rather than defining them anew. They are language tools, but not novel in wat specifically.
 
@@ -2455,11 +2455,11 @@ This section freezes the full algebra in its target shape (post-058). Core forms
 Orthogonal to the six HolonAST-producing core forms, the algebra exposes scalar-returning measurements as a separate tier. These operate on Holons but return `:f64`, not a new Holon:
 
 ```scheme
-(:wat::algebra::cosine a b)     ;; :Holon :Holon -> :f64
+(:wat::algebra::cosine a b)     ;; :holon::HolonAST :holon::HolonAST -> :f64
 ;; Cosine similarity. Returns dot(a, b) / (norm(a) * norm(b)).
 ;; Used for presence measurement against the substrate noise floor (5/sqrt(d)).
 
-(:wat::algebra::dot a b)        ;; :Holon :Holon -> :f64
+(:wat::algebra::dot a b)        ;; :holon::HolonAST :holon::HolonAST -> :f64
 ;; Dot product. Elementwise multiply, sum reduction.
 ;; Used by stdlib's Reject/Project for computed Gram-Schmidt coefficients;
 ;; available to applications for any scalar measurement on vector pairs.
@@ -2575,25 +2575,25 @@ Retrieval is NOT a core form. Presence is measured by `cosine(encode(target), re
 ;;   HashSet  ↔  std::collections::HashSet
 ;; One name per concept across algebra, type annotation, and runtime backing.
 
-(:wat::core::define (:wat::std::HashMap (pairs :Vec<Pair<Holon,Holon>>) -> :Holon)
+(:wat::core::define (:wat::std::HashMap (pairs :Vec<Pair<holon::HolonAST,holon::HolonAST>>) -> :holon::HolonAST)
   ;; Key-value container. Each pair becomes a Bind of key to value; all pairs
   ;; bundled together. Runtime backs it with Rust's HashMap for O(1) lookups.
   (:wat::algebra::Bundle
-    (:wat::core::map (:wat::core::lambda ((pair :(Holon,Holon)) -> :Holon)
+    (:wat::core::map (:wat::core::lambda ((pair :(Holon,Holon)) -> :holon::HolonAST)
            (:wat::algebra::Bind (:wat::core::first pair) (:wat::core::second pair)))
          pairs)))
 
-(:wat::core::define (:wat::std::Vec (items :Vec<Holon>) -> :Holon)
+(:wat::core::define (:wat::std::Vec (items :Vec<holon::HolonAST>) -> :holon::HolonAST)
   ;; Indexed container. Each item bound to its position as an integer atom.
   ;; (Atom i) is the atom whose literal IS the integer i. Runtime backs it
   ;; with Rust's Vec for O(1) indexing.
   (:wat::algebra::Bundle
     (map-indexed
-      (:wat::core::lambda ((i :usize) (item :Holon) -> :Holon)
+      (:wat::core::lambda ((i :usize) (item :holon::HolonAST) -> :holon::HolonAST)
         (:wat::algebra::Bind (:wat::algebra::Atom i) item))
       items)))
 
-(:wat::core::define (:wat::std::HashSet (items :Vec<Holon>) -> :Holon)
+(:wat::core::define (:wat::std::HashSet (items :Vec<holon::HolonAST>) -> :holon::HolonAST)
   ;; Unordered collection. Bundle of items; runtime backs it with Rust's
   ;; HashSet for O(1) membership. Presence is structural (via `get`) or
   ;; similarity-measured (via `presence`), caller's choice.
@@ -2601,7 +2601,7 @@ Retrieval is NOT a core form. Presence is measured by `cosine(encode(target), re
 
 ;; --- get: unified structural retrieval ---
 ;;
-;; Works uniformly across HashMap, Vec, HashSet. Returns :Option<Holon>.
+;; Works uniformly across HashMap, Vec, HashSet. Returns :Option<holon::HolonAST>.
 ;; Direct lookup through the container's efficient Rust backing — no walk,
 ;; no cosine, no cleanup. The AST describes the container; the runtime
 ;; materializes the efficient backing (HashMap, Vec, HashSet) for O(1)
@@ -2612,7 +2612,7 @@ Retrieval is NOT a core form. Presence is measured by `cosine(encode(target), re
 ;;   (:wat::std::get (c :Vec<T>)       (i :usize))  -> :Option<T>   ;; index into vec
 ;;   (:wat::std::get (c :HashSet<T>)   (x :T))      -> :Option<T>   ;; membership → Some(x) or None
 
-(:wat::core::define (:wat::std::get (container :Holon) (locator :Holon) -> :Option<Holon>)
+(:wat::core::define (:wat::std::get (container :holon::HolonAST) (locator :holon::HolonAST) -> :Option<holon::HolonAST>)
   ;; Dispatches on the container's runtime backing:
   ;;   HashMap → HashMap::get(locator) — hash lookup, O(1) avg
   ;;   Vec     → Vec[locator]          — direct index, O(1)
@@ -2776,7 +2776,7 @@ All eight forms are loaded at startup. The wat-vm distinguishes them by what kin
 ;;   :f64 :f32 :i8 :i16 :i32 :i64 :i128 :u8 :u16 :u32 :u64 :u128
 ;;   :usize :isize :bool :char :String :&str :()
 ;;
-;; Algebra — :Holon is an enum; :Atom, Bind, Bundle, Permute,
+;; Algebra — :holon::HolonAST is an enum; :Atom, Bind, Bundle, Permute,
 ;;   :Thermometer, Blend
 ;;   are its seven variants (not separate subtypes). Pattern-match to
 ;;   select variant behavior.
@@ -2812,8 +2812,8 @@ All eight forms are loaded at startup. The wat-vm distinguishes them by what kin
 ;;   :HashMap<K,V>
 ;;   :fn(List<i32>)->Option<f64>
 ;;   :HashMap<String,fn(i32)->i32>
-;;   :Result<HashMap<Atom,Holon>,String>
-;;   :Atom<Holon>
+;;   :Result<HashMap<Atom,holon::HolonAST>,String>
+;;   :Atom<holon::HolonAST>
 ;;   :Atom<i64>
 ;;
 ;; --- ILLEGAL: a second ':' inside a parametric type ---
@@ -2823,18 +2823,18 @@ All eight forms are loaded at startup. The wat-vm distinguishes them by what kin
 ;; bare Rust symbol names — do NOT re-quote them.
 ;;
 ;; WRONG (two colons in one type token):
-;;   :Atom<:Holon>                 ;; ':Holon' is a re-quote; illegal
+;;   :Atom<:holon::HolonAST>                 ;; ':holon::HolonAST' is a re-quote; illegal
 ;;   :Vec<:T>                     ;; ':T' is a re-quote; illegal
 ;;   :HashMap<:K,:V>               ;; ':K,:V' are re-quotes; illegal
 ;;   :crossbeam_channel::Receiver<:wat::kernel::Signal>  ;; same mistake
 ;;   :Vec<:(Holon,f64)>       ;; same mistake at any nesting depth
 ;;
 ;; RIGHT (one colon at the start, bare Rust symbols inside):
-;;   :Atom<Holon>
+;;   :Atom<holon::HolonAST>
 ;;   :Vec<T>
 ;;   :HashMap<K,V>
 ;;   :crossbeam_channel::Receiver<wat/kernel/Signal>
-;;   :Vec<Pair<Holon,f64>>
+;;   :Vec<Pair<holon::HolonAST,f64>>
 ;;
 ;; Rule of thumb: the ':' opens the quote; everything inside the matched
 ;; brackets up to the balancing closer is part of the SAME symbol. A
@@ -2842,11 +2842,11 @@ All eight forms are loaded at startup. The wat-vm distinguishes them by what kin
 ;; inside a quoted expression.
 ;;
 ;; NO :Any. Every case that wanted :Any has a principled replacement:
-;;   - Universal algebra value   →  :Holon
+;;   - Universal algebra value   →  :holon::HolonAST
 ;;   - Heterogeneous primitives  →  :Union<T,U,V>
 ;;   - Generic container elem    →  parametric T, K, V, ...
-;;   - eval's return             →  :fn(:Holon)->Holon  (or parametric)
-;;   - Engram library entries    →  :Vec<Pair<Holon,Vector>>
+;;   - eval's return             →  :fn(:holon::HolonAST)->Holon  (or parametric)
+;;   - Engram library entries    →  :Vec<Pair<holon::HolonAST,Vector>>
 ;;
 ;; NO null. Rust doesn't have null; wat doesn't have null.
 ;;   - Optional value            →  :Option<T>  with variants :None and (Some value)
@@ -3092,7 +3092,7 @@ The implementation choice is outside FOUNDATION's scope. FOUNDATION declares the
 ;; Unbind REJECTED (058-024) — identity alias for Bind; userland.
 ```
 
-Plus lowercase helpers: `get` (unified structural retrieval across HashMap / Vec / HashSet, returns `:Option<Holon>`) and `atom-value` (direct field access on an Atom AST node). These are stdlib but not UpperCase — they're accessors, not AST constructors. `nth` is retired — `(get vec i)` replaces it.
+Plus lowercase helpers: `get` (unified structural retrieval across HashMap / Vec / HashSet, returns `:Option<holon::HolonAST>`) and `atom-value` (direct field access on an Atom AST node). These are stdlib but not UpperCase — they're accessors, not AST constructors. `nth` is retired — `(get vec i)` replaces it.
 
 ### Language Core (8 forms)
 
@@ -3119,7 +3119,7 @@ Compile-time forms (materialized into the Rust-backed wat-vm binary; cannot be r
 Syntactic feature pervading all of the above:
 
 ```scheme
-type annotations               ; 058-030  — :Holon, Atom, Rust primitives, parametric, user keyword-path
+type annotations               ; 058-030  — :holon::HolonAST, Atom, Rust primitives, parametric, user keyword-path
 ```
 
 Language core is minimal by criterion: just enough to make the algebra stdlib exist as runnable code, define user types statically, load both phases with cryptographic trust, and dispatch correctly. Everything else is host-inherited from Lisp or belongs in stdlib.

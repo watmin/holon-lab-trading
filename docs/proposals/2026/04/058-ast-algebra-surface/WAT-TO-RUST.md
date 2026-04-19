@@ -183,7 +183,7 @@ By the time the wat-to-rust compiler sees the AST, `defmacro` expansion has alre
 ### User `define`s — Rust functions
 
 ```scheme
-(:wat::core::define (:my::app::process (c :Candle) -> :Holon)
+(:wat::core::define (:my::app::process (c :Candle) -> :holon::HolonAST)
   (:wat::algebra::Bind
     (:wat::algebra::Atom :open-price)
     (:wat::algebra::Thermometer (:wat::std::get c :open) 0 100000)))

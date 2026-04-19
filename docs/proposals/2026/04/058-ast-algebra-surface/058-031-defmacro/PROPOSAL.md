@@ -18,7 +18,7 @@
 
 The body is a Lisp expression that evaluates AT PARSE TIME to produce a new AST. The resulting AST replaces the invocation.
 
-Every macro parameter carries a concrete value type `T` via the `:AST<T>` wrapper (per 058-032). `T` is the value type the argument expression must produce — `:Holon`, `:f64`, `:Vec<Holon>`, etc. Bare `:AST` without `<T>` is not a valid parameter type; the language enforces the same discipline on macros as on every other typed position.
+Every macro parameter carries a concrete value type `T` via the `:AST<T>` wrapper (per 058-032). `T` is the value type the argument expression must produce — `:holon::HolonAST`, `:f64`, `:Vec<holon::HolonAST>`, etc. Bare `:AST` without `<T>` is not a valid parameter type; the language enforces the same discipline on macros as on every other typed position.
 
 ## Why This Form Exists
 
@@ -92,7 +92,7 @@ The `expansion-body` is a Lisp expression. It can use:
 **Pure alias — Concurrent:**
 
 ```scheme
-(:wat::core::defmacro (:wat::std::Concurrent (xs :AST<List<Holon>>) -> :AST<Holon>)
+(:wat::core::defmacro (:wat::std::Concurrent (xs :AST<List<holon::HolonAST>>) -> :AST<holon::HolonAST>)
   `(:wat::algebra::Bundle ,xs))
 
 ;; User writes:
@@ -105,7 +105,7 @@ The `expansion-body` is a Lisp expression. It can use:
 **Transforming — Subtract:**
 
 ```scheme
-(:wat::core::defmacro (:wat::std::Subtract (x :AST<Holon>) (y :AST<Holon>) -> :AST<Holon>)
+(:wat::core::defmacro (:wat::std::Subtract (x :AST<holon::HolonAST>) (y :AST<holon::HolonAST>) -> :AST<holon::HolonAST>)
   `(:wat::algebra::Blend ,x ,y 1 -1))
 
 ;; User writes:
@@ -118,7 +118,7 @@ The `expansion-body` is a Lisp expression. It can use:
 **Parameterized — Amplify:**
 
 ```scheme
-(:wat::core::defmacro (:wat::std::Amplify (x :AST<Holon>) (y :AST<Holon>) (s :AST<f64>) -> :AST<Holon>)
+(:wat::core::defmacro (:wat::std::Amplify (x :AST<holon::HolonAST>) (y :AST<holon::HolonAST>) (s :AST<f64>) -> :AST<holon::HolonAST>)
   `(:wat::algebra::Blend ,x ,y 1 ,s))
 
 ;; User writes:
@@ -131,7 +131,7 @@ The `expansion-body` is a Lisp expression. It can use:
 **Higher-order expansion — Chain:**
 
 ```scheme
-(:wat::core::defmacro (:wat::std::Chain (holons :AST<List<Holon>>) -> :AST<Holon>)
+(:wat::core::defmacro (:wat::std::Chain (holons :AST<List<holon::HolonAST>>) -> :AST<holon::HolonAST>)
   `(:wat::algebra::Bundle (pairwise-map :wat::std::Then ,holons)))
 
 ;; User writes:
@@ -142,7 +142,7 @@ The `expansion-body` is a Lisp expression. It can use:
 
 ;; which further expands Then:
 (:wat::algebra::Bundle (pairwise-map
-         (:wat::core::lambda ((a :Holon) (b :Holon) -> :Holon)
+         (:wat::core::lambda ((a :holon::HolonAST) (b :holon::HolonAST) -> :holon::HolonAST)
            (:wat::algebra::Bundle (:wat::core::vec a (:wat::algebra::Permute b 1))))
          (:wat::core::vec a b c d)))
 ```
@@ -247,7 +247,7 @@ Matthew Flatt's 2016 paper — *"Binding as Sets of Scopes"* — is the referenc
 
 ```scheme
 ;; Macro introduces `tmp`:
-(:wat::core::defmacro (:my::vocab::swap-thoughts (a :AST<Holon>) (b :AST<Holon>) -> :AST<Holon>)
+(:wat::core::defmacro (:my::vocab::swap-thoughts (a :AST<holon::HolonAST>) (b :AST<holon::HolonAST>) -> :AST<holon::HolonAST>)
   `(:wat::core::let ((tmp ,a))          ; `tmp` here has macro-scope M
      (set! ,a ,b)
      (set! ,b tmp)))
@@ -451,7 +451,7 @@ pub enum WatCompileTimeAST {
 
 ```rust
 pub struct MacroRegistry {
-    macros: HashMap<Keyword, Arc<Macro>>,
+    macros: HashMap<wat::core::keyword, Arc<Macro>>,
 }
 
 pub struct Macro {

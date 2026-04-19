@@ -22,7 +22,7 @@ Round 3 reviewers may reopen any of these decisions; the per-question reasoning 
 
 ## 058-001: Atom — ACCEPTED (parametric)
 
-**All questions in this section are RESOLVED.** Atom accepts into core as `:Atom<T>` — parametric over any serializable T (primitive, composite `:Holon`, user-defined struct/enum/newtype). Substrate-level decision: without parametric Atom, programs cannot be atomized, which breaks FOUNDATION's "Programs ARE Holons" principle. See 058-001/PROPOSAL.md's ACCEPTED banner for the per-question reasoning, and FOUNDATION-CHANGELOG 2026-04-18 entry "Parametric polymorphism as substrate — programs ARE atoms, which demands it."
+**All questions in this section are RESOLVED.** Atom accepts into core as `:Atom<T>` — parametric over any serializable T (primitive, composite `:holon::HolonAST`, user-defined struct/enum/newtype). Substrate-level decision: without parametric Atom, programs cannot be atomized, which breaks FOUNDATION's "Programs ARE Holons" principle. See 058-001/PROPOSAL.md's ACCEPTED banner for the per-question reasoning, and FOUNDATION-CHANGELOG 2026-04-18 entry "Parametric polymorphism as substrate — programs ARE atoms, which demands it."
 
 
 ---
@@ -150,7 +150,7 @@ Q1 (core vs stdlib) resolves stdlib — widened Blend absorbs the computed-coeff
 
 2. **Accessor variants.** `get` (with cleanup) vs `get-raw` (without). Both useful. Keep both with these names? Or use `get` for raw and `get-cleanup` for the cleanup variant? Recommendation: `get` is the common case (with cleanup); `get-raw` for the raw case.
 
-3. **Key type constraints.** — **RESOLVED.** Keys can be any `:Holon` value. Typed Atom literals (058-001) include string/int/float/bool/keyword; composite ASTs (Bind, Bundle, etc.) also work as keys because `:Holon` is the substrate's universal type. `:HashMap<K,V>` at declaration time pins the key type; runtime hash lookup (Rust `std::collections::HashMap`) handles any hashable key.
+3. **Key type constraints.** — **RESOLVED.** Keys can be any `:holon::HolonAST` value. Typed Atom literals (058-001) include string/int/float/bool/keyword; composite ASTs (Bind, Bundle, etc.) also work as keys because `:holon::HolonAST` is the substrate's universal type. `:HashMap<K,V>` at declaration time pins the key type; runtime hash lookup (Rust `std::collections::HashMap`) handles any hashable key.
 
 4. **Performance for large Maps.** Bundle's capacity is bounded (~d / ln(K) items for reliable cleanup). Maps with many keys exceed capacity and produce noisy retrieval. Document the capacity bound; stdlib could provide a `LargeMap` variant using partitioning if demand arises.
 
@@ -302,21 +302,21 @@ Bind, Permute, and Thermometer are affirmed core primitives already present in h
 
 ## 058-030: Types
 
-1. **Generics scope.** Is `:fn(args)->return` and `:Vec<T>` sufficient, or do we need variance, bounds (`T extends :Holon`), or existentials? Recommendation: start minimal — just List and fn parametrics. Add more if stdlib needs emerge.
+1. **Generics scope.** Is `:fn(args)->return` and `:Vec<T>` sufficient, or do we need variance, bounds (`T extends :holon::HolonAST`), or existentials? Recommendation: start minimal — just List and fn parametrics. Add more if stdlib needs emerge.
 
 2. **Type inference strength — RESOLVED 2026-04-19 to required typed let bindings.** Parameter types on `define`/`lambda` are required; let bindings are too. Every binding has shape `((name :Type) rhs)` — the typed form is mandatory, not optional. Reversal of the earlier "infer intermediates" recommendation after wat-rs slice 7b surfaced the trade-off: anonymous functions declare their constraints, and the discipline is cleanest when it applies uniformly. See FOUNDATION-CHANGELOG 2026-04-19 "Typed-let discipline" for reasoning.
 
-3. **Nominal vs. structural typing — RESOLVED 2026-04-18.** Nominal for `struct`/`enum`/`newtype`; structural for `typealias` (renamed from `deftype`). Four distinct head keywords, zero ambiguity at parse. `:is-a` removed; no nominal subtyping (polymorphism via enum wrapping, same as `:Holon`).
+3. **Nominal vs. structural typing — RESOLVED 2026-04-18.** Nominal for `struct`/`enum`/`newtype`; structural for `typealias` (renamed from `deftype`). Four distinct head keywords, zero ambiguity at parse. `:is-a` removed; no nominal subtyping (polymorphism via enum wrapping, same as `:holon::HolonAST`).
 
 4. **`:Any` usage.** Was considered, rejected. Heterogeneous data uses named `:Union<T,U,V>` types; generic containers use parametric `T`/`K`/`V`; atom literals use `:AtomLiteral`. Resolved in the 2026-04-18 type-grammar sweep.
 
 5. **Type promotion rules.** If a function takes `:f64` and you pass an `:i32`, does it auto-promote? Recommendation: no implicit promotion — explicit `(to-f64 int)` or similar. Matches Rust's strictness; prevents surprising behavior.
 
-6. **Error reporting.** Type errors need to point at the offending expression with a useful message. "Expected :Holon, got :f64 at line X" is the minimum. Structured error types with source locations are part of the implementation.
+6. **Error reporting.** Type errors need to point at the offending expression with a useful message. "Expected :holon::HolonAST, got :f64 at line X" is the minimum. Structured error types with source locations are part of the implementation.
 
 7. **Metadata on types.** `typealias` could accept documentation strings, constraints, validators. Worth including in the first version? Recommendation: start simple (just alias); add metadata if needed.
 
-8. **Subtype hierarchy — RESOLVED 2026-04-18.** No nominal subtyping. `:Holon` is an ENUM with 9 variants (Atom, Bind, Bundle, etc.). Functions on `:Holon` pattern-match to select variant. Same pattern as Rust's `match holon { HolonAST::Atom(lit) => ... }`. No `:is-a` keyword in the grammar.
+8. **Subtype hierarchy — RESOLVED 2026-04-18.** No nominal subtyping. `:holon::HolonAST` is an ENUM with 9 variants (Atom, Bind, Bundle, etc.). Functions on `:holon::HolonAST` pattern-match to select variant. Same pattern as Rust's `match holon { HolonAST::Atom(lit) => ... }`. No `:is-a` keyword in the grammar.
 
 9. **Dependency ordering.** Types depend on nothing; `define` and `lambda` depend on types. Resolution order: 058-030 (types) first, then 058-028 (define) and 058-029 (lambda).
 

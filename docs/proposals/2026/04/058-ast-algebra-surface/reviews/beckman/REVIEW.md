@@ -11,7 +11,7 @@
 
 **The algebra composes.** Round 3 closes the load-bearing Round-2 concerns. The similarity-measurement reframe is categorically honest: the algebra was always similarity-measured — Bundle's "associativity" under ternary thresholding was never a categorical associativity claim; it is the capacity-bounded similarity-equivalence that Kanerva's framework provides. Round 3 states this correctly. The Round-2 counter-example is preserved VERBATIM in FOUNDATION and used to motivate the correct framing. That is how a specification repairs itself.
 
-The parametric-polymorphism substrate (`:Atom<:T>`, parametric user types, parametric functions, parametric macros) is categorically sound. `Atom<_>` is a MONAD over Serializable: unit is wrap, join is `atom-value`, laws hold. The recursion `Atom<Holon>` where `Holon` contains `Atom` is ordinary ADT recursion — no paradox. The programs-are-atoms corollary is operationally grounded.
+The parametric-polymorphism substrate (`:Atom<:T>`, parametric user types, parametric functions, parametric macros) is categorically sound. `Atom<_>` is a MONAD over Serializable: unit is wrap, join is `atom-value`, laws hold. The recursion `Atom<holon::HolonAST>` where `Holon` contains `Atom` is ordinary ADT recursion — no paradox. The programs-are-atoms corollary is operationally grounded.
 
 The measurement tier (`cosine`, `dot` as scalar-returning primitives alongside HolonAST variants) is a clean categorical separation. Vector-producing operations form one tier; scalar-returning measurements form another. Reject/Project couple the tiers via dot-valued weights — a dependent-weight pattern, not a complection. The algebra core shrinks 7 → 6 cleanly as a consequence.
 
@@ -57,11 +57,11 @@ The load-bearing piece is that FOUNDATION explicitly says `Chain, Ngram, Sequent
 
 **Round-2 finding:** HYPOTHETICAL used old `: Thought` return-type syntax outside the paren.
 
-**Round-3 response:** HYPOTHETICAL migrated. Every `define` now uses `-> :Holon` return-type syntax inside the paren. Function types use `:fn(T)->U` Rust-surface form. `:Holon` replaces `:Thought` (project rename). Type names (Candle, Pair, Option, Holon, f64, bool) all conform to 058-030.
+**Round-3 response:** HYPOTHETICAL migrated. Every `define` now uses `-> :holon::HolonAST` return-type syntax inside the paren. Function types use `:fn(T)->U` Rust-surface form. `:holon::HolonAST` replaces `:Thought` (project rename). Type names (Candle, Pair, Option, Holon, f64, bool) all conform to 058-030.
 
 **Verdict: RESOLVED.**
 
-Minor code-style note: HYPOTHETICAL uses `(Atom :null)` as a sentinel keyword for "I have nothing to say" (lines 45, 57, 70, 81). This is legal (`:null` is a keyword literal, permitted by Atom parametric), but stylistically it would be more idiomatic under the new grammar to return `:Option<Holon>::None`. Not a defect — a polish nit.
+Minor code-style note: HYPOTHETICAL uses `(Atom :null)` as a sentinel keyword for "I have nothing to say" (lines 45, 57, 70, 81). This is legal (`:null` is a keyword literal, permitted by Atom parametric), but stylistically it would be more idiomatic under the new grammar to return `:Option<holon::HolonAST>::None`. Not a defect — a polish nit.
 
 ### NEW-4 — Capacity-budget reframing bundles distinct phenomena
 
@@ -196,7 +196,7 @@ Monad laws:
 - Right unit: `join(Atom-map(unit, a)) = Atom(atom-value(a)) = a` (by atom determinism). ✓
 - Associativity: `join(join(a)) = join(Atom-map(join, a))` by structural induction over nested Atom wrapping. ✓
 
-**Implication.** Programs-are-atoms is not merely an operational claim; it's grounded in the monad structure of Atom over Serializable. The recursion `Atom<Holon>` where Holon contains Atom is ordinary ADT recursion — the initial algebra of an endofunctor. No paradox.
+**Implication.** Programs-are-atoms is not merely an operational claim; it's grounded in the monad structure of Atom over Serializable. The recursion `Atom<holon::HolonAST>` where Holon contains Atom is ordinary ADT recursion — the initial algebra of an endofunctor. No paradox.
 
 The two-encoding ambiguity (direct structural encoding vs atomized opaque encoding) is an honest feature of the bifurcation: measurements that care about structure use direct; measurements that care about identity use atomized. Applications choose. This IS a categorical separation, not a complection.
 

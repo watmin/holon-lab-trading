@@ -16,10 +16,10 @@
 > **Chain (058-012) was defined in terms of Then.** Post-rejection, Chain inlines the binary-Sequential pattern:
 >
 > ```scheme
-> (:wat::core::define (:wat::std::Chain (xs :Vec<Holon>) -> :Holon)
+> (:wat::core::define (:wat::std::Chain (xs :Vec<holon::HolonAST>) -> :holon::HolonAST)
 >   (:wat::algebra::Bundle
 >     (pairwise-map
->       (:wat::core::lambda ((a :Holon) (b :Holon) -> :Holon)
+>       (:wat::core::lambda ((a :holon::HolonAST) (b :holon::HolonAST) -> :holon::HolonAST)
 >         (:wat::std::Sequential (:wat::core::vec a b)))
 >       xs)))
 > ```

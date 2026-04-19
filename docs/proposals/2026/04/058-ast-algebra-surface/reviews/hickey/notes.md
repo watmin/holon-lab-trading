@@ -24,9 +24,9 @@
 
 6. **Output-space ternary sweep downstream** → RESOLVED via rejection. Resonance (which still talked bipolar) REJECTED, so the open-ness is gone.
 
-7. **`deftype` with `:is-a` syntactic ambiguity (N4)** → RESOLVED via simplification. `deftype` gone entirely. Four distinct heads: `newtype` (nominal), `struct`, `enum`, `typealias` (structural). No `:is-a` keyword at all — nominal subtyping dropped; `:Holon` is an enum with variants pattern-matched. This is a stronger resolution than the three-heads split I suggested — they went further.
+7. **`deftype` with `:is-a` syntactic ambiguity (N4)** → RESOLVED via simplification. `deftype` gone entirely. Four distinct heads: `newtype` (nominal), `struct`, `enum`, `typealias` (structural). No `:is-a` keyword at all — nominal subtyping dropped; `:holon::HolonAST` is an enum with variants pattern-matched. This is a stronger resolution than the three-heads split I suggested — they went further.
 
-8. **`:Any` polymorphism erosion (R1 hammock #5)** → RESOLVED. `:Any` dropped from grammar. Every case has principled replacement (`:Holon`, `:Union<T,U>`, parametric T, `:Vec<Pair<Holon,Vector>>`).
+8. **`:Any` polymorphism erosion (R1 hammock #5)** → RESOLVED. `:Any` dropped from grammar. Every case has principled replacement (`:holon::HolonAST`, `:Union<T,U>`, parametric T, `:Vec<Pair<holon::HolonAST,Vector>>`).
 
 9. **keyword-path naming as convention-dressed-as-mechanism** → PARTIALLY RESOLVED. Consolidated to one canonical policy section. BUT: parametric polymorphism was added (2026-04-18 "Parametric polymorphism as substrate"). This is new complexity and needs its own audit.
 
@@ -46,7 +46,7 @@ Every Round 2 open item has a landed resolution. This is the rare case where ALL
 
 This is the biggest single new commit. 2026-04-18 entry: "Parametric polymorphism as substrate — programs ARE atoms, which demands it."
 
-Claim: `:Atom<T>` accepts any T (primitive, composite `:Holon`, user type). Forces parametric polymorphism for user types, functions, macros. Rank-1 HM.
+Claim: `:Atom<T>` accepts any T (primitive, composite `:holon::HolonAST`, user type). Forces parametric polymorphism for user types, functions, macros. Rank-1 HM.
 
 Hickey test: **Is this simple or easy?**
 
@@ -73,7 +73,7 @@ HOWEVER: the datamancer owns this. They've committed to the work, named the cost
 
 ### N7 (R3). `dot` as scalar-returning algebra primitive
 
-New primitive: `:wat::algebra::dot`. Sibling to cosine. `:Holon :Holon -> :f64`. Scalar-out, not Holon-out.
+New primitive: `:wat::algebra::dot`. Sibling to cosine. `:holon::HolonAST :holon::HolonAST -> :f64`. Scalar-out, not Holon-out.
 
 Introduced to support the Reject/Project stdlib macros (which need a computed Gram-Schmidt coefficient `(x·y)/(y·y)`).
 
@@ -232,7 +232,7 @@ Previously: wrote to raw stdout. Now: spawns Console program, pops client handle
 
 ## Complection audit — any hiding?
 
-### 1. `:Atom<T>` with T = :Holon
+### 1. `:Atom<T>` with T = :holon::HolonAST
 
 `(Atom some-bundle)` atomizes a bundle. Two encodings possible:
 - Direct: structural vector, unbind-recoverable.

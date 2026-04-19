@@ -46,7 +46,7 @@ Every rejection has a per-proposal REJECTED banner citing the reasoning. The spe
 - **Core/stdlib division line named:** single Rust method → `:wat::core::`; short composition → `:wat::std::`; app-shaped → userland.
 - **No bare aliases.** Dual-tier symbol table removed. Every call uses its full keyword path. `:wat/lang/` renamed to `:wat::core::`.
 - **Naming discipline enforced:** `(:wat::core::define ...)`, `(:wat::core::let* ...)`, `(:wat::algebra::Bundle ...)`, etc. Bareword sweep complete across every scheme block in the batch.
-- **`:` quoting rule** documented explicitly. `:Atom<Holon>` legal; `:Atom<:Holon>` illegal. Inside angle brackets, parameters are bare Rust symbols.
+- **`:` quoting rule** documented explicitly. `:Atom<holon::HolonAST>` legal; `:Atom<:holon::HolonAST>` illegal. Inside angle brackets, parameters are bare Rust symbols.
 - **`:user::main`** as keyword-path entry point, receiving stdin/stdout/stderr/signals as parameters (no ambient capabilities).
 - **`:wat::kernel::select`** added; **`:wat::kernel::HandlePool`** promoted to kernel; Topic and Mailbox REJECTED. Config setters entry-file-only, before any `load!`. One loader `:wat::core::load!` for all file kinds.
 - **Programs-are-userland** subsection in FOUNDATION codifying the conformance contract (six rules). Only Console and Cache ship as stdlib programs (universal plumbing).

@@ -136,16 +136,16 @@ Looking at 058-013: "n > length produces an empty bundle (zero vector) per Bundl
 
 **But** the atomicity of Sequential([]) is undefined. Accept this as a minor edge case — stdlib can refuse empty lists to Sequential at macro expand time or document the undefined behavior. Not a blocker.
 
-### Issue R3-3: Parametric Atom recursion — Atom<Holon> where Holon contains Atom
+### Issue R3-3: Parametric Atom recursion — Atom<holon::HolonAST> where Holon contains Atom
 
-**The setup.** `(Atom x)` is parametric over T. T can be any primitive, any `:Holon` (including another Atom), any user type. `:Holon` is the union of algebra AST variants including Atom. So we have:
+**The setup.** `(Atom x)` is parametric over T. T can be any primitive, any `:holon::HolonAST` (including another Atom), any user type. `:holon::HolonAST` is the union of algebra AST variants including Atom. So we have:
 
 ```
 Atom : T → Holon
-Holon = Atom<T> | Bind(Holon, Holon) | Bundle(List<Holon>) | ...
+Holon = Atom<T> | Bind(Holon, Holon) | Bundle(List<holon::HolonAST>) | ...
 ```
 
-This is a recursive type. Mathematically: `Holon` is the fixed point of the functor `F(X) = Atom<T> ⊔ Bind(X, X) ⊔ Bundle(List<X>) ⊔ ...` where `T` itself can be `X`. So `Atom<Holon>` is `Atom<μX. F(X))` = `Atom<Holon>`. Standard ADT recursion.
+This is a recursive type. Mathematically: `Holon` is the fixed point of the functor `F(X) = Atom<T> ⊔ Bind(X, X) ⊔ Bundle(List<X>) ⊔ ...` where `T` itself can be `X`. So `Atom<holon::HolonAST>` is `Atom<μX. F(X))` = `Atom<holon::HolonAST>`. Standard ADT recursion.
 
 **Is this sound?**
 
@@ -157,7 +157,7 @@ The hash is `hash(type-tag, canonical-EDN(value))`. For `T = Holon`, EDN of a Ho
 
 Categorically: `Atom : Type → (T: Type) → Holon` where the outer `Type` is a syntactic kind. The hash is a natural transformation from the serialization-type functor to the vector-space. I think this is sound.
 
-**The subtle bit — Atom<Holon> vs direct encoding.**
+**The subtle bit — Atom<holon::HolonAST> vs direct encoding.**
 
 A Bundle `b = (Bundle [x y z])` encodes via children composition to a structural vector with density and structure preserved. But `(Atom b)` encodes via `hash(type-tag(Holon), edn(b))` → a SEEDED RANDOM vector. These are DIFFERENT vectors for the same underlying holon!
 
@@ -171,7 +171,7 @@ In category-theory terms: consider the category of Serializable things + morphis
 
 The encoding has TWO legitimate modes: the structural encode E and the atomic encode A. For any composite h, these produce different vectors. The algebra treats both as valid. This is not a contradiction — it's an honest acknowledgment that you can measure "is this the same program by identity" (use A) or "is this program structurally similar" (use E).
 
-**Verdict on parametric Atom:** categorically sound. The recursion in `Atom<Holon>` is just ADT recursion. The two-encoding ambiguity is a feature, not a bug, as long as applications know which they're calling.
+**Verdict on parametric Atom:** categorically sound. The recursion in `Atom<holon::HolonAST>` is just ADT recursion. The two-encoding ambiguity is a feature, not a bug, as long as applications know which they're calling.
 
 **Remaining concern:** what if somebody computes `Atom(Atom(x))`? That's `Atom<Atom<T>>`. Each wrap produces a new opaque vector. `hash(Atom, hash(Atom, value))`. Well-defined, but does it compose meaningfully? `atom-value(atom-value(Atom(Atom(x)))) = x`. The extraction composes — it's the inverse functor. OK.
 
@@ -338,7 +338,7 @@ OK. So Atom is a monad. The programs-are-atoms substrate gives us a proper monad
 
 058-001 says: "polymorphic function; type-checker infers T at each call site." With rank-1 HM this requires the call site to fix T via context. If context is ambiguous, type inference fails.
 
-Example: `(let ((x (atom-value a))) ...)`. If `a : Atom<Holon>` and the let binding has no usage of x yet, can T be inferred? Only from downstream use. If x is then passed to `Bind` which expects `:Holon`, unification fixes T = Holon.
+Example: `(let ((x (atom-value a))) ...)`. If `a : Atom<holon::HolonAST>` and the let binding has no usage of x yet, can T be inferred? Only from downstream use. If x is then passed to `Bind` which expects `:holon::HolonAST`, unification fixes T = Holon.
 
 Rank-1 HM is known tractable (polynomial in program size). 058-030 commits to rank-1 HM (not higher-ranked). OK.
 
@@ -356,21 +356,21 @@ Let me walk through the six core forms and their composition properties.
 
 ### Core (6 forms): Atom, Bind, Bundle, Permute, Thermometer, Blend
 
-**Atom:** `:T → :Holon`. Constant — takes a literal, produces a holon. Composition: `Atom(Atom(x)) : Atom<Atom<T>>`. Parametric. Monadic.
+**Atom:** `:T → :holon::HolonAST`. Constant — takes a literal, produces a holon. Composition: `Atom(Atom(x)) : Atom<Atom<T>>`. Parametric. Monadic.
 
-**Bind:** `:Holon × :Holon → :Holon`. Bilinear on vectors (elementwise product). Commutative, self-inverse on dense-bipolar, measurement-based on general.
+**Bind:** `:holon::HolonAST × :holon::HolonAST → :holon::HolonAST`. Bilinear on vectors (elementwise product). Commutative, self-inverse on dense-bipolar, measurement-based on general.
 - `Bind(a, b) = Bind(b, a)` ✓ commutative
 - `Bind(a, Atom(ONE)) = a` if ONE is the all-+1 atom (but no reserved such atom)
 - `Bind(Bind(a, b), b) ≈ a` under similarity ✓
 - `Bind(Bind(a, b), c) = Bind(a, Bind(b, c))` associative ✓ (elementwise product is associative exactly)
 
-**Bundle:** `:Vec<:Holon> → :Holon`. Elementwise sum + ternary threshold.
+**Bundle:** `:Vec<:holon::HolonAST> → :holon::HolonAST`. Elementwise sum + ternary threshold.
 - Commutative ✓ (sum commutes, threshold preserves)
 - NOT elementwise associative; similarity-associative within capacity ✓ (FOUNDATION is honest)
 - Bundle([]) = zero vector (identity) ✓
 - Bundle([x]) = x (if threshold(x) = x, which is true for ternary x)
 
-**Permute:** `:Holon × :Integer → :Holon`. Z/dZ group action on dimensions.
+**Permute:** `:holon::HolonAST × :Integer → :holon::HolonAST`. Z/dZ group action on dimensions.
 - `Permute(v, 0) = v` ✓ identity
 - `Permute(Permute(v, j), k) = Permute(v, j+k mod d)` ✓ group
 - `Permute(Bind(a, b), k) = Bind(Permute(a, k), Permute(b, k))` ✓ distributes over Bind elementwise (because Permute commutes with elementwise product under same permutation)
@@ -378,11 +378,11 @@ Let me walk through the six core forms and their composition properties.
 
 Composition of Permute with everything = clean.
 
-**Thermometer:** `:f64 × :f64 × :f64 → :Holon`. Pure scalar encoder. No composition rules beyond determinism. Dense-bipolar output.
+**Thermometer:** `:f64 × :f64 × :f64 → :holon::HolonAST`. Pure scalar encoder. No composition rules beyond determinism. Dense-bipolar output.
 - `Thermometer(v, mn, mx)` same for same inputs ✓ deterministic
 - Composition: output is a Holon that goes into Bind, Bundle, Blend, Permute. No internal composition structure (Thermometer doesn't take Holons).
 
-**Blend:** `:Holon × :Holon × :f64 × :f64 → :Holon`. Weighted sum + ternary threshold.
+**Blend:** `:holon::HolonAST × :holon::HolonAST × :f64 × :f64 → :holon::HolonAST`. Weighted sum + ternary threshold.
 - `Blend(a, b, w1, w2) = Blend(b, a, w2, w1)` ✓ swap-weighted symmetry
 - `Blend(a, b, w1, w2) ≠ Blend(b, a, w1, w2)` in general ✓ non-commutative in args alone
 - `Blend(a, b, 1, 1) = Bundle([a, b])` ✓ specialization

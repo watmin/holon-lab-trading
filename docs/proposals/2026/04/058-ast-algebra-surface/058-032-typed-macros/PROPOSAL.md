@@ -21,7 +21,7 @@ Bare `:AST` (without parameterization) is **retired as a parameter type** — sa
   `(:wat::algebra::Blend ,x ,y 1 -1))
 
 ;; 058-032 honest — concrete typing.
-(:wat::core::defmacro (:wat::std::Subtract (x :AST<Holon>) (y :AST<Holon>) -> :AST<Holon>)
+(:wat::core::defmacro (:wat::std::Subtract (x :AST<holon::HolonAST>) (y :AST<holon::HolonAST>) -> :AST<holon::HolonAST>)
   `(:wat::algebra::Blend ,x ,y 1 -1))
 ```
 
@@ -38,7 +38,7 @@ A prior draft of this proposal framed typed macros as an opt-in upgrade — "you
 
 Opt-in typing is Hickey's *easy, not simple*. It lets the macro author reach for either form, but it interleaves two type systems: a typed one and an untyped escape hatch. The untyped hatch has no principled semantics — it's just "skip the check" wearing a type's skirt. It conflicts with 058-030's discipline that every value position carries a concrete type.
 
-`:AST` alone was never "syntax-level, not evaluation-level." In wat, every macro argument arrives as a Holon AST (because the AST IS the Holon, per FOUNDATION). What makes one macro argument different from another is the VALUE TYPE its eventual evaluation produces — because that determines which positions in the expansion it can be spliced into. `:AST<Holon>`, `:AST<f64>`, `:AST<List<Holon>>` — each says something useful. Bare `:AST` says nothing.
+`:AST` alone was never "syntax-level, not evaluation-level." In wat, every macro argument arrives as a Holon AST (because the AST IS the Holon, per FOUNDATION). What makes one macro argument different from another is the VALUE TYPE its eventual evaluation produces — because that determines which positions in the expansion it can be spliced into. `:AST<holon::HolonAST>`, `:AST<f64>`, `:AST<List<holon::HolonAST>>` — each says something useful. Bare `:AST` says nothing.
 
 **The honest answer: every macro parameter is `:AST<T>` for some concrete T.** Same discipline as every other typed position in the language. 058-031's `:AST` placeholder was always provisional; this proposal replaces it.
 
@@ -57,16 +57,16 @@ With that distinction:
 
 ```
 :AST<T>    — a WatAST expression whose evaluation produces a value of type T.
-             T ranges over any concrete value type: :Holon, :f64, :i32,
+             T ranges over any concrete value type: :holon::HolonAST, :f64, :i32,
              :bool, :String, :Vec<U>, :HashMap<K,V>, user-defined
              newtype/struct/enum/typealias, etc.
              T MUST be concrete. Bare :AST without <T> is not a valid
              parameter type — same discipline as banning :Any.
 ```
 
-`:AST<T>` constrains the EVALUATION type, not the syntactic shape. A macro parameter `(x :AST<Holon>)` accepts any WatAST that evaluates to a Holon — a direct HolonAST variant, a function call returning `:Holon`, a let-wrapped algebra expression, or any other wat form that produces a holon at evaluation. The syntactic wrapping doesn't matter; the value type does.
+`:AST<T>` constrains the EVALUATION type, not the syntactic shape. A macro parameter `(x :AST<holon::HolonAST>)` accepts any WatAST that evaluates to a Holon — a direct HolonAST variant, a function call returning `:holon::HolonAST`, a let-wrapped algebra expression, or any other wat form that produces a holon at evaluation. The syntactic wrapping doesn't matter; the value type does.
 
-058-030 lists `:Holon` as the 9-variant algebra enum (the HolonAST value type). This proposal does NOT introduce `:HolonAST` as a separate type — `:Holon` already names the value produced by HolonAST variants, and `:AST<Holon>` already describes "a WatAST producing that value." The syntactic sub-class would only be needed if a macro author wanted to require a literal HolonAST variant at a parameter position; that's a syntactic restriction orthogonal to the type system and out of scope here.
+058-030 lists `:holon::HolonAST` as the 9-variant algebra enum (the HolonAST value type). This proposal does NOT introduce `:HolonAST` as a separate type — `:holon::HolonAST` already names the value produced by HolonAST variants, and `:AST<holon::HolonAST>` already describes "a WatAST producing that value." The syntactic sub-class would only be needed if a macro author wanted to require a literal HolonAST variant at a parameter position; that's a syntactic restriction orthogonal to the type system and out of scope here.
 
 `:AST<T>` is itself a value type. A macro's body can bind intermediate `:AST<T>` values, return them, pass them to helper functions, etc.
 
@@ -88,33 +88,33 @@ Every stdlib macro from 058-031 has a concrete value type for each argument. 058
 **Pure alias — Concurrent:**
 
 ```scheme
-(:wat::core::defmacro (:wat::std::Concurrent (xs :AST<List<Holon>>) -> :AST<Holon>)
+(:wat::core::defmacro (:wat::std::Concurrent (xs :AST<List<holon::HolonAST>>) -> :AST<holon::HolonAST>)
   `(:wat::algebra::Bundle ,xs))
 ```
 
 At definition time the checker sees:
-- `xs : :AST<List<Holon>>` — an expression producing a list of Holons
-- Body constructs `(Bundle ,xs)`. Bundle's signature is `(Bundle (items :Vec<Holon>) -> :Holon)`.
-- Spliced `xs` into Bundle's `items` slot: `:AST<List<Holon>>` matches the expected `:Vec<Holon>` at evaluation. ✓
-- Body returns `:AST<Holon>` ✓ matches declared return.
+- `xs : :AST<List<holon::HolonAST>>` — an expression producing a list of Holons
+- Body constructs `(Bundle ,xs)`. Bundle's signature is `(Bundle (items :Vec<holon::HolonAST>) -> :holon::HolonAST)`.
+- Spliced `xs` into Bundle's `items` slot: `:AST<List<holon::HolonAST>>` matches the expected `:Vec<holon::HolonAST>` at evaluation. ✓
+- Body returns `:AST<holon::HolonAST>` ✓ matches declared return.
 
 **Transforming — Subtract:**
 
 ```scheme
-(:wat::core::defmacro (:wat::std::Subtract (x :AST<Holon>) (y :AST<Holon>) -> :AST<Holon>)
+(:wat::core::defmacro (:wat::std::Subtract (x :AST<holon::HolonAST>) (y :AST<holon::HolonAST>) -> :AST<holon::HolonAST>)
   `(:wat::algebra::Blend ,x ,y 1 -1))
 ```
 
-Blend's signature: `(Blend (a :Holon) (b :Holon) (w1 :f64) (w2 :f64) -> :Holon)`.
-- `,x` splices into position `a` (`:Holon`). `x : :AST<Holon>` ✓
-- `,y` splices into position `b` (`:Holon`). ✓
+Blend's signature: `(Blend (a :holon::HolonAST) (b :holon::HolonAST) (w1 :f64) (w2 :f64) -> :holon::HolonAST)`.
+- `,x` splices into position `a` (`:holon::HolonAST`). `x : :AST<holon::HolonAST>` ✓
+- `,y` splices into position `b` (`:holon::HolonAST`). ✓
 - `1` and `-1` are `:f64` literals, matching `w1`, `w2`. ✓
-- Blend returns `:Holon` ✓ matches declared `:AST<Holon>`.
+- Blend returns `:holon::HolonAST` ✓ matches declared `:AST<holon::HolonAST>`.
 
 **Parameterized — Amplify:**
 
 ```scheme
-(:wat::core::defmacro (:wat::std::Amplify (x :AST<Holon>) (y :AST<Holon>) (s :AST<f64>) -> :AST<Holon>)
+(:wat::core::defmacro (:wat::std::Amplify (x :AST<holon::HolonAST>) (y :AST<holon::HolonAST>) (s :AST<f64>) -> :AST<holon::HolonAST>)
   `(:wat::algebra::Blend ,x ,y 1 ,s))
 ```
 
@@ -130,22 +130,22 @@ Call site errors land at the caller by name:
 **Higher-order — Chain:**
 
 ```scheme
-(:wat::core::defmacro (:wat::std::Chain (holons :AST<List<Holon>>) -> :AST<Holon>)
+(:wat::core::defmacro (:wat::std::Chain (holons :AST<List<holon::HolonAST>>) -> :AST<holon::HolonAST>)
   `(:wat::algebra::Bundle (pairwise-map :wat::std::Then ,holons)))
 ```
 
-Checker verifies `pairwise-map : :fn(:fn(Holon,Holon)->Holon, :Vec<Holon>) -> :Vec<Holon>` (or its typed-macro equivalent), `Then : :fn(Holon,Holon)->Holon`, so `(pairwise-map Then holons)` has type `:Vec<Holon>`, and `Bundle` over it produces `:Holon`. Declared return `:AST<Holon>` ✓.
+Checker verifies `pairwise-map : :fn(:fn(Holon,Holon)->Holon, :Vec<holon::HolonAST>) -> :Vec<holon::HolonAST>` (or its typed-macro equivalent), `Then : :fn(Holon,Holon)->Holon`, so `(pairwise-map Then holons)` has type `:Vec<holon::HolonAST>`, and `Bundle` over it produces `:holon::HolonAST`. Declared return `:AST<holon::HolonAST>` ✓.
 
 ### Quasiquote under a typed environment
 
 Quasiquote from 058-031 works unchanged. What changes: each unquoted parameter carries a declared `T`, and the spliced positions check against the surrounding form's expected types.
 
 In `(Blend ,x ,y 1 -1)`:
-- Position 1 expects `:Holon`. `,x` is `:AST<Holon>`. ✓
-- Position 2 expects `:Holon`. `,y` is `:AST<Holon>`. ✓
+- Position 1 expects `:holon::HolonAST`. `,x` is `:AST<holon::HolonAST>`. ✓
+- Position 2 expects `:holon::HolonAST`. `,y` is `:AST<holon::HolonAST>`. ✓
 - Positions 3 and 4 expect `:f64`. `1` and `-1` are `:f64` literals. ✓
 
-A misplaced splice (e.g., `,s` into a `:Holon` position) fails the macro-definition-time check; the macro never loads.
+A misplaced splice (e.g., `,s` into a `:holon::HolonAST` position) fails the macro-definition-time check; the macro never loads.
 
 ## What Happens to the "I Need Any Shape" Case
 
@@ -153,7 +153,7 @@ Under the opt-in draft, a macro like `debug-print` could use bare `:AST` to mean
 
 The honest resolution:
 
-1. **Most "any shape" desires are concrete in practice.** `debug-print` for Holon ASTs is `:AST<Holon>`. For f64 expressions, `:AST<f64>`. Write a version per type. This is what 058-030's "polymorphism uses per-type functions" rule says — macros follow the same rule.
+1. **Most "any shape" desires are concrete in practice.** `debug-print` for Holon ASTs is `:AST<holon::HolonAST>`. For f64 expressions, `:AST<f64>`. Write a version per type. This is what 058-030's "polymorphism uses per-type functions" rule says — macros follow the same rule.
 
 2. **If 058-030 adds parametric polymorphism**, macros can use type variables: `(x :AST<T>) -> :AST<T>` where `T` is bound at the macro's signature. That's a future extension — not this proposal, and not an escape hatch; it's fully-typed polymorphism.
 
@@ -256,11 +256,11 @@ Every parameter has a concrete type. No "sometimes it's typed, sometimes it isn'
 
 **2. Error locality.**
 
-Under 058-031's expansion-time check, a wrong-type `Subtract` call surfaces as a type error at the expanded `Blend` — mentioning a form the user never typed. Under typed macros, the error says `:wat::std::Subtract expects (y :AST<Holon>)`, naming the macro the user actually invoked.
+Under 058-031's expansion-time check, a wrong-type `Subtract` call surfaces as a type error at the expanded `Blend` — mentioning a form the user never typed. Under typed macros, the error says `:wat::std::Subtract expects (y :AST<holon::HolonAST>)`, naming the macro the user actually invoked.
 
 **3. Type information at the signature documents intent.**
 
-`(Amplify (x :AST<Holon>) (y :AST<Holon>) (s :AST<f64>))` tells a reader that `x` and `y` are holons and `s` is a scalar weight. `(Amplify (x :AST) (y :AST) (s :AST))` tells them nothing.
+`(Amplify (x :AST<holon::HolonAST>) (y :AST<holon::HolonAST>) (s :AST<f64>))` tells a reader that `x` and `y` are holons and `s` is a scalar weight. `(Amplify (x :AST) (y :AST) (s :AST))` tells them nothing.
 
 **4. Racket has a decade of production evidence.**
 

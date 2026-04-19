@@ -9,7 +9,7 @@
 
 ## ACCEPTED as parametric — 2026-04-18
 
-Atom accepts into core as `:Atom<T>` — **parametric over any serializable T**. Not just primitives (str, int, float, bool, keyword) — also `:Holon` (any AST node, including composite programs), user-defined struct/enum/newtype, any type the language admits.
+Atom accepts into core as `:Atom<T>` — **parametric over any serializable T**. Not just primitives (str, int, float, bool, keyword) — also `:holon::HolonAST` (any AST node, including composite programs), user-defined struct/enum/newtype, any type the language admits.
 
 ### Why parametric and not primitive-only
 
@@ -25,11 +25,11 @@ Correct. Parametric Atom is substrate-level, not feature-level.
 ;; primitives — unchanged
 (:wat::algebra::Atom 42)                      ;; :Atom<i64>
 (:wat::algebra::Atom "foo")                   ;; :Atom<String>
-(:wat::algebra::Atom :some::keyword)           ;; :Atom<Keyword>
+(:wat::algebra::Atom :some::keyword)           ;; :Atom<wat::core::keyword>
 
 ;; composite holons — programs, bundles, binds, any AST
-(:wat::algebra::Atom some-bundle)             ;; :Atom<Holon>
-(:wat::algebra::Atom trained-model-program)   ;; :Atom<Holon>
+(:wat::algebra::Atom some-bundle)             ;; :Atom<holon::HolonAST>
+(:wat::algebra::Atom trained-model-program)   ;; :Atom<holon::HolonAST>
 
 ;; user-defined types — any struct, enum, newtype
 (:wat::algebra::Atom (my-candle ...))         ;; :Atom<my/types/Candle>
@@ -41,7 +41,7 @@ The hash for every variant is `hash(type-tag, canonical-EDN(value))` producing a
 ### Extraction — polymorphic
 
 ```scheme
-(:wat::core::define (:wat::std::atom-value (a :Holon) -> :Option<T>)
+(:wat::core::define (:wat::std::atom-value (a :holon::HolonAST) -> :Option<T>)
   ;; Returns (Some inner) when `a` is an Atom<T> for the T the caller
   ;; requests; :None when `a` is a non-Atom variant (Bind, Bundle, ...)
   ;; or an Atom<U> for some U ≠ T. T is inferred from the call site's
@@ -51,7 +51,7 @@ The hash for every variant is `hash(type-tag, canonical-EDN(value))` producing a
   ...)
 
 (:wat::std::atom-value (:wat::algebra::Atom 42))           ;; → (Some 42) as :Option<i64>
-(:wat::std::atom-value (:wat::algebra::Atom some-bundle))  ;; → (Some some-bundle) as :Option<Holon>
+(:wat::std::atom-value (:wat::algebra::Atom some-bundle))  ;; → (Some some-bundle) as :Option<holon::HolonAST>
 (:wat::std::atom-value (:wat::algebra::Atom my-candle))    ;; → (Some candle) as :Option<Candle>
 ```
 
@@ -79,7 +79,7 @@ Different use cases:
 `Atom<T>` is parametric; it is NOT idempotent under nesting.
 `(:wat::algebra::Atom (:wat::algebra::Atom 42))` is a legitimate composite
 AST: the outer Atom has payload type `:Atom<i64>` (which is itself a
-`:Holon` variant), and its canonical-EDN serialization recursively
+`:holon::HolonAST` variant), and its canonical-EDN serialization recursively
 canonicalizes that inner Atom. The outer vector is distinct from the
 inner vector; a library that stores `(Atom (Atom 42))` keeps a handle
 to the layering, not a handle to the integer `42`.
@@ -95,7 +95,7 @@ substrate does not impose one.
 
 **Q1 — typed hash categorically sound?** YES.
 
-`hash(type-tag, bytes)` is the canonical tagged-union encoding. Coproduct payload + tag is how every typed-serialization library encodes ADTs (bincode, CBOR, Protobuf oneof). Beckman-compatible: `Atom : (T is Serializable) → :Holon` with hash respecting the coproduct structure. Hickey-compatible: type and value are orthogonal, not braided.
+`hash(type-tag, bytes)` is the canonical tagged-union encoding. Coproduct payload + tag is how every typed-serialization library encodes ADTs (bincode, CBOR, Protobuf oneof). Beckman-compatible: `Atom : (T is Serializable) → :holon::HolonAST` with hash respecting the coproduct structure. Hickey-compatible: type and value are orthogonal, not braided.
 
 **Q2 — one variant vs separate variants?** ONE (parametric).
 

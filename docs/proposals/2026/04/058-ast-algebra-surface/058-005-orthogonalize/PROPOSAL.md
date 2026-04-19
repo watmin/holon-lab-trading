@@ -19,7 +19,7 @@ The Gram-Schmidt projection-removal and projection operations ship as **two stdl
 ;; Geometric interpretation: the residual of x after projecting out y's direction.
 ;; The Gram-Schmidt reject step; the component of x orthogonal to y.
 
-(:wat::core::defmacro (:wat::std::Reject (x :AST<Holon>) (y :AST<Holon>) -> :AST<Holon>)
+(:wat::core::defmacro (:wat::std::Reject (x :AST<holon::HolonAST>) (y :AST<holon::HolonAST>) -> :AST<holon::HolonAST>)
   `(:wat::algebra::Blend ,x ,y 1
       (:wat::core::- (:wat::core::/ (:wat::algebra::dot ,x ,y)
                                 (:wat::algebra::dot ,y ,y)))))
@@ -28,7 +28,7 @@ The Gram-Schmidt projection-removal and projection operations ship as **two stdl
 ;; Formula:  ((x·y)/(y·y)) · y    equivalently:  x - Reject(x, y)
 ;; Geometric interpretation: the shadow x casts on y's axis.
 
-(:wat::core::defmacro (:wat::std::Project (x :AST<Holon>) (y :AST<Holon>) -> :AST<Holon>)
+(:wat::core::defmacro (:wat::std::Project (x :AST<holon::HolonAST>) (y :AST<holon::HolonAST>) -> :AST<holon::HolonAST>)
   `(:wat::std::Subtract ,x (:wat::std::Reject ,x ,y)))
 ```
 
@@ -40,7 +40,7 @@ Both macros depend on a scalar-returning dot-product measurement — `(:wat::alg
 
 Signature:
 ```
-(:wat::algebra::dot :Holon :Holon) -> :f64
+(:wat::algebra::dot :holon::HolonAST :holon::HolonAST) -> :f64
 ```
 
 Implementation: elementwise product, sum reduction. Rust: `a.iter().zip(b.iter()).map(|(ai, bi)| ai * bi).sum::<f64>()`. Trivial cost; the operation already exists internally wherever `cosine` is computed.
@@ -64,7 +64,7 @@ Holon-rs uses `reject`. Challenge 010 writeups use `reject`. The rename aligns w
 Users who prefer the mathematical term define their own alias in their namespace:
 
 ```scheme
-(:wat::core::define (:my::vocab::Orthogonalize (x :Holon) (y :Holon) -> :Holon)
+(:wat::core::define (:my::vocab::Orthogonalize (x :holon::HolonAST) (y :holon::HolonAST) -> :holon::HolonAST)
   (:wat::std::Reject x y))
 ```
 
@@ -97,7 +97,7 @@ This is not speculative. Production-cited with concrete measurements.
 **Q4** (handling of zero-magnitude y): document as user responsibility. When `dot(y,y) = 0` (y is the zero vector), the Reject computation divides by zero. The macro expansion produces `NaN` at runtime. Callers that may receive a zero y guard with an explicit check before calling — or define a safe variant in their namespace:
 
 ```scheme
-(:wat::core::define (:my::vocab::safe-reject (x :Holon) (y :Holon) -> :Holon)
+(:wat::core::define (:my::vocab::safe-reject (x :holon::HolonAST) (y :holon::HolonAST) -> :holon::HolonAST)
   (:wat::core::if (:wat::core::= 0.0 (:wat::algebra::dot y y))
       x  ;; nothing to project out — return x unchanged
       (:wat::std::Reject x y)))

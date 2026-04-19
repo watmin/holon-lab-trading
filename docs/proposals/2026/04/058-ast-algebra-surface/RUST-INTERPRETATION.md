@@ -63,7 +63,7 @@ pub enum Value {
     Int(i64),
     Scalar(f64),
     String(Arc<str>),
-    Keyword(Arc<Keyword>),        // :foo, :foo::bar::baz
+    Keyword(Arc<wat::core::keyword>),        // :foo, :foo::bar::baz
     Null,
     List(Arc<Vec<Value>>),
     Function(Arc<Function>),       // defined or lambda
@@ -102,7 +102,7 @@ pub enum AtomLiteral {
     Int(i64),
     Scalar(f64),
     Bool(bool),
-    Keyword(Arc<Keyword>),
+    Keyword(Arc<wat::core::keyword>),
     Null,
 }
 ```
@@ -113,7 +113,7 @@ UpperCase forms in wat evaluate to `Value::HolonAST(...)`. They do NOT compute v
 
 ```rust
 pub struct Function {
-    pub name: Option<Keyword>,      // Some for define, None for lambda
+    pub name: Option<wat::core::keyword>,      // Some for define, None for lambda
     pub params: Vec<(Symbol, TypeRef)>,
     pub return_type: TypeRef,
     pub body: Arc<WatAST>,
@@ -127,7 +127,7 @@ pub struct Function {
 
 ```rust
 pub struct SymbolTable {
-    functions: HashMap<Keyword, Arc<Function>>,
+    functions: HashMap<wat::core::keyword, Arc<Function>>,
     // After startup: read-only. Attempting to register after startup panics or returns an error.
 }
 
@@ -160,8 +160,8 @@ pub enum TypeDef {
 }
 
 pub struct TypeEnv {
-    builtins: HashMap<Keyword, BuiltinType>,    // :Holon, :Atom, :f64, etc.
-    user_types: HashMap<Keyword, TypeDef>,
+    builtins: HashMap<wat::core::keyword, BuiltinType>,    // :holon::HolonAST, :Atom, :f64, etc.
+    user_types: HashMap<wat::core::keyword, TypeDef>,
     // Frozen after startup.
 }
 ```
@@ -254,13 +254,13 @@ Runs after the Resolver. For each `define` (and each nested expression):
 3. Verify the body's final type matches the declared return type.
 4. Store the verified function in the SymbolTable.
 
-Key subtlety: **UpperCase forms produce `:Holon`; lowercase primitives produce `:Vector` or other concrete types.** The type checker must know which layer each form is at. Maintain a table:
+Key subtlety: **UpperCase forms produce `:holon::HolonAST`; lowercase primitives produce `:Vector` or other concrete types.** The type checker must know which layer each form is at. Maintain a table:
 
 ```rust
 let upper_signatures = hashmap!{
     "Atom"        => FunctionType { params: vec!["AtomLiteral"],    return: "Holon" },
     "Bind"        => FunctionType { params: vec!["Holon", "Holon"], return: "Holon" },
-    "Bundle"      => FunctionType { params: vec!["List<Holon>"],   return: "Holon" },
+    "Bundle"      => FunctionType { params: vec!["List<holon::HolonAST>"],   return: "Holon" },
     // ...
 };
 
@@ -457,7 +457,7 @@ Essentially: `verify` the AST against the static environment, then return it. Th
 
 Eval errors reveal the exact node that failed and why:
 - "Unknown function `:attacker::evil/exec` at path ..."
-- "Expected :Holon, got :i32 at argument 2 of Difference"
+- "Expected :holon::HolonAST, got :i32 at argument 2 of Difference"
 - "Unknown type `:fake::type/Foo`"
 
 ---

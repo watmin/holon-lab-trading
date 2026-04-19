@@ -40,7 +40,7 @@ A wat stdlib macro (per 058-031-defmacro) that encodes a LIST of events as pairw
 (:wat::core::defmacro (:wat::std::Chain (holons :AST) -> :AST)
   `(:wat::algebra::Bundle
     (pairwise-map
-      (:wat::core::lambda ((a :Holon) (b :Holon) -> :Holon)
+      (:wat::core::lambda ((a :holon::HolonAST) (b :holon::HolonAST) -> :holon::HolonAST)
         (:wat::std::Sequential (:wat::core::vec a b)))
       ,holons)))
 ```
@@ -125,7 +125,7 @@ Chain and Sequential are both "encode a list of things in some order-aware way."
 (:wat::core::defmacro (:wat::std::Chain (holons :AST) -> :AST)
   `(:wat::algebra::Bundle
      (pairwise-map
-       (:wat::core::lambda ((a :Holon) (b :Holon) -> :Holon)
+       (:wat::core::lambda ((a :holon::HolonAST) (b :holon::HolonAST) -> :holon::HolonAST)
          (:wat::std::Sequential (:wat::core::vec a b)))
        ,holons)))
 ```
@@ -205,7 +205,7 @@ Yes — `(Bundle (pairwise-map (lambda (a b) (Sequential (list a b))) xs))`. Cha
 (:wat::core::defmacro (:wat::std::Chain (holons :AST) -> :AST)
   `(:wat::algebra::Bundle
      (pairwise-map
-       (:wat::core::lambda ((a :Holon) (b :Holon) -> :Holon)
+       (:wat::core::lambda ((a :holon::HolonAST) (b :holon::HolonAST) -> :holon::HolonAST)
          (:wat::std::Sequential (:wat::core::vec a b)))
        ,holons)))
 ```
@@ -213,7 +213,7 @@ Yes — `(Bundle (pairwise-map (lambda (a b) (Sequential (list a b))) xs))`. Cha
 `pairwise-map` itself is a list combinator, not an AST-rewriting macro — it is a regular stdlib function used inside the macro expansion. If it doesn't exist yet:
 
 ```scheme
-(:wat::core::define (:wat::std::pairwise-map (f :fn(Holon,Holon)->Holon) (xs :Vec<Holon>) -> :Vec<Holon>)
+(:wat::core::define (:wat::std::pairwise-map (f :fn(Holon,Holon)->Holon) (xs :Vec<holon::HolonAST>) -> :Vec<holon::HolonAST>)
   (:wat::core::if (:wat::core::or (:wat::core::empty? xs) (:wat::core::empty? (:wat::core::rest xs)))
       '()
       (:wat::core::cons (f (:wat::core::first xs) (:wat::core::second xs))

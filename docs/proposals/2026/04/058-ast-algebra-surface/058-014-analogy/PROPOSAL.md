@@ -149,9 +149,9 @@ Some users already write analogies inline. Adding a named form might not be used
 ;; The caller's next step — whether that is max-by-score, threshold
 ;; filter, top-k sort, or a weighted bundle — lives in the caller.
 (:wat::core::define (:my::app::measure-candidates
-                    (analogy-result :Holon)
-                    (candidates     :Vec<Holon>)
-                    -> :Vec<Pair<Holon,f64>>)
+                    (analogy-result :holon::HolonAST)
+                    (candidates     :Vec<holon::HolonAST>)
+                    -> :Vec<Pair<holon::HolonAST,f64>>)
   (:wat::core::map candidates
     (:wat::core::lambda (c)
       (:wat::core::vec c (presence c (encode analogy-result))))))

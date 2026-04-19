@@ -30,7 +30,7 @@ Four positions:
 ### Example
 
 ```scheme
-(:wat::core::define (:wat::std::Difference (a :Holon) (b :Holon) -> :Holon)
+(:wat::core::define (:wat::std::Difference (a :holon::HolonAST) (b :holon::HolonAST) -> :holon::HolonAST)
   (:wat::algebra::Blend a b 1 -1))
 ```
 
@@ -123,17 +123,17 @@ With `define` available:
 
 ```
 wat/std/blends.wat:
-  (define (:wat::std::Difference (a :Holon) (b :Holon) -> :Holon)
+  (define (:wat::std::Difference (a :holon::HolonAST) (b :holon::HolonAST) -> :holon::HolonAST)
     (Blend a b 1 -1))
-  (define (:wat::std::Amplify (x :Holon) (y :Holon) (s :f64) -> :Holon)
+  (define (:wat::std::Amplify (x :holon::HolonAST) (y :holon::HolonAST) (s :f64) -> :holon::HolonAST)
     (Blend x y 1 s))
-  (define (:wat::std::Subtract (x :Holon) (y :Holon) -> :Holon)
+  (define (:wat::std::Subtract (x :holon::HolonAST) (y :holon::HolonAST) -> :holon::HolonAST)
     (Blend x y 1 -1))
 
 wat/std/sequences.wat:
-  (define (:wat::std::Then (a :Holon) (b :Holon) -> :Holon)
+  (define (:wat::std::Then (a :holon::HolonAST) (b :holon::HolonAST) -> :holon::HolonAST)
     (Bundle (list a (Permute b 1))))
-  (define (:wat::std::Chain (holons :Vec<Holon>) -> :Holon)
+  (define (:wat::std::Chain (holons :Vec<holon::HolonAST>) -> :holon::HolonAST)
     (Bundle (pairwise-map :wat::std::Then holons)))
 ```
 
@@ -155,7 +155,7 @@ Nothing prevents a user from writing `(define (:wat::std::Difference ...) ...)` 
 
 **3. Generic types.**
 
-This proposal uses concrete types (`:Holon`, `:Atom`, `:f64`). For higher-order stdlib (`map`, `reduce`, `filter`), generics are needed: `(define (:wat::std::map (f :fn(T)->U) (xs :Vec<T>) -> :Vec<U>) ...)`.
+This proposal uses concrete types (`:holon::HolonAST`, `:Atom`, `:f64`). For higher-order stdlib (`map`, `reduce`, `filter`), generics are needed: `(define (:wat::std::map (f :fn(T)->U) (xs :Vec<T>) -> :Vec<U>) ...)`.
 
 **Counter:** generics are part of 058-030-types. This proposal uses concrete types initially; generics layer on without changing `define`'s shape.
 
@@ -245,7 +245,7 @@ Once `define` is implemented (alongside `lambda` per 058-029 and types per 058-0
 7. **First wat program.** From BOOK's "The first program" section:
 
    ```scheme
-   (:wat::core::define (:watmin::hello-world (name :Atom) -> :Holon)
+   (:wat::core::define (:watmin::hello-world (name :Atom) -> :holon::HolonAST)
      (:wat::std::Sequential (:wat::core::vec (:wat::algebra::Atom "hello") name)))
    ```
 

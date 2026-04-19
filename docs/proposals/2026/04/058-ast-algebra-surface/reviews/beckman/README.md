@@ -35,16 +35,16 @@ Resolved. FOUNDATION, 058-023 audit, Linear/Log/Circular macro bodies, and HYPOT
 Between Round 2 and Round 3, the datamancer committed 058 to **parametric polymorphism across the board** — user types, functions, macros, and the algebra's `:Atom<:T>`. Triggered by the "Programs ARE Atoms" substrate corollary: every holon (including composite programs) can be atomized into an opaque-identity vector via parametric Atom. Without parametric polymorphism, programs cannot be atomized; the programs-as-values principle would remain theoretical.
 
 Categorically:
-- `Atom : (T : Serializable) → :Holon` — parametric constructor. Hash respects coproduct structure: `hash(type-tag, canonical-EDN(value))`.
+- `Atom : (T : Serializable) → :holon::HolonAST` — parametric constructor. Hash respects coproduct structure: `hash(type-tag, canonical-EDN(value))`.
 - Extraction `atom-value : :Atom<:T> → :T` — polymorphic, type inference at call site.
 - User types can be parametric: `newtype`, `struct`, `enum`, `typealias` all accept type parameters.
 - Functions can carry type variables in rank-1 HM signatures.
 
-The question for Round 3: **does the parametric structure compose cleanly with the algebra?** `Atom<Holon>` is a recursive type (Holon contains Atom); is that categorically sound? The datamancer claims yes — `Atom` is a coproduct constructor over an open payload universe, and the universe includes `:Holon` itself. The hash respects the coproduct at every depth.
+The question for Round 3: **does the parametric structure compose cleanly with the algebra?** `Atom<holon::HolonAST>` is a recursive type (Holon contains Atom); is that categorically sound? The datamancer claims yes — `Atom` is a coproduct constructor over an open payload universe, and the universe includes `:holon::HolonAST` itself. The hash respects the coproduct at every depth.
 
 ### Algebra core shrinks 7 → 6
 
-**058-005 Orthogonalize** reframed to stdlib macros `Reject` + `Project` over Blend + a new `:wat::algebra::dot` measurement primitive. The datamancer introduces a scalar-returning measurement tier alongside HolonAST-producing core variants. Categorically: `cosine : :Holon × :Holon → :f64` and `dot : :Holon × :Holon → :f64` are bilinear measurements, orthogonal to the vector-producing HolonAST variants. This is a new categorical tier.
+**058-005 Orthogonalize** reframed to stdlib macros `Reject` + `Project` over Blend + a new `:wat::algebra::dot` measurement primitive. The datamancer introduces a scalar-returning measurement tier alongside HolonAST-producing core variants. Categorically: `cosine : :holon::HolonAST × :holon::HolonAST → :f64` and `dot : :holon::HolonAST × :holon::HolonAST → :f64` are bilinear measurements, orthogonal to the vector-producing HolonAST variants. This is a new categorical tier.
 
 ### The rejection pattern
 
