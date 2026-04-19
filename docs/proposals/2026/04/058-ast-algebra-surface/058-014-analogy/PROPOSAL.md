@@ -109,7 +109,7 @@ Some users already write analogies inline. Adding a named form might not be used
 (:wat/core/define (:my/app/measure-candidates
                     (analogy-result :Holon)
                     (candidates     :List<Holon>)
-                    -> :List<:Pair<Holon,f64>>)
+                    -> :List<Pair<Holon,f64>>)
   (:wat/core/map candidates
     (:wat/core/lambda (c)
       (:wat/core/list c (presence c (encode analogy-result))))))
@@ -120,11 +120,11 @@ Some users already write analogies inline. Adding a named form might not be used
 ;;   (Bundle (list man (Blend queen king 1 -1)))
 
 ;; Trading analogy: "uptrend was to breakout as reversal is to ?"
-(:wat/core/define :my/app/predicted
-  (:my/app/best-match (:wat/std/Analogy uptrend breakout reversal) candidate-patterns))
+(:wat/core/define :my/app/reversal-candidate-scores
+  (:my/app/measure-candidates (:wat/std/Analogy uptrend breakout reversal) candidate-patterns))
 ```
 
-The pattern is always: `Analogy` produces a completion Holon; the caller presence-measures that Holon against a candidate library to find the best match.
+The pattern is always: `Analogy` produces a completion Holon; the caller presence-measures that Holon against a candidate library and chooses a selection policy (max-by-score, threshold filter, top-k, weighted Bundle).
 
 ## Comparison
 

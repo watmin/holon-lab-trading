@@ -557,7 +557,7 @@ redef-mode = :strict         ;; default — name collisions halt startup
   ;; Eval checks every reference before executing:
   ;;   - Difference: exists in the static symbol table as a stdlib fn ✓
   ;;   - Atom: exists as an algebra-core form ✓
-  ;;   - :observed, :baseline: valid keywords ✓
+  ;;   - :observed, baseline: valid keywords ✓
   ;;   - Types match (Difference takes two Holons; Atom produces Holon) ✓
   ;; All checks pass. Execute: returns the constructed Holon AST.
 
@@ -826,12 +826,12 @@ The kernel primitives are exposed to wat programs as lowercase keyword-path func
 ;; --- Queues ---
 
 (:wat/kernel/make-bounded-queue :Candle 1)
-;; → :Pair<:QueueSender<Candle>, :QueueReceiver<Candle>>
+;; → :Pair<QueueSender<Candle>, QueueReceiver<Candle>>
 ;; Create a bounded(1) queue carrying :Candle values.
 ;; bounded(1) is lockstep rendezvous; larger n adds buffering.
 
 (:wat/kernel/make-unbounded-queue :LearnSignal)
-;; → :Pair<:QueueSender<LearnSignal>, :QueueReceiver<LearnSignal>>
+;; → :Pair<QueueSender<LearnSignal>, QueueReceiver<LearnSignal>>
 ;; Fire-and-forget — buffer grows until the consumer drains.
 
 (:wat/kernel/send sender value)         ;; → :()     blocks if bounded + full
@@ -855,8 +855,8 @@ The kernel primitives are exposed to wat programs as lowercase keyword-path func
 ;; thread hop, so they are DEAD. Patterns are written where they are used.
 
 (:wat/kernel/select receivers)
-;; receivers : :List<:QueueReceiver<T>>
-;; → :Pair<:usize, :Option<T>>
+;; receivers : :List<QueueReceiver<T>>
+;; → :Pair<usize, Option<T>>
 ;; Block until ANY receiver has a value or is disconnected. Returns the
 ;; index of the receiver and :None if that receiver disconnected or
 ;; (Some value) if it produced. The caller typically writes a loop that
@@ -924,7 +924,7 @@ The kernel primitives are exposed to wat programs as lowercase keyword-path func
 (:wat/core/define (:user/main (stdin   :QueueReceiver<String>)
                                (stdout  :QueueSender<String>)
                                (stderr  :QueueSender<String>)
-                               (signals :QueueReceiver<:wat/kernel/Signal>)
+                               (signals :QueueReceiver<wat/kernel/Signal>)
                                -> :())
   ;; stdin, stderr, and signals are slot-required by the kernel signature,
   ;; but this program does not use them. Only stdout is passed onward.
@@ -950,7 +950,7 @@ The kernel primitives are exposed to wat programs as lowercase keyword-path func
 
 This is the Haskell discipline without the monad wrapper: threading plain values through function parameters. The frustration is the point — every side effect is visible at the call site. Simple, not easy.
 
-**The `:user/main` convention.** The entry point is `:user/main` — a keyword-path name the **kernel looks for at startup**. The user declares it with four parameters the kernel passes in: `(:wat/core/define (:user/main (stdin :QueueReceiver<String>) (stdout :QueueSender<String>) (stderr :QueueSender<String>) (signals :QueueReceiver<:wat/kernel/Signal>) -> :()) ...)`. Same convention as C's `main(argc, argv)` and Rust's `fn main()` — but with every capability the kernel gives the program made explicit in the signature. No ambient stdio, no ambient signal handling. No bare-name exception to the keyword-path discipline.
+**The `:user/main` convention.** The entry point is `:user/main` — a keyword-path name the **kernel looks for at startup**. The user declares it with four parameters the kernel passes in: `(:wat/core/define (:user/main (stdin :QueueReceiver<String>) (stdout :QueueSender<String>) (stderr :QueueSender<String>) (signals :QueueReceiver<wat/kernel/Signal>) -> :()) ...)`. Same convention as C's `main(argc, argv)` and Rust's `fn main()` — but with every capability the kernel gives the program made explicit in the signature. No ambient stdio, no ambient signal handling. No bare-name exception to the keyword-path discipline.
 
 `:user/main` is a **kernel-looked-up slot** that the USER provides. This is the inverse of `:wat/kernel/...` paths, which are kernel-PROVIDED implementations (protected from redefinition). `:user/main` is kernel-REQUIRED (user provides; kernel invokes); there is no default implementation; the user's definition fills the slot.
 
@@ -980,9 +980,9 @@ Two `:user/main` declarations across loaded files produce a startup name collisi
      state)))
 
 ;; Inline fan-in: select across N receivers, keep going until all disconnect.
-;; `select` returns (index, :None) when a receiver disconnects — drop it.
+;; `select` returns (index, None) when a receiver disconnects — drop it.
 (:wat/core/define (:my/app/drain-results
-                    (rxs      :List<:QueueReceiver<Result>>)
+                    (rxs      :List<QueueReceiver<Result>>)
                     (console  :ConsoleHandle)
                     -> :())
   (:wat/core/if (:wat/core/empty? rxs)
@@ -998,7 +998,7 @@ Two `:user/main` declarations across loaded files produce a startup name collisi
 (:wat/core/define (:user/main (stdin   :QueueReceiver<String>)
                                (stdout  :QueueSender<String>)
                                (stderr  :QueueSender<String>)
-                               (signals :QueueReceiver<:wat/kernel/Signal>)
+                               (signals :QueueReceiver<wat/kernel/Signal>)
                                -> :())
   (:wat/core/let*
       ((N 4)  ;; four observers
@@ -1624,7 +1624,7 @@ None of these need to be primitive. Step (1) is a `:wat/core/map`. Step (2) is p
   (:wat/core/lambda (entry)
     (:wat/core/list (:wat/core/first entry)
                      (presence (:wat/core/first entry) query-vector))))
-;; → :List<:Pair<Holon,f64>>   — every entry paired with its overlay score
+;; → :List<Pair<Holon,f64>>   — every entry paired with its overlay score
 ```
 
 No `Cleanup` in the core. The algebra returned the full list of (entry, presence-score) pairs. The caller now decides: top-1 (a fold with max-by-score), top-k (a sort then take), threshold filter (keep entries above `5/sqrt(d)` — the substrate noise floor), a weighted mixture of matches (a Bundle with Blend coefficients), or simply "pass the whole list onward" for a downstream stage. Four different policies, four different caller expressions, same substrate.
@@ -1644,7 +1644,7 @@ Every presence query — membership, retrieval, matching, recognition — return
 
 (:wat/core/define (:my/app/recognize (observation :Vector)
                                      (engram-lib :Holon)
-                                     -> :List<:Pair<Holon,f64>>)
+                                     -> :List<Pair<Holon,f64>>)
   ;; Return every engram with its presence score. The caller decides
   ;; what to do with the list — top-1, above-threshold, weighted
   ;; bundle, whatever their application demands.
@@ -1949,7 +1949,7 @@ wat/std/program/
       No more. Database, telemetry pipelines, rate-gates, signal
       converters, domain-specific observers/brokers/treasuries — all
       USERLAND. Apps ship them under their own paths (:project/.../
-      program/..., :alice/program/..., etc.). See FOUNDATION's
+      program/..., alice/program/..., etc.). See FOUNDATION's
       "Programs are userland" subsection for the six-rule conformance
       contract.
 
@@ -2432,7 +2432,7 @@ Retrieval is NOT a core form. Presence is measured by `cosine(encode(target), re
   ;;   HashMap → HashMap::get(locator) — hash lookup, O(1) avg
   ;;   Vec     → Vec[locator]          — direct index, O(1)
   ;;   HashSet → HashSet::get(locator) — hash membership, O(1) avg
-  ;; Returns (Some v) on hit, :None on miss. No vectors involved.
+  ;; Returns (Some v) on hit, None on miss. No vectors involved.
   ...)
 
 ;; Note: `nth` is retired. Use `get` uniformly — `(:wat/std/get my-vec 3)` is `nth`.
@@ -2573,8 +2573,8 @@ All eight forms are loaded at startup. The wat-vm distinguishes them by what kin
 ;;   :f64 :f32 :i8 :i16 :i32 :i64 :i128 :u8 :u16 :u32 :u64 :u128
 ;;   :usize :isize :bool :char :String :&str :()
 ;;
-;; Algebra — :Holon is an enum; :Atom, :Bind, :Bundle, :Permute,
-;;   :Thermometer, :Blend, :Orthogonalize, :Resonance, :ConditionalBind
+;; Algebra — :Holon is an enum; :Atom, Bind, Bundle, Permute,
+;;   :Thermometer, Blend, Orthogonalize, Resonance, ConditionalBind
 ;;   are its nine variants (not separate subtypes). Pattern-match to
 ;;   select variant behavior.
 ;;
@@ -2878,7 +2878,7 @@ Compile-time forms (materialized into the Rust-backed wat-vm binary; cannot be r
 Syntactic feature pervading all of the above:
 
 ```scheme
-type annotations               ; 058-030  — :Holon, :Atom, Rust primitives, parametric, user keyword-path
+type annotations               ; 058-030  — :Holon, Atom, Rust primitives, parametric, user keyword-path
 ```
 
 Language core is minimal by criterion: just enough to make the algebra stdlib exist as runnable code, define user types statically, load both phases with cryptographic trust, and dispatch correctly. Everything else is host-inherited from Lisp or belongs in stdlib.
