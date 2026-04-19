@@ -21,7 +21,7 @@ The first two modes dissolve into Blend idioms. The third is the genuinely new o
 A new core variant that removes a component's geometric direction from a vector:
 
 ```scheme
-(Orthogonalize x y)
+(:wat/algebra/Orthogonalize x y)
 ```
 
 Semantically: given vectors `x` and `y`, produce a new vector that is `x` with `y`'s direction projected out. The result is **orthogonal to `y` under similarity measurement** — the algebra's primary evaluation framework (see FOUNDATION's "Algebraic laws under similarity measurement").
@@ -94,8 +94,8 @@ The invariant produced (orthogonality to `y`) is the signature property. No othe
 If Blend accepted computed weights (expressions evaluable at encoding time, using primitives like `dot` and `magnitude-squared`), Orthogonalize would become stdlib:
 
 ```scheme
-(define (Orthogonalize x y)
-  (Blend x y 1 (- (/ (dot x y) (dot y y)))))
+(:wat/core/define (:wat/std/Orthogonalize x y)
+  (:wat/algebra/Blend x y 1 (:wat/core/- (:wat/core// (dot x y) (dot y y)))))
 ```
 
 Whether to widen Blend is a design question — it would require wat to support scalar-expression evaluation in AST positions, which changes the AST's character from "static tree of literals" to "tree with arithmetic in scalar positions."

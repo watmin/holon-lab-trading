@@ -24,12 +24,12 @@ With Blend as a pivotal core form (058-002) — and specifically Option B (two I
 ### Stdlib definition
 
 ```scheme
-(defmacro (Circular (value :AST) (period :AST) -> :AST)
-  `(let* ((angle   (* 2 pi (/ ,value ,period)))
+(:wat/core/defmacro (:wat/std/Circular (value :AST) (period :AST) -> :AST)
+  `(:wat/core/let* ((angle   (:wat/core/* 2 pi (:wat/core// ,value ,period)))
           (w-cos   (cos angle))                  ;; can be negative
           (w-sin   (sin angle)))                 ;; can be negative
-     (Blend (Atom :wat/std/circular-cos-basis)
-            (Atom :wat/std/circular-sin-basis)
+     (:wat/algebra/Blend (:wat/algebra/Atom :wat/std/circular-cos-basis)
+            (:wat/algebra/Atom :wat/std/circular-sin-basis)
             w-cos
             w-sin)))
 ```
@@ -136,10 +136,10 @@ Delete the Circular encoder match arm (~15-20 lines). Macro expansion is handled
 **wat stdlib addition** — `wat/std/scalars.wat`:
 
 ```scheme
-(defmacro (Circular (low :AST) (high :AST) (value :AST) (scale :AST) -> :AST)
-  `(let* ((period (first ,scale))
-          (angle (* 2 pi (/ ,value period))))
-     (Blend (Thermometer ,low dim) (Thermometer ,high dim) (cos angle) (sin angle))))
+(:wat/core/defmacro (:wat/std/Circular (low :AST) (high :AST) (value :AST) (scale :AST) -> :AST)
+  `(:wat/core/let* ((period (:wat/core/first ,scale))
+          (angle (:wat/core/* 2 pi (:wat/core// ,value period))))
+     (:wat/algebra/Blend (:wat/algebra/Thermometer ,low dim) (:wat/algebra/Thermometer ,high dim) (cos angle) (sin angle))))
 ```
 
 Registered at parse time (per 058-031-defmacro): every `(Circular ...)` invocation is rewritten to the canonical `let* + Blend-over-Thermometers` form before hashing.

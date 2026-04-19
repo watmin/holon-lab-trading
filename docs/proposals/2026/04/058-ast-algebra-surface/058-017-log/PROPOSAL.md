@@ -24,8 +24,8 @@ With Blend as a pivotal core form (058-002), `Log` becomes a stdlib macro (per 0
 ### Stdlib definition
 
 ```scheme
-(defmacro (Log (value :AST) (min :AST) (max :AST) -> :AST)
-  `(Thermometer (log ,value) (log ,min) (log ,max)))
+(:wat/core/defmacro (:wat/std/Log (value :AST) (min :AST) (max :AST) -> :AST)
+  `(:wat/algebra/Thermometer (log ,value) (log ,min) (log ,max)))
 ```
 
 Log-transform the value and the bounds, then encode linearly with Thermometer. Because Thermometer's encoding is intrinsically linear in its inputs, log-transforming the inputs gives log-scale output — the geometric midpoint of `[min, max]` lands at the linear midpoint of the Thermometer gradient.
@@ -129,12 +129,12 @@ Delete the Log encoder match arm (~15-20 lines). Macro expansion is handled by 0
 **wat stdlib addition** — `wat/std/scalars.wat`:
 
 ```scheme
-(defmacro (Log (low :AST) (high :AST) (value :AST) (scale :AST) -> :AST)
-  `(let* ((min (first ,scale))
-          (max (second ,scale))
-          (t (/ (- (log ,value) (log min))
-                (- (log max) (log min)))))
-     (Blend (Thermometer ,low dim) (Thermometer ,high dim) (- 1 t) t)))
+(:wat/core/defmacro (:wat/std/Log (low :AST) (high :AST) (value :AST) (scale :AST) -> :AST)
+  `(:wat/core/let* ((min (:wat/core/first ,scale))
+          (max (:wat/core/second ,scale))
+          (t (:wat/core// (:wat/core/- (log ,value) (log min))
+                (:wat/core/- (log max) (log min)))))
+     (:wat/algebra/Blend (:wat/algebra/Thermometer ,low dim) (:wat/algebra/Thermometer ,high dim) (:wat/core/- 1 t) t)))
 ```
 
 Registered at parse time (per 058-031-defmacro): every `(Log ...)` invocation is rewritten to the canonical `let* + Blend-over-Thermometers` form before hashing.

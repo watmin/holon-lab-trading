@@ -16,7 +16,7 @@
 ### Shape
 
 ```scheme
-(lambda ((param1 :Type1) (param2 :Type2) ... -> :ReturnType)
+(:wat/core/lambda ((param1 :Type1) (param2 :Type2) ... -> :ReturnType)
   body-expression)
 ```
 
@@ -30,15 +30,15 @@ Three positions:
 
 ```scheme
 ;; An anonymous function that doubles a Holon's emphasis against another:
-(lambda ((x :Holon) (y :Holon) -> :Holon)
-  (Amplify x y 2))
+(:wat/core/lambda ((x :Holon) (y :Holon) -> :Holon)
+  (:wat/std/Amplify x y 2))
 
 ;; Used inside map:
-(map (lambda ((t :Holon) -> :Holon) (Permute t 1))
+(:wat/core/map (:wat/core/lambda ((t :Holon) -> :Holon) (:wat/algebra/Permute t 1))
      my-holons)
 
 ;; Stored in a local variable (but still anonymous — no symbol-table entry):
-(let ((doubler (lambda ((x :f64) -> :f64) (* x 2))))
+(:wat/core/let ((doubler (:wat/core/lambda ((x :f64) -> :f64) (:wat/core/* x 2))))
   (doubler 21))
 ```
 
@@ -73,12 +73,12 @@ Identical structure to `Define` but without the `name` field and without the sym
 Stdlib forms like `map`, `reduce`, `filter` take functions as arguments:
 
 ```scheme
-(define (:wat/std/map (f :fn(T)->U) (xs :List<T>) -> :List<U>)
+(:wat/core/define (:wat/std/map (f :fn(T)->U) (xs :List<T>) -> :List<U>)
   ...)
 
 ;; Call site with an inline lambda:
-(map (lambda ((t :Holon) -> :Holon) (Permute t 1))
-     (list a b c d))
+(:wat/core/map (:wat/core/lambda ((t :Holon) -> :Holon) (:wat/algebra/Permute t 1))
+     (:wat/core/list a b c d))
 ```
 
 Without `lambda`, every higher-order call requires pre-defining the transformation via `define`, cluttering the startup symbol table with one-off functions. This is unworkable at scale, and it also means that runtime code composition becomes impossible — users would need to anticipate every helper at startup.
@@ -89,11 +89,11 @@ The wat type system includes `:fn(args)->return` as a type (per 058-030-types). 
 
 ```scheme
 ;; Awkward — you must add a named helper to stdlib:
-(define (:internal/my-shift (t :Holon) -> :Holon) (Permute t 1))
-(map :internal/my-shift (list a b c))
+(:wat/core/define (:internal/my-shift (t :Holon) -> :Holon) (:wat/algebra/Permute t 1))
+(:wat/core/map :internal/my-shift (:wat/core/list a b c))
 
 ;; Clean — pass the function directly:
-(map (lambda ((t :Holon) -> :Holon) (Permute t 1)) (list a b c))
+(:wat/core/map (:wat/core/lambda ((t :Holon) -> :Holon) (:wat/algebra/Permute t 1)) (:wat/core/list a b c))
 ```
 
 The second form is load-bearing for any language that treats functions as values.
@@ -103,9 +103,9 @@ The second form is load-bearing for any language that treats functions as values
 Lambdas capture their enclosing lexical scope, including references to the static symbol table:
 
 ```scheme
-(define (:wat/std/amplify-all (xs :List<Holon>) (reference :Holon) (factor :f64) -> :List<Holon>)
-  (map (lambda ((x :Holon) -> :Holon)
-         (Amplify x reference factor))    ; references `reference` and `factor` from enclosing scope
+(:wat/core/define (:wat/std/amplify-all (xs :List<Holon>) (reference :Holon) (factor :f64) -> :List<Holon>)
+  (:wat/core/map (:wat/core/lambda ((x :Holon) -> :Holon)
+         (:wat/std/Amplify x reference factor))    ; references `reference` and `factor` from enclosing scope
        xs))
 ```
 
@@ -127,10 +127,10 @@ A lambda is an AST node like any other. Its EDN is hashable and part of the encl
 
 ```scheme
 ;; Old (per LANGUAGE.md — types optional):
-(lambda (x) (* x 2))
+(:wat/core/lambda (x) (:wat/core/* x 2))
 
 ;; New (types required, return inside signature):
-(lambda ((x :f64) -> :f64) (* x 2))
+(:wat/core/lambda ((x :f64) -> :f64) (:wat/core/* x 2))
 ```
 
 Stdlib authors writing `(define ...)` forms use typed lambdas for their higher-order arguments. The syntax pairs cleanly.
@@ -154,9 +154,9 @@ Having both as separate primitives lets the evaluator handle them independently.
 Inside a larger function, lambdas let you factor out small transformations without polluting the global symbol table:
 
 ```scheme
-(define (:my/complex-analysis (data :Holon) -> :Holon)
-  (let ((extract-signal (lambda ((d :Holon) -> :Holon) (Orthogonalize d noise)))
-        (amplify-signal (lambda ((s :Holon) -> :Holon) (Amplify s reference 2))))
+(:wat/core/define (:my/complex-analysis (data :Holon) -> :Holon)
+  (:wat/core/let ((extract-signal (:wat/core/lambda ((d :Holon) -> :Holon) (:wat/algebra/Orthogonalize d noise)))
+        (amplify-signal (:wat/core/lambda ((s :Holon) -> :Holon) (:wat/std/Amplify s reference 2))))
     (amplify-signal (extract-signal data))))
 ```
 

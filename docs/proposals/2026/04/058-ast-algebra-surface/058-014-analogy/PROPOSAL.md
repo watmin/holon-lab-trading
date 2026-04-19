@@ -11,8 +11,8 @@
 A wat stdlib macro (per 058-031-defmacro) that produces the classic VSA analogy completion:
 
 ```scheme
-(defmacro (Analogy (a :AST) (b :AST) (c :AST) -> :AST)
-  `(Bundle (list ,c (Subtract ,b ,a))))
+(:wat/core/defmacro (:wat/std/Analogy (a :AST) (b :AST) (c :AST) -> :AST)
+  `(:wat/algebra/Bundle (:wat/core/list ,c (:wat/std/Subtract ,b ,a))))
 ```
 
 Expands to `c + (b - a)` — the classic "A is to B as C is to ?" vector arithmetic. The result is a Holon that represents the fourth term of the analogy as a point in thought-space. The caller retrieves the actual answer by measuring **presence** of that Holon against a candidate library — presence measurement above the substrate's noise floor (5σ ≈ 0.05 at d=10,000) identifies the matching candidate.
@@ -54,10 +54,10 @@ The typical usage is:
 ```scheme
 ;; Find the candidate that best matches the analogy's completion:
 (argmax
-  (map (lambda ((cand :Holon) -> :Pair<Holon,f64>)
-         (list cand (presence cand (encode (Analogy king queen man)))))
+  (:wat/core/map (:wat/core/lambda ((cand :Holon) -> :Pair<Holon,f64>)
+         (:wat/core/list cand (presence cand (encode (:wat/std/Analogy king queen man)))))
        candidates)
-  second)
+  :wat/core/second)
 ```
 
 With `Analogy` named, this reads as "complete this analogy, then find the best-matching candidate by presence measurement." Without `Analogy`, the expression's inner form becomes `(Bundle (list man (Subtract queen king)))` — mechanically identical, but the reader has to recognize the pattern.
@@ -73,8 +73,8 @@ If the algebra exposes `Bind`, `Bundle`, `Permute`, `Subtract`, `Analogy` as a c
 **1. It's one line of code.**
 
 ```scheme
-(defmacro (Analogy (a :AST) (b :AST) (c :AST) -> :AST)
-  `(Bundle (list ,c (Subtract ,b ,a))))
+(:wat/core/defmacro (:wat/std/Analogy (a :AST) (b :AST) (c :AST) -> :AST)
+  `(:wat/algebra/Bundle (:wat/core/list ,c (:wat/std/Subtract ,b ,a))))
 ```
 
 One line. Is a named form earning its place for one line of expansion?
@@ -102,21 +102,21 @@ Some users already write analogies inline. Adding a named form might not be used
 ```scheme
 ;; Classical king-queen-man analogy — find the best-matching candidate
 ;; by presence measurement:
-(define (best-match (analogy-result :Holon) (candidates :List<Holon>) -> :Pair<Holon,f64>)
+(:wat/core/define (:my/app/best-match (analogy-result :Holon) (candidates :List<Holon>) -> :Pair<Holon,f64>)
   (argmax
-    (map (lambda ((c :Holon) -> :Pair<Holon,f64>)
-           (list c (presence c (encode analogy-result))))
+    (:wat/core/map (:wat/core/lambda ((c :Holon) -> :Pair<Holon,f64>)
+           (:wat/core/list c (presence c (encode analogy-result))))
          candidates)
-    second))
+    :wat/core/second))
 
-(define completion
-  (best-match (Analogy king queen man) vocabulary))
+(:wat/core/define :my/app/completion
+  (:my/app/best-match (:wat/std/Analogy king queen man) vocabulary))
 ;; after parse-time expansion, the Analogy AST is:
 ;;   (Bundle (list man (Blend queen king 1 -1)))
 
 ;; Trading analogy: "uptrend was to breakout as reversal is to ?"
-(define predicted
-  (best-match (Analogy uptrend breakout reversal) candidate-patterns))
+(:wat/core/define :my/app/predicted
+  (:my/app/best-match (:wat/std/Analogy uptrend breakout reversal) candidate-patterns))
 ```
 
 The pattern is always: `Analogy` produces a completion Holon; the caller presence-measures that Holon against a candidate library to find the best match.
@@ -163,8 +163,8 @@ Yes — `(Bundle (list c (Subtract b a)))`, or directly `(Bundle (list c (Blend 
 
 ```scheme
 ;; wat/std/reasoning.wat (or similar)
-(defmacro (Analogy (a :AST) (b :AST) (c :AST) -> :AST)
-  `(Bundle (list ,c (Subtract ,b ,a))))
+(:wat/core/defmacro (:wat/std/Analogy (a :AST) (b :AST) (c :AST) -> :AST)
+  `(:wat/algebra/Bundle (:wat/core/list ,c (:wat/std/Subtract ,b ,a))))
 ```
 
 Depends on `Bundle` (core), `Subtract` (stdlib macro, 058-019). Registered at parse time (per 058-031-defmacro): every `(Analogy ...)` invocation expands to the canonical Bundle + Subtract form, and `Subtract` is then expanded further to `Blend` in the same pass.
@@ -178,8 +178,8 @@ Depends on `Bundle` (core), `Subtract` (stdlib macro, 058-019). Registered at pa
 3. **Should the stdlib also provide the four-term `AnalogyCleanup`?** A convenience form that runs cleanup against a candidate pool:
 
 ```scheme
-(defmacro (AnalogyCleanup (a :AST) (b :AST) (c :AST) (candidates :AST) -> :AST)
-  `(cleanup (Analogy ,a ,b ,c) ,candidates))
+(:wat/core/defmacro (:my/vocab/AnalogyCleanup (a :AST) (b :AST) (c :AST) (candidates :AST) -> :AST)
+  `(cleanup (:wat/std/Analogy ,a ,b ,c) ,candidates))
 ```
 
 Over-naming risk, but this is the most common use case. Worth a second named form, or let users compose cleanup around Analogy manually?

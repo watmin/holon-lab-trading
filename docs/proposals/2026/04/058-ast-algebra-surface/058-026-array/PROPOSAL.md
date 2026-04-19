@@ -25,15 +25,15 @@ Earlier drafts proposed Array as a macro alias for `Sequential` (the positional-
 A wat stdlib function that builds an integer-keyed Map from a list of Holons:
 
 ```scheme
-(define (:wat/std/Vec (items :List<Holon>) -> :Holon)
-  (Bundle
+(:wat/core/define (:wat/std/Vec (items :List<Holon>) -> :Holon)
+  (:wat/algebra/Bundle
     (map-with-index
-      (lambda ((item :Holon) (i :usize) -> :Holon)
-        (Bind (Atom i) item))
+      (:wat/core/lambda ((item :Holon) (i :usize) -> :Holon)
+        (:wat/algebra/Bind (:wat/algebra/Atom i) item))
       items)))
 ```
 
-Expands at call time to: `(Bundle (list (Bind (Atom 0) items[0]) (Bind (Atom 1) items[1]) ...))`. The integer at each position is the KEY atom; each item is bound to its index.
+Expands at call time to: `(:wat/algebra/Bundle (:wat/core/list (:wat/algebra/Bind (:wat/algebra/Atom 0) items[0]) (:wat/algebra/Bind (:wat/algebra/Atom 1) items[1]) ...))`. The integer at each position is the KEY atom; each item is bound to its index.
 
 ### Semantics
 
@@ -43,14 +43,14 @@ Expands at call time to: `(Bundle (list (Bind (Atom 0) items[0]) (Bind (Atom 1) 
 
 ```scheme
 ;; Build an array:
-(define fruits
-  (Array (list apple banana cherry date)))
+(:wat/core/define :my/app/fruits
+  (:wat/std/Vec (:wat/core/list apple banana cherry date)))
 
 ;; fruits' AST is structurally:
-;;   (Bundle (list (Bind (Atom 0) apple)
-;;                 (Bind (Atom 1) banana)
-;;                 (Bind (Atom 2) cherry)
-;;                 (Bind (Atom 3) date)))
+;;   (:wat/algebra/Bundle (:wat/core/list (:wat/algebra/Bind (:wat/algebra/Atom 0) apple)
+;;                 (:wat/algebra/Bind (:wat/algebra/Atom 1) banana)
+;;                 (:wat/algebra/Bind (:wat/algebra/Atom 2) cherry)
+;;                 (:wat/algebra/Bind (:wat/algebra/Atom 3) date)))
 ```
 
 ### `nth` retired
@@ -58,8 +58,8 @@ Expands at call time to: `(Bundle (list (Bind (Atom 0) items[0]) (Bind (Atom 1) 
 `nth` was redundant with the unified `get` introduced in the 2026-04-18 sweep. Use `get` directly:
 
 ```scheme
-(get my-vec 3)                 ;; returns :Option<Holon>
-;; equivalent to the old (nth my-vec 3)
+(:wat/std/get my-vec 3)                 ;; returns :Option<Holon>
+;; equivalent to the old (:wat/std/nth my-vec 3)
 ```
 
 `get` with a `:usize` locator goes through the Vec's Rust `Vec<Holon>` backing for O(1) indexing. Returns `(Some v)` at valid indices, `:None` out of range. Same signature as `get` on HashMap (hash lookup) and HashSet (hash membership). One name, three containers.
@@ -70,19 +70,19 @@ All expressible through the Map API:
 
 ```scheme
 ;; Append (cheap — new integer key is just count(arr))
-(define (:wat/std/append (arr :Holon) (item :Holon) -> :Holon)
-  (assoc arr (Atom (count arr)) item))
+(:wat/core/define (:wat/std/append (arr :Holon) (item :Holon) -> :Holon)
+  (assoc arr (:wat/algebra/Atom (:wat/std/count arr)) item))
 
 ;; Redefine at index (moderate — AST walk to find and replace)
-(define (:wat/std/set-at (arr :Holon) (i :usize) (v :Holon) -> :Holon)
-  (assoc arr (Atom i) v))
+(:wat/core/define (:wat/std/set-at (arr :Holon) (i :usize) (v :Holon) -> :Holon)
+  (assoc arr (:wat/algebra/Atom i) v))
 
 ;; Remove at index (moderate — AST walk to remove)
-(define (:wat/std/remove-at (arr :Holon) (i :usize) -> :Holon)
-  (dissoc arr (Atom i)))
+(:wat/core/define (:wat/std/remove-at (arr :Holon) (i :usize) -> :Holon)
+  (dissoc arr (:wat/algebra/Atom i)))
 
 ;; Count
-(define (:wat/std/count (arr :Holon) -> :usize)
+(:wat/core/define (:wat/std/count (arr :Holon) -> :usize)
   (map-count arr))                  ; number of Bind nodes in the Bundle
 ```
 
@@ -91,12 +91,12 @@ All expressible through the Map API:
 Inserting at position 0 requires **renumbering every existing entry** — each current key `i` becomes `i + 1`, then the new item gets key `0`. The identity of every existing binding changes (different key atom), so the old bindings are removed and new ones are added.
 
 ```scheme
-(define (:wat/std/cons-front (arr :Holon) (item :Holon) -> :Holon)
-  (let ((n (count arr)))
+(:wat/core/define (:wat/std/cons-front (arr :Holon) (item :Holon) -> :Holon)
+  (:wat/core/let ((n (:wat/std/count arr)))
     ;; Step 1: collect all existing items with their old keys
     ;; Step 2: rebuild the array with keys shifted by 1 and the new item at key 0
-    (Array (cons item
-                 (map (lambda ((i :usize) -> :Holon) (nth arr i))
+    (:wat/std/Vec (:wat/core/cons item
+                 (:wat/core/map (:wat/core/lambda ((i :usize) -> :Holon) (:wat/std/get arr (:wat/algebra/Atom i)))
                       (range n))))))
 ```
 
@@ -190,18 +190,18 @@ No. Array has one role ("integer-indexed collection"), one construction path, on
 ```scheme
 ;; wat/std/structures.wat (or similar)
 
-(define (:wat/std/Vec (items :List<Holon>) -> :Holon)
-  (Bundle
+(:wat/core/define (:wat/std/Vec (items :List<Holon>) -> :Holon)
+  (:wat/algebra/Bundle
     (map-with-index
-      (lambda ((item :Holon) (i :usize) -> :Holon)
-        (Bind (Atom i) item))
+      (:wat/core/lambda ((item :Holon) (i :usize) -> :Holon)
+        (:wat/algebra/Bind (:wat/algebra/Atom i) item))
       items)))
 
-(define (:wat/std/nth (arr :Holon) (i :usize) -> :Option<Holon>)
-  (get arr (Atom i)))
+(:wat/core/define (:wat/std/nth (arr :Holon) (i :usize) -> :Option<Holon>)
+  (:wat/std/get arr (:wat/algebra/Atom i)))
 
-(define (:wat/std/append (arr :Holon) (item :Holon) -> :Holon)
-  (assoc arr (Atom (count arr)) item))
+(:wat/core/define (:wat/std/append (arr :Holon) (item :Holon) -> :Holon)
+  (assoc arr (:wat/algebra/Atom (:wat/std/count arr)) item))
 ```
 
 Ships as wat code once `define`, `lambda`, Bundle/Bind/Atom/Map/get are in.

@@ -20,7 +20,7 @@ In a classical database, there is a separation: data lives at some address (memo
 A query in wat is a function call — an AST that describes what to compute:
 
 ```scheme
-(event-at-time (Atom "2026-04-17T12:00:00"))
+(event-at-time (:wat/algebra/Atom "2026-04-17T12:00:00"))
 ```
 
 This expression is data (an AST). It projects to a vector. Evaluating it produces the answer — which is ALSO an AST (and a vector).
@@ -43,24 +43,24 @@ The location is a holon. Holons compose. Addresses can be computed, composed, st
 Carin Meier's Clojure VSA talk mentioned "time databases" — time-indexed stores built from the same primitives. It works:
 
 ```scheme
-(def event-stream
-  (HashMap (list
-    (list (Atom "2026-04-17T12:00") event-1)
-    (list (Atom "2026-04-17T13:00") event-2)
-    (list (Atom "2026-04-17T14:00") event-3)
+(:wat/core/define :my/app/event-stream
+  (:wat/std/HashMap (:wat/core/list
+    (:wat/core/list (:wat/algebra/Atom "2026-04-17T12:00") event-1)
+    (:wat/core/list (:wat/algebra/Atom "2026-04-17T13:00") event-2)
+    (:wat/core/list (:wat/algebra/Atom "2026-04-17T14:00") event-3)
     ;; ... arbitrary depth via Recursive Composition ...
     )))
 
 ;; Exact lookup — address is a literal:
-(get event-stream (Atom "2026-04-17T12:00"))
+(:wat/std/get :my/app/event-stream (:wat/algebra/Atom "2026-04-17T12:00"))
 
 ;; Semantic search — address is a pattern (cosine over vectors):
 (match-library query-holon event-library)
 
 ;; Generated query — address is a computed AST:
-(def custom-query
-  (build-query user-criteria))       ; user-criteria is data
-(evaluate custom-query event-stream) ; executes a program built from data
+(:wat/core/define :my/app/custom-query
+  (build-query user-criteria))               ; user-criteria is data
+(evaluate :my/app/custom-query :my/app/event-stream) ; executes a program built from data
 ```
 
 Each query is itself a holon. Queries can be stored, composed, compared via cosine, searched by similarity. A database of queries is as natural as a database of events, because both are holons.
@@ -70,15 +70,15 @@ Each query is itself a holon. Queries can be stored, composed, compared via cosi
 Because programs are holons, a program can build another program and return it as a value:
 
 ```scheme
-(defn build-matcher (pattern)
+(:wat/core/define (:my/app/build-matcher pattern)
   ;; Returns a function AST that matches against `pattern`
-  (Fn (Vec (list (Atom :candidate)))
-      (Bundle (list
-        (If (matches? (Atom :candidate) pattern)
-            (Atom :match)
-            (Atom :no-match))))))
+  (Fn (:wat/std/Vec (:wat/core/list (:wat/algebra/Atom :candidate)))
+      (:wat/algebra/Bundle (:wat/core/list
+        (:wat/core/if (matches? (:wat/algebra/Atom :candidate) pattern)
+            (:wat/algebra/Atom :match)
+            (:wat/algebra/Atom :no-match))))))
 
-(def match-reversal (build-matcher reversal-pattern))
+(:wat/core/define :my/app/match-reversal (:my/app/build-matcher reversal-pattern))
 ;; match-reversal is a function, built from data.
 ;; It can be stored in a HashMap, passed to another function, executed,
 ;; compared to other functions via cosine, and evaluated on inputs.

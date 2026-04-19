@@ -18,8 +18,8 @@
 A wat stdlib macro (per 058-031-defmacro) that constructs an encoded unordered collection from a list of holons:
 
 ```scheme
-(defmacro (HashSet (xs :AST) -> :AST)
-  `(Bundle ,xs))
+(:wat/core/defmacro (:wat/std/HashSet (xs :AST) -> :AST)
+  `(:wat/algebra/Bundle ,xs))
 ```
 
 Expansion is Bundle. The distinction is reader intent at source: `HashSet` communicates "data-structure: unordered collection with O(1) membership"; `Bundle` communicates "superposition primitive." Both collapse to the same canonical AST after parse-time expansion, so `hash((HashSet xs)) = hash((Bundle xs))` — no alias collision.
@@ -31,7 +31,7 @@ Expansion is Bundle. The distinction is reader intent at source: `HashSet` commu
 ### `get` — structural membership, unified with HashMap and Vec
 
 ```scheme
-(get (s :HashSet<T>) (candidate :T)) -> :Option<T>
+(:wat/std/get (s :HashSet<T>) (candidate :T)) -> :Option<T>
 ;; Hash-based membership via Rust's HashSet::get(), O(1) average.
 ;; Returns (Some candidate) if the element is present (confirmation /
 ;; canonicalization); :None if absent.
@@ -47,6 +47,7 @@ For similarity-based queries (approximate membership, fuzzy match), the algebra'
 (presence candidate (encode my-set)) -> :f64
 ;; Cosine of candidate's encoding against the set's bundled vector.
 ;; Above 5/sqrt(d) = "present with confidence"; below = absent or capacity exceeded.
+;; (presence and encode are algebra-level accessors; paths TBD)
 ```
 
 The caller picks the regime: structural for exact, similarity for fuzzy. See FOUNDATION's "Presence is Measurement, Not Verdict" for the general framing.
@@ -177,8 +178,8 @@ Yes — `(Bundle xs)`. Named form earns its place via data-structure reader inte
 **wat stdlib addition** — `wat/std/structures.wat`:
 
 ```scheme
-(defmacro (Set (xs :AST) -> :AST)
-  `(Bundle ,xs))
+(:wat/core/defmacro (:wat/std/HashSet (xs :AST) -> :AST)
+  `(:wat/algebra/Bundle ,xs))
 ```
 
 Registered at parse time (per 058-031-defmacro): every `(Set xs)` invocation is rewritten to `(Bundle xs)` before hashing.
@@ -187,8 +188,8 @@ Optional userland helper (not part of this proposal):
 
 ```scheme
 ;; userland: threshold-based membership test — regular function, not a macro
-(define (contains? set-holon candidate threshold)
-  (> (cosine-similarity set-holon candidate) threshold))
+(:wat/core/define (:my/vocab/contains? set-holon candidate threshold)
+  (:wat/core/> (cosine-similarity set-holon candidate) threshold))
 ```
 
 ## Questions for Designers

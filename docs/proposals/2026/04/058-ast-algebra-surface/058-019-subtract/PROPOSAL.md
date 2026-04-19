@@ -12,9 +12,9 @@
 A wat stdlib macro (per 058-031-defmacro) that linearly removes `y`'s contribution from `x`:
 
 ```scheme
-(defmacro (Subtract (x :AST) (y :AST) -> :AST)
-  `(Blend ,x ,y 1 -1))
-;; Expands at parse time to: (Blend x y 1 -1)
+(:wat/core/defmacro (:wat/std/Subtract (x :AST) (y :AST) -> :AST)
+  `(:wat/algebra/Blend ,x ,y 1 -1))
+;; Expands at parse time to: (:wat/algebra/Blend x y 1 -1)
 ;; which computes: threshold(1·x + (-1)·y) — linearly subtract y from x
 ```
 
@@ -40,9 +40,9 @@ Both criteria met.
 Vocab modules that want to cleanse an observation of a known pattern use subtraction framing:
 
 ```scheme
-(Subtract observation known-noise)     ; strip the known noise
-(Subtract signal trend)                 ; detrend the signal
-(Subtract candidate prototype)          ; extract deviation
+(:wat/std/Subtract observation known-noise)     ; strip the known noise
+(:wat/std/Subtract signal trend)                 ; detrend the signal
+(:wat/std/Subtract candidate prototype)          ; extract deviation
 ```
 
 Reading as "strip, detrend, extract" is immediate. Reading as `Blend(..., 1, -1)` forces mechanical decoding.
@@ -127,8 +127,8 @@ Yes — `(Blend x y 1 -1)` or `(Amplify x y -1)`. Named form earns its place via
 **wat stdlib addition** — `wat/std/blends.wat`:
 
 ```scheme
-(defmacro (Subtract (x :AST) (y :AST) -> :AST)
-  `(Blend ,x ,y 1 -1))
+(:wat/core/defmacro (:wat/std/Subtract (x :AST) (y :AST) -> :AST)
+  `(:wat/algebra/Blend ,x ,y 1 -1))
 ```
 
 Registered at parse time (per 058-031-defmacro): every `(Subtract x y)` invocation is rewritten to `(Blend x y 1 -1)` before hashing.

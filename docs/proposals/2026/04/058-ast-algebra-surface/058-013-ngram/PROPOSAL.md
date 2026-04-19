@@ -13,8 +13,8 @@
 A wat stdlib macro (per 058-031-defmacro) that encodes `n`-wise adjacency windows over a list of holons:
 
 ```scheme
-(defmacro (Ngram (n :AST) (holons :AST) -> :AST)
-  `(Bundle (n-wise-map encode-window ,n ,holons)))
+(:wat/core/defmacro (:wat/std/Ngram (n :AST) (holons :AST) -> :AST)
+  `(:wat/algebra/Bundle (n-wise-map encode-window ,n ,holons)))
 ```
 
 Where `n-wise-map` is a regular stdlib function (not a macro) that slides a window of size `n` across `holons`, and `encode-window` encodes each window as a permutation-ordered Bundle (Sequential, specialized). The macro quasiquotes the call; `,n` and `,holons` splice in the argument ASTs.
@@ -23,18 +23,18 @@ Where `n-wise-map` is a regular stdlib function (not a macro) that slides a wind
 
 ```scheme
 ;; list-combinator helpers (regular stdlib functions, not macros)
-(define (encode-window window)
-  (Bundle
-    (map-with-index (lambda (t i) (Permute t i)) window)))
+(:wat/core/define (:wat/std/encode-window window)
+  (:wat/algebra/Bundle
+    (map-with-index (:wat/core/lambda (t i) (:wat/algebra/Permute t i)) window)))
 
-(define (n-wise-map f n xs)
+(:wat/core/define (:wat/std/n-wise-map f n xs)
   ;; produces: (f xs[0..n]), (f xs[1..n+1]), (f xs[2..n+2]), ...
   ;; until the sliding window exhausts xs
   ...)
 
 ;; the macro itself — expands at parse time
-(defmacro (Ngram (n :AST) (holons :AST) -> :AST)
-  `(Bundle (n-wise-map encode-window ,n ,holons)))
+(:wat/core/defmacro (:wat/std/Ngram (n :AST) (holons :AST) -> :AST)
+  `(:wat/algebra/Bundle (:wat/std/n-wise-map :wat/std/encode-window ,n ,holons)))
 ```
 
 The window-slicing combinator (`n-wise-map`) is a runtime list operation used inside the expansion — it is not itself a macro. The `Ngram` macro simply emits the canonical Bundle-over-n-wise-map call; Bundle, Permute, and the helpers do the actual work.
@@ -92,11 +92,11 @@ Ngram takes an integer `n` as its first argument, unlike Bundle/Chain which are 
 The expansion depends on a sliding-window combinator. If unavailable, must define:
 
 ```scheme
-(define (n-wise-map f n xs)
-  (if (< (length xs) n)
+(:wat/core/define (:wat/std/n-wise-map f n xs)
+  (:wat/core/if (:wat/core/< (length xs) n)
       '()
-      (cons (f (take n xs))
-            (n-wise-map f n (rest xs)))))
+      (:wat/core/cons (f (take n xs))
+            (:wat/std/n-wise-map f n (:wat/core/rest xs)))))
 ```
 
 Works but requires `take`, `length`, standard list combinators. Assumes these exist in the wat stdlib or become bundled additions.
@@ -117,15 +117,15 @@ The proposal encodes each window as a Sequential-like position-permuted bundle, 
 **Mitigation:** simplify the definition:
 
 ```scheme
-(defmacro (Ngram (n :AST) (holons :AST) -> :AST)
-  `(Bundle (n-wise-map (lambda (window) (Sequential window)) ,n ,holons)))
+(:wat/core/defmacro (:wat/std/Ngram (n :AST) (holons :AST) -> :AST)
+  `(:wat/algebra/Bundle (:wat/std/n-wise-map (:wat/core/lambda (window) (:wat/std/Sequential window)) ,n ,holons)))
 ```
 
 Or, even more concise (once Sequential is a parse-time macro per 058-009):
 
 ```scheme
-(defmacro (Ngram (n :AST) (holons :AST) -> :AST)
-  `(Bundle (map Sequential (n-wise-split ,n ,holons))))
+(:wat/core/defmacro (:wat/std/Ngram (n :AST) (holons :AST) -> :AST)
+  `(:wat/algebra/Bundle (:wat/core/map :wat/std/Sequential (:wat/std/n-wise-split ,n ,holons))))
 ```
 
 Where `n-wise-split` produces the list of windows. Cleaner composition. Note that `Sequential` in the expansion is itself a macro — it is expanded in the same parse-time pass once `Ngram` is expanded.
@@ -176,15 +176,15 @@ Yes, once the sliding-window combinator is available. Pure composition.
 ;; wat/std/sequences.wat
 
 ;; list combinator — regular stdlib function, not a macro
-(define (n-wise-split n xs)
-  (if (< (length xs) n)
+(:wat/core/define (:wat/std/n-wise-split n xs)
+  (:wat/core/if (:wat/core/< (length xs) n)
       '()
-      (cons (take n xs)
-            (n-wise-split n (rest xs)))))
+      (:wat/core/cons (take n xs)
+            (:wat/std/n-wise-split n (:wat/core/rest xs)))))
 
 ;; the macro itself — registered at parse time
-(defmacro (Ngram (n :AST) (holons :AST) -> :AST)
-  `(Bundle (map Sequential (n-wise-split ,n ,holons))))
+(:wat/core/defmacro (:wat/std/Ngram (n :AST) (holons :AST) -> :AST)
+  `(:wat/algebra/Bundle (:wat/core/map :wat/std/Sequential (:wat/std/n-wise-split ,n ,holons))))
 ```
 
 Depends on `take`, `length`, `map`, `rest` being available in the wat stdlib (standard list combinators). `Ngram` is registered at parse time (per 058-031-defmacro); every `(Ngram n xs)` invocation is rewritten to the canonical Bundle-of-Sequentials form before hashing, with `Sequential` itself further expanded by the same pass.

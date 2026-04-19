@@ -11,8 +11,8 @@
 > Userland may define the alias if readability matters to their vocab:
 >
 > ```scheme
-> (defmacro (:my/vocab/Linear (v :AST) (min :AST) (max :AST) -> :AST)
->   `(Thermometer ,v ,min ,max))
+> (:wat/core/defmacro (:my/vocab/Linear (v :AST) (min :AST) (max :AST) -> :AST)
+>   `(:wat/algebra/Thermometer ,v ,min ,max))
 > ```
 >
 > This proposal is kept in the record as an honest trace of the design process.
@@ -43,14 +43,14 @@ Parallel proposals 058-017-log and 058-018-circular apply the same reframing to 
 ### Stdlib definition
 
 ```scheme
-(defmacro (Linear (low-atom :AST) (high-atom :AST) (value :AST) (scale :AST) -> :AST)
-  `(let* ((min (first ,scale))
-          (max (second ,scale))
-          (t (/ (- ,value min) (- max min)))                    ; normalize to [0,1]
-          (w-low (- 1 t))
+(:wat/core/defmacro (:wat/std/Linear (low-atom :AST) (high-atom :AST) (value :AST) (scale :AST) -> :AST)
+  `(:wat/core/let* ((min (:wat/core/first ,scale))
+          (max (:wat/core/second ,scale))
+          (t (:wat/core// (:wat/core/- ,value min) (:wat/core/- max min)))                    ; normalize to [0,1]
+          (w-low (:wat/core/- 1 t))
           (w-high t))
-     (Blend (Thermometer ,low-atom dim)
-            (Thermometer ,high-atom dim)
+     (:wat/algebra/Blend (:wat/algebra/Thermometer ,low-atom dim)
+            (:wat/algebra/Thermometer ,high-atom dim)
             w-low
             w-high)))
 ```
@@ -152,11 +152,11 @@ Delete the Linear encoder match arm (~15-20 lines including tests). Macro expans
 **wat stdlib addition** — `wat/std/scalars.wat`:
 
 ```scheme
-(defmacro (Linear (low :AST) (high :AST) (value :AST) (scale :AST) -> :AST)
-  `(let* ((min (first ,scale))
-          (max (second ,scale))
-          (t (/ (- ,value min) (- max min))))
-     (Blend (Thermometer ,low dim) (Thermometer ,high dim) (- 1 t) t)))
+(:wat/core/defmacro (:wat/std/Linear (low :AST) (high :AST) (value :AST) (scale :AST) -> :AST)
+  `(:wat/core/let* ((min (:wat/core/first ,scale))
+          (max (:wat/core/second ,scale))
+          (t (:wat/core// (:wat/core/- ,value min) (:wat/core/- max min))))
+     (:wat/algebra/Blend (:wat/algebra/Thermometer ,low dim) (:wat/algebra/Thermometer ,high dim) (:wat/core/- 1 t) t)))
 ```
 
 Registered at parse time (per 058-031-defmacro): every `(Linear ...)` invocation is rewritten to the canonical `let* + Blend-over-Thermometers` form before hashing.

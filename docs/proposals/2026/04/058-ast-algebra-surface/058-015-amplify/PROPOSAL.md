@@ -12,9 +12,9 @@
 A wat stdlib macro (per 058-031-defmacro) that scales the contribution of `y` in a blend with `x`:
 
 ```scheme
-(defmacro (Amplify (x :AST) (y :AST) (s :AST) -> :AST)
-  `(Blend ,x ,y 1 ,s))
-;; Expands at parse time to: (Blend x y 1 s)
+(:wat/core/defmacro (:wat/std/Amplify (x :AST) (y :AST) (s :AST) -> :AST)
+  `(:wat/algebra/Blend ,x ,y 1 ,s))
+;; Expands at parse time to: (:wat/algebra/Blend x y 1 s)
 ;; which computes: threshold(1·x + s·y) — boost component y in x by factor s
 ```
 
@@ -47,13 +47,13 @@ Amplify frames the operation as "take `x` as the anchor, scale `y`'s emphasis by
 Vocab modules that want to emphasize a detected pattern in a noisy observation can write:
 
 ```scheme
-(Amplify observation pattern 3)   ; triple the pattern's weight
+(:wat/std/Amplify observation pattern 3)   ; triple the pattern's weight
 ```
 
 Rather than:
 
 ```scheme
-(Blend observation pattern 1 3)   ; mechanically equivalent
+(:wat/algebra/Blend observation pattern 1 3)   ; mechanically equivalent
 ```
 
 The first reads as intent. The second reads as mechanics.
@@ -78,8 +78,8 @@ Different idioms, same underlying primitive.
 **1. Trivial expansion.**
 
 ```scheme
-(defmacro (Amplify (x :AST) (y :AST) (s :AST) -> :AST)
-  `(Blend ,x ,y 1 ,s))
+(:wat/core/defmacro (:wat/std/Amplify (x :AST) (y :AST) (s :AST) -> :AST)
+  `(:wat/algebra/Blend ,x ,y 1 ,s))
 ```
 
 One-line expansion. Three tokens replaced by three tokens (`Amplify x y s` ≈ `Blend x y 1 s`). Is the name earning its place for a one-token "savings"?
@@ -101,13 +101,13 @@ Three redundancies. Each specific value collapses to a more-specific name.
 Alternative: extend Blend's interface to accept "amplify" as a keyword-ish convention:
 
 ```scheme
-(Blend x y :amplify 2)  ; syntactic sugar for weights (1, 2)
+(:wat/algebra/Blend x y :amplify 2)  ; syntactic sugar for weights (1, 2)
 ```
 
 Or make Bundle variadic with weights:
 
 ```scheme
-(Bundle (list x y) :weights (list 1 2))
+(:wat/algebra/Bundle (:wat/core/list x y) :weights (:wat/core/list 1 2))
 ```
 
 **Counter:** both alternatives complicate core interfaces. Keeping Amplify as a stdlib form preserves Blend's clean 4-arg signature and keeps the naming explicit. Stringly-typed keyword dispatch is WORSE than a named wrapper.
@@ -161,8 +161,8 @@ Yes — `(Blend x y 1 s)`. Named form earns its place via reader clarity.
 **wat stdlib addition** — `wat/std/blends.wat`:
 
 ```scheme
-(defmacro (Amplify (x :AST) (y :AST) (s :AST) -> :AST)
-  `(Blend ,x ,y 1 ,s))
+(:wat/core/defmacro (:wat/std/Amplify (x :AST) (y :AST) (s :AST) -> :AST)
+  `(:wat/algebra/Blend ,x ,y 1 ,s))
 ```
 
 Registered at parse time (per 058-031-defmacro): every `(Amplify x y s)` invocation is rewritten to `(Blend x y 1 s)` before hashing.

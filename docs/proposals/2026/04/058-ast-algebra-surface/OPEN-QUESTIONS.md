@@ -207,8 +207,8 @@
 3. **Should the stdlib also provide the four-term `AnalogyCleanup`?** A convenience form that runs cleanup against a candidate pool:
 
 ```scheme
-(define (AnalogyCleanup a b c candidates)
-  (cleanup (Analogy a b c) candidates))
+(:wat/core/define (:my/vocab/AnalogyCleanup a b c candidates)
+  (cleanup (:wat/std/Analogy a b c) candidates))
 ```
 
 Over-naming risk, but this is the most common use case. Worth a second named form, or let users compose cleanup around Analogy manually?

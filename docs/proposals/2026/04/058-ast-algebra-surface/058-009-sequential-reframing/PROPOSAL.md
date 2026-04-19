@@ -16,10 +16,10 @@ This proposal argues that the grandfathering should end. `Sequential` should be 
 `Sequential(list-of-holons)` is position-encoded bundling: each holon `t_i` at position `i` is permuted by `i` steps, and the permuted holons are bundled.
 
 ```scheme
-(defmacro (Sequential (holons :AST) -> :AST)
-  `(Bundle
+(:wat/core/defmacro (:wat/std/Sequential (holons :AST) -> :AST)
+  `(:wat/algebra/Bundle
      (map-with-index
-       (lambda (t i) (Permute t i))
+       (:wat/core/lambda (t i) (:wat/algebra/Permute t i))
        ,holons)))
 ```
 
@@ -27,10 +27,10 @@ Or, thought of with explicit index iteration:
 
 ```scheme
 ;; conceptual unrolling of the emitted expansion for a known-length list:
-(Bundle
-  (list (Permute (nth holons 0) 0)
-        (Permute (nth holons 1) 1)
-        (Permute (nth holons 2) 2)
+(:wat/algebra/Bundle
+  (:wat/core/list (:wat/algebra/Permute (:wat/std/nth holons 0) 0)
+        (:wat/algebra/Permute (:wat/std/nth holons 1) 1)
+        (:wat/algebra/Permute (:wat/std/nth holons 2) 2)
         ...))
 ```
 
@@ -60,11 +60,11 @@ As a stdlib macro, Sequential is visible in the wat source, inspectable, extensi
 
 ```scheme
 ;; user can define related macros:
-(defmacro (ReverseSequential (holons :AST) -> :AST)
-  `(Sequential (reverse ,holons)))
+(:wat/core/defmacro (:my/vocab/ReverseSequential (holons :AST) -> :AST)
+  `(:wat/std/Sequential (reverse ,holons)))
 
-(defmacro (SequentialFromN (start :AST) (holons :AST) -> :AST)
-  `(Bundle (map-with-index (lambda (t i) (Permute t (+ i ,start))) ,holons)))
+(:wat/core/defmacro (:my/vocab/SequentialFromN (start :AST) (holons :AST) -> :AST)
+  `(:wat/algebra/Bundle (map-with-index (:wat/core/lambda (t i) (:wat/algebra/Permute t (:wat/core/+ i ,start))) ,holons)))
 ```
 
 As a variant, Sequential's behavior is hidden in Rust encoder dispatch. Users can't trivially produce related forms without compiling new Rust.
@@ -148,9 +148,9 @@ Delete the Sequential encoder match arm (~15-20 lines including tests).
 
 ```scheme
 ;; wat/std/sequences.wat (or equivalent)
-(defmacro (Sequential (holons :AST) -> :AST)
-  `(Bundle
-     (map-with-index (lambda (t i) (Permute t i)) ,holons)))
+(:wat/core/defmacro (:wat/std/Sequential (holons :AST) -> :AST)
+  `(:wat/algebra/Bundle
+     (map-with-index (:wat/core/lambda (t i) (:wat/algebra/Permute t i)) ,holons)))
 ```
 
 Registered at parse time (per 058-031-defmacro): every `(Sequential ...)` invocation is rewritten to the canonical `(Bundle (map-with-index ...))` form before hashing. `map-with-index` itself remains a regular runtime list combinator, not a macro.

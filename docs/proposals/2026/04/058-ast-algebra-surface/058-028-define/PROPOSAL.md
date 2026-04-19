@@ -16,7 +16,7 @@
 ### Shape
 
 ```scheme
-(define (:namespace/function-name (param1 :Type1) (param2 :Type2) ... -> :ReturnType)
+(:wat/core/define (:namespace/function-name (param1 :Type1) (param2 :Type2) ... -> :ReturnType)
   body-expression)
 ```
 
@@ -30,8 +30,8 @@ Four positions:
 ### Example
 
 ```scheme
-(define (:wat/std/Difference (a :Holon) (b :Holon) -> :Holon)
-  (Blend a b 1 -1))
+(:wat/core/define (:wat/std/Difference (a :Holon) (b :Holon) -> :Holon)
+  (:wat/algebra/Blend a b 1 -1))
 ```
 
 Readable as: "define the function `:wat/std/Difference`, which takes two Holons named `a` and `b` and returns a Holon, by evaluating `(Blend a b 1 -1)`."
@@ -65,9 +65,9 @@ Registered by name in the startup symbol table. After startup completes, the sym
 Every stdlib proposal in 058 uses `define` in its expansion:
 
 ```scheme
-(define (Difference a b) (Blend a b 1 -1))
-(define (Concurrent xs) (Bundle xs))
-(define (Chain xs) (Bundle (pairwise-map Then xs)))
+(:wat/core/define (:wat/std/Difference a b) (:wat/algebra/Blend a b 1 -1))
+(:wat/core/define (:wat/std/Concurrent xs) (:wat/algebra/Bundle xs))
+(:wat/core/define (:wat/std/Chain xs) (:wat/algebra/Bundle (pairwise-map :wat/std/Then xs)))
 ```
 
 Without a `define` primitive in the wat language, these are theoretical compositions, not runnable definitions.
@@ -245,8 +245,8 @@ Once `define` is implemented (alongside `lambda` per 058-029 and types per 058-0
 7. **First wat program.** From BOOK's "The first program" section:
 
    ```scheme
-   (define (:watmin/hello-world (name :Atom) -> :Holon)
-     (Sequential (list (Atom "hello") name)))
+   (:wat/core/define (:watmin/hello-world (name :Atom) -> :Holon)
+     (:wat/std/Sequential (:wat/core/list (:wat/algebra/Atom "hello") name)))
    ```
 
    This proposal specifies the `define` that makes that program runnable. The first program's execution waits on this proposal's implementation plus 058-029 and 058-030.

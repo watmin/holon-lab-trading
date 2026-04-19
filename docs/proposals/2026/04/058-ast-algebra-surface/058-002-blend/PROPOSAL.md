@@ -11,7 +11,7 @@
 A new core variant that introduces scalar-weighted vector addition — an operation no existing core form can perform.
 
 ```scheme
-(Blend a b w1 w2)
+(:wat/algebra/Blend a b w1 w2)
 ```
 
 Semantically: `threshold(w1 × a + w2 × b)` where `a` and `b` are vectors in the algebra's ternary output space `{-1, 0, +1}^d` and `w1`, `w2` are arbitrary real-valued scalar weights (positive, negative, or fractional). See FOUNDATION's "Output Space" section for the ternary convention (`threshold(0) = 0`).
@@ -224,18 +224,19 @@ If `Blend` is promoted, the following FOUNDATION refinements follow:
 
 1. **`Linear` reclassified as stdlib:**
    ```scheme
-   (define (Linear v scale)
-     (Blend (Atom :wat/std/linear-low) (Atom :wat/std/linear-high)
-            (- 1 (/ v scale))
-            (/ v scale)))
+   (:wat/core/define (:wat/std/Linear v scale)
+     (:wat/algebra/Blend (:wat/algebra/Atom :wat/std/linear-low)
+                         (:wat/algebra/Atom :wat/std/linear-high)
+            (:wat/core/- 1 (:wat/core// v scale))
+            (:wat/core// v scale)))
    ```
 
 2. **`Circular` reclassified as stdlib:**
    ```scheme
-   (define (Circular v period)
-     (let ((theta (* 2 pi (/ v period))))
-       (Blend (Atom :wat/std/circular-cos-basis)
-              (Atom :wat/std/circular-sin-basis)
+   (:wat/core/define (:wat/std/Circular v period)
+     (:wat/core/let ((theta (:wat/core/* 2 pi (:wat/core// v period))))
+       (:wat/algebra/Blend (:wat/algebra/Atom :wat/std/circular-cos-basis)
+              (:wat/algebra/Atom :wat/std/circular-sin-basis)
               (cos theta)
               (sin theta))))
    ```
@@ -244,14 +245,14 @@ If `Blend` is promoted, the following FOUNDATION refinements follow:
 
 4. **`Amplify` becomes stdlib** (see 058-015-amplify):
    ```scheme
-   (define (Amplify x y s)
-     (Blend x y 1 s))
+   (:wat/core/define (:wat/std/Amplify x y s)
+     (:wat/algebra/Blend x y 1 s))
    ```
 
 5. **`Subtract` enters as stdlib** (see 058-019-subtract — historically Negate's subtract mode):
    ```scheme
-   (define (Subtract x y)
-     (Blend x y 1 -1))
+   (:wat/core/define (:wat/std/Subtract x y)
+     (:wat/algebra/Blend x y 1 -1))
    ```
 
 6. **`Negate` is split** — the orthogonalize mode becomes its own CORE form (see 058-005-orthogonalize), while subtract/flip modes become stdlib Blend idioms (see 058-019-subtract, 058-020-flip).

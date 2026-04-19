@@ -12,7 +12,7 @@
 `defmacro` is a **compile-time language-core form** that registers a syntactic transformation. Unlike `define`, which creates a runtime function, `defmacro` defines a rewriter: it takes a source-level form and returns its canonical replacement BEFORE any evaluation, hashing, caching, or signing occurs.
 
 ```scheme
-(defmacro (:namespace/macro-name (arg1 :AST<T1>) (arg2 :AST<T2>) ... -> :AST<R>)
+(:wat/core/defmacro (:namespace/macro-name (arg1 :AST<T1>) (arg2 :AST<T2>) ... -> :AST<R>)
   body-expression)
 ```
 
@@ -29,9 +29,9 @@ This proposal responds directly to Beckman's finding #4 (alias hash collision) f
 Stdlib aliases like `Concurrent`, `Set`, `Subtract`, `Flip`, `Then`, `Chain` all expand to compositions of core primitives. Under the naive `(define (Alias ...) (Primitive ...))` encoding, the source AST retains the alias name as a distinct node:
 
 ```scheme
-(Concurrent xs)    → AST: (Call :wat/std/Concurrent (xs))   hash: H1
-(Set xs)           → AST: (Call :wat/std/Set (xs))          hash: H2
-(Bundle xs)        → AST: (Call :wat/std/Bundle (xs))       hash: H3
+(:wat/std/Concurrent xs)    → AST: (Call :wat/std/Concurrent (xs))   hash: H1
+(:wat/std/HashSet xs)       → AST: (Call :wat/std/HashSet (xs))      hash: H2
+(:wat/algebra/Bundle xs)    → AST: (Call :wat/algebra/Bundle (xs))   hash: H3
 ```
 
 All three produce the same vector (elementwise threshold sum). But they have three distinct hashes. FOUNDATION's claim — `hash(AST) IS the holon's identity` — becomes contradictory: **same meaning, different identities.**
@@ -41,15 +41,15 @@ All three produce the same vector (elementwise threshold sum). But they have thr
 If `Concurrent` and `Set` are MACROS rather than functions, they expand at parse time to their canonical form BEFORE hashing:
 
 ```scheme
-(Concurrent xs)    → parser sees macro call → expands
-                   → AST becomes: (Call :wat/algebra/Bundle (xs))
-                   → hash: H3 (same as (Bundle xs) directly)
+(:wat/std/Concurrent xs)    → parser sees macro call → expands
+                            → AST becomes: (Call :wat/algebra/Bundle (xs))
+                            → hash: H3 (same as (:wat/algebra/Bundle xs) directly)
 
-(Set xs)           → same expansion path → AST: (Call :wat/algebra/Bundle (xs))
-                   → hash: H3
+(:wat/std/HashSet xs)       → same expansion path → AST: (Call :wat/algebra/Bundle (xs))
+                            → hash: H3
 
-(Bundle xs)        → no macro expansion needed → AST: (Call :wat/algebra/Bundle (xs))
-                   → hash: H3
+(:wat/algebra/Bundle xs)    → no macro expansion needed → AST: (Call :wat/algebra/Bundle (xs))
+                            → hash: H3
 ```
 
 All three have the same hash. `hash(AST) IS identity` holds. The reader clarity provided by `Concurrent` and `Set` at source level is preserved; the semantic identity at the algebra level is unified.
@@ -76,7 +76,7 @@ All three have the same hash. `hash(AST) IS identity` holds. The reader clarity 
 `defmacro` uses the **same signature syntax as `define` and `lambda`** — every parameter typed with a concrete value type, return type explicit. One consistent signature form across all three definition primitives. Macros use `:AST<T>` (per 058-032) rather than bare `:T` because the parameter arrives unevaluated at parse time; `T` still commits to the evaluation type.
 
 ```scheme
-(defmacro (:namespace/macro-name (param1 :AST<T1>) (param2 :AST<T2>) ... -> :AST<R>)
+(:wat/core/defmacro (:namespace/macro-name (param1 :AST<T1>) (param2 :AST<T2>) ... -> :AST<R>)
   expansion-body)
 ```
 
@@ -92,59 +92,59 @@ The `expansion-body` is a Lisp expression. It can use:
 **Pure alias — Concurrent:**
 
 ```scheme
-(defmacro (:wat/std/Concurrent (xs :AST<List<Holon>>) -> :AST<Holon>)
-  `(Bundle ,xs))
+(:wat/core/defmacro (:wat/std/Concurrent (xs :AST<List<Holon>>) -> :AST<Holon>)
+  `(:wat/algebra/Bundle ,xs))
 
 ;; User writes:
-(Concurrent (list a b c))
+(:wat/std/Concurrent (:wat/core/list a b c))
 
 ;; Parser expands:
-(Bundle (list a b c))
+(:wat/algebra/Bundle (:wat/core/list a b c))
 ```
 
 **Transforming — Subtract:**
 
 ```scheme
-(defmacro (:wat/std/Subtract (x :AST<Holon>) (y :AST<Holon>) -> :AST<Holon>)
-  `(Blend ,x ,y 1 -1))
+(:wat/core/defmacro (:wat/std/Subtract (x :AST<Holon>) (y :AST<Holon>) -> :AST<Holon>)
+  `(:wat/algebra/Blend ,x ,y 1 -1))
 
 ;; User writes:
-(Subtract a b)
+(:wat/std/Subtract a b)
 
 ;; Parser expands:
-(Blend a b 1 -1)
+(:wat/algebra/Blend a b 1 -1)
 ```
 
 **Parameterized — Amplify:**
 
 ```scheme
-(defmacro (:wat/std/Amplify (x :AST<Holon>) (y :AST<Holon>) (s :AST<f64>) -> :AST<Holon>)
-  `(Blend ,x ,y 1 ,s))
+(:wat/core/defmacro (:wat/std/Amplify (x :AST<Holon>) (y :AST<Holon>) (s :AST<f64>) -> :AST<Holon>)
+  `(:wat/algebra/Blend ,x ,y 1 ,s))
 
 ;; User writes:
-(Amplify a b 2)
+(:wat/std/Amplify a b 2)
 
 ;; Parser expands:
-(Blend a b 1 2)
+(:wat/algebra/Blend a b 1 2)
 ```
 
 **Higher-order expansion — Chain:**
 
 ```scheme
-(defmacro (:wat/std/Chain (holons :AST<List<Holon>>) -> :AST<Holon>)
-  `(Bundle (pairwise-map Then ,holons)))
+(:wat/core/defmacro (:wat/std/Chain (holons :AST<List<Holon>>) -> :AST<Holon>)
+  `(:wat/algebra/Bundle (pairwise-map :wat/std/Then ,holons)))
 
 ;; User writes:
-(Chain (list a b c d))
+(:wat/std/Chain (:wat/core/list a b c d))
 
 ;; Parser expands:
-(Bundle (pairwise-map Then (list a b c d)))
+(:wat/algebra/Bundle (pairwise-map :wat/std/Then (:wat/core/list a b c d)))
 
 ;; which further expands Then:
-(Bundle (pairwise-map
-         (lambda ((a :Holon) (b :Holon) -> :Holon)
-           (Bundle (list a (Permute b 1))))
-         (list a b c d)))
+(:wat/algebra/Bundle (pairwise-map
+         (:wat/core/lambda ((a :Holon) (b :Holon) -> :Holon)
+           (:wat/algebra/Bundle (:wat/core/list a (:wat/algebra/Permute b 1))))
+         (:wat/core/list a b c d)))
 ```
 
 The final form contains only algebra core operations. No stdlib-alias function calls survive into the hashed AST.
@@ -247,20 +247,20 @@ Matthew Flatt's 2016 paper — *"Binding as Sets of Scopes"* — is the referenc
 
 ```scheme
 ;; Macro introduces `tmp`:
-(defmacro (swap-thoughts (a :AST<Holon>) (b :AST<Holon>) -> :AST<Holon>)
-  `(let ((tmp ,a))          ; `tmp` here has macro-scope M
+(:wat/core/defmacro (:my/vocab/swap-thoughts (a :AST<Holon>) (b :AST<Holon>) -> :AST<Holon>)
+  `(:wat/core/let ((tmp ,a))          ; `tmp` here has macro-scope M
      (set! ,a ,b)
      (set! ,b tmp)))
 
 ;; User writes:
-(let ((tmp :my-thought))    ; `tmp` here has user-scope U (outer lexical scope)
-  (swap-thoughts tmp other-var))
+(:wat/core/let ((tmp :my-thought))    ; `tmp` here has user-scope U (outer lexical scope)
+  (:my/vocab/swap-thoughts tmp other-var))
 
 ;; After expansion:
-(let ((tmp[U] :my-thought))                 ; user's tmp retains U
-  (let ((tmp[M] tmp[U]))                    ; macro's tmp gets M; references user's U
-    (set! tmp[U] other-var)                 ; user's tmp — resolved via U
-    (set! other-var tmp[M])))               ; macro's tmp — resolved via M
+(:wat/core/let ((tmp[U] :my-thought))                 ; user's tmp retains U
+  (:wat/core/let ((tmp[M] tmp[U]))                    ; macro's tmp gets M; references user's U
+    (set! tmp[U] other-var)                           ; user's tmp — resolved via U
+    (set! other-var tmp[M])))                         ; macro's tmp — resolved via M
 ```
 
 `tmp[U]` and `tmp[M]` are DIFFERENT identifiers even though both print as `tmp`. The expander's internal representation distinguishes them. Capture is structurally impossible.

@@ -10,7 +10,7 @@
 A new core variant that keeps the dimensions where two vectors agree in sign and zeros the dimensions where they disagree:
 
 ```scheme
-(Resonance v reference)
+(:wat/algebra/Resonance v reference)
 ```
 
 Semantically: `v` filtered through `reference` — the components of `v` that "resonate" with (point the same direction as) `reference` survive; the dissonant components are silenced.
@@ -117,7 +117,7 @@ The result is still a vector in the same `d`-dimensional space (just with some z
 If the algebra had a general `Mask(x, selector)` primitive (keep x where selector is +1, zero where selector is -1 or 0), then Resonance would be stdlib:
 
 ```scheme
-(define (Resonance v ref)
+(:wat/core/define (:wat/std/Resonance v ref)
   (Mask v (sign-agreement v ref)))
 ```
 

@@ -17,12 +17,12 @@ Bare `:AST` (without parameterization) is **retired as a parameter type** — sa
 
 ```scheme
 ;; 058-031 draft — placeholder typing.
-(defmacro (:wat/std/Subtract (x :AST) (y :AST) -> :AST)
-  `(Blend ,x ,y 1 -1))
+(:wat/core/defmacro (:wat/std/Subtract (x :AST) (y :AST) -> :AST)
+  `(:wat/algebra/Blend ,x ,y 1 -1))
 
 ;; 058-032 honest — concrete typing.
-(defmacro (:wat/std/Subtract (x :AST<Holon>) (y :AST<Holon>) -> :AST<Holon>)
-  `(Blend ,x ,y 1 -1))
+(:wat/core/defmacro (:wat/std/Subtract (x :AST<Holon>) (y :AST<Holon>) -> :AST<Holon>)
+  `(:wat/algebra/Blend ,x ,y 1 -1))
 ```
 
 The `:AST<T>` wrapper declares: "this parameter is an AST expression whose evaluated value has type `T`." The type checker:
@@ -73,7 +73,7 @@ With that distinction:
 ### Typed macro signature
 
 ```scheme
-(defmacro (:namespace/macro-name (p1 :AST<T1>) (p2 :AST<T2>) ... -> :AST<R>)
+(:wat/core/defmacro (:namespace/macro-name (p1 :AST<T1>) (p2 :AST<T2>) ... -> :AST<R>)
   body-expression)
 ```
 
@@ -88,8 +88,8 @@ Every stdlib macro from 058-031 has a concrete value type for each argument. 058
 **Pure alias — Concurrent:**
 
 ```scheme
-(defmacro (:wat/std/Concurrent (xs :AST<List<Holon>>) -> :AST<Holon>)
-  `(Bundle ,xs))
+(:wat/core/defmacro (:wat/std/Concurrent (xs :AST<List<Holon>>) -> :AST<Holon>)
+  `(:wat/algebra/Bundle ,xs))
 ```
 
 At definition time the checker sees:
@@ -101,8 +101,8 @@ At definition time the checker sees:
 **Transforming — Subtract:**
 
 ```scheme
-(defmacro (:wat/std/Subtract (x :AST<Holon>) (y :AST<Holon>) -> :AST<Holon>)
-  `(Blend ,x ,y 1 -1))
+(:wat/core/defmacro (:wat/std/Subtract (x :AST<Holon>) (y :AST<Holon>) -> :AST<Holon>)
+  `(:wat/algebra/Blend ,x ,y 1 -1))
 ```
 
 Blend's signature: `(Blend (a :Holon) (b :Holon) (w1 :f64) (w2 :f64) -> :Holon)`.
@@ -114,24 +114,24 @@ Blend's signature: `(Blend (a :Holon) (b :Holon) (w1 :f64) (w2 :f64) -> :Holon)`
 **Parameterized — Amplify:**
 
 ```scheme
-(defmacro (:wat/std/Amplify (x :AST<Holon>) (y :AST<Holon>) (s :AST<f64>) -> :AST<Holon>)
-  `(Blend ,x ,y 1 ,s))
+(:wat/core/defmacro (:wat/std/Amplify (x :AST<Holon>) (y :AST<Holon>) (s :AST<f64>) -> :AST<Holon>)
+  `(:wat/algebra/Blend ,x ,y 1 ,s))
 ```
 
 Call site errors land at the caller by name:
 
 ```scheme
-(Amplify foo bar 2.5)    ;; OK: 2.5 : :f64 matches :AST<f64>
-(Amplify foo bar "oh")   ;; ERROR at my-file.wat:12:
-                         ;;   :wat/std/Amplify expects (s :AST<f64>)
-                         ;;   argument type is :AST<String>
+(:wat/std/Amplify foo bar 2.5)    ;; OK: 2.5 : :f64 matches :AST<f64>
+(:wat/std/Amplify foo bar "oh")   ;; ERROR at my-file.wat:12:
+                                  ;;   :wat/std/Amplify expects (s :AST<f64>)
+                                  ;;   argument type is :AST<String>
 ```
 
 **Higher-order — Chain:**
 
 ```scheme
-(defmacro (:wat/std/Chain (holons :AST<List<Holon>>) -> :AST<Holon>)
-  `(Bundle (pairwise-map Then ,holons)))
+(:wat/core/defmacro (:wat/std/Chain (holons :AST<List<Holon>>) -> :AST<Holon>)
+  `(:wat/algebra/Bundle (pairwise-map :wat/std/Then ,holons)))
 ```
 
 Checker verifies `pairwise-map : :fn(:fn(Holon,Holon)->Holon, :List<Holon>) -> :List<Holon>` (or its typed-macro equivalent), `Then : :fn(Holon,Holon)->Holon`, so `(pairwise-map Then holons)` has type `:List<Holon>`, and `Bundle` over it produces `:Holon`. Declared return `:AST<Holon>` ✓.

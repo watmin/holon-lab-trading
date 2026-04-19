@@ -10,13 +10,13 @@
 Clarify and lock `Bundle`'s signature as taking a single LIST argument (not variadic).
 
 ```scheme
-(Bundle list-of-holons)    ; one argument — a list
+(:wat/algebra/Bundle list-of-holons)    ; one argument — a list
 ```
 
 Not:
 
 ```scheme
-(Bundle a b c d)             ; variadic
+(:wat/algebra/Bundle a b c d)             ; variadic
 ```
 
 ## Current Ambiguity
@@ -45,13 +45,13 @@ List-taking is the natural Lisp form for any operation over a variable number of
 
 ```scheme
 ;; Composes with map:
-(Bundle (map some-encoder raw-values))
+(:wat/algebra/Bundle (:wat/core/map some-encoder raw-values))
 
 ;; Composes with filter:
-(Bundle (filter proven? candidates))
+(:wat/algebra/Bundle (:wat/core/filter proven? candidates))
 
 ;; Explicit list when needed:
-(Bundle (list a b c))
+(:wat/algebra/Bundle (:wat/core/list a b c))
 ```
 
 Variadic Bundle forces `(apply Bundle (some-list))` at every indirection. The list-taking form composes cleanly without `apply`.

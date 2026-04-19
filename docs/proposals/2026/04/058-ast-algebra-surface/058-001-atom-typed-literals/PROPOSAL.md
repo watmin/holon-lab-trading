@@ -12,7 +12,7 @@ Generalize `Atom` to accept typed literals — not only strings, but integers, f
 ### Current
 
 ```scheme
-(Atom "foo")           ; string only — current signature
+(:wat/algebra/Atom "foo")           ; string only — current signature
 ```
 
 The current `Atom` signature in holon-rs accepts a string. The VectorManager hashes that string to produce a deterministic vector in the algebra's ternary output space `{-1, 0, +1}^d` (see FOUNDATION's "Output Space" section). In practice, Atom's seeded projection is dense bipolar — zeros arise from downstream arithmetic, not from Atom itself.
@@ -20,12 +20,12 @@ The current `Atom` signature in holon-rs accepts a string. The VectorManager has
 ### Proposed
 
 ```scheme
-(Atom "foo")           ; string literal
-(Atom 42)              ; integer literal
-(Atom 1.6)             ; float literal
-(Atom true)            ; boolean literal
-(Atom :wat/std/cos)    ; keyword literal (with optional namespace)
-(Atom null)           ; null/none literal
+(:wat/algebra/Atom "foo")           ; string literal
+(:wat/algebra/Atom 42)              ; integer literal
+(:wat/algebra/Atom 1.6)             ; float literal
+(:wat/algebra/Atom true)            ; boolean literal
+(:wat/algebra/Atom :wat/std/cos)    ; keyword literal (with optional namespace)
+(:wat/algebra/Atom null)           ; null/none literal
 ```
 
 All produce deterministic dense-bipolar vectors in the ternary output space `{-1, 0, +1}^d` via a **type-aware hash** — the literal's type tag is included in the hash input, so different types with similar-looking values yield different vectors:
@@ -129,7 +129,7 @@ pub enum HolonAST {
 **`atom-value` stdlib** — direct field access:
 
 ```scheme
-(define (atom-value atom-ast)
+(:wat/core/define (:wat/std/atom-value atom-ast)
   (literal-field atom-ast))
 ```
 

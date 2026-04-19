@@ -33,7 +33,7 @@ The type system has two tiers of built-ins: **algebraic types** (abstractions ov
 **`:Holon` is an enum, not a subtype root.** This matches the underlying Rust `HolonAST` enum exactly. Declared in FOUNDATION as:
 
 ```scheme
-(enum :wat/algebra/Holon
+(:wat/core/enum :wat/algebra/Holon
   (Atom            (literal :AtomLiteral))
   (Bind            (a :Holon) (b :Holon))
   (Bundle          (items :List<Holon>))
@@ -48,8 +48,8 @@ The type system has two tiers of built-ins: **algebraic types** (abstractions ov
 Every algebra AST node is a **variant** of the `:Holon` enum. A function typed `(f (h :Holon) -> ...)` accepts any variant and pattern-matches to select behavior:
 
 ```scheme
-(define (atom-value (h :Holon) -> :AtomLiteral)
-  (match h
+(:wat/core/define (:wat/std/atom-value (h :Holon) -> :AtomLiteral)
+  (:wat/core/match h
     ((Atom literal)  literal)
     (_               (error "atom-value: not an Atom variant"))))
 ```
@@ -178,13 +178,13 @@ Users declare types using FOUR compile-time forms, each with a distinct head key
 ;; Compiles to Rust: `struct Name(Inner);`
 ;; NOT substitutable for its inner type — explicit conversion required.
 
-(newtype :project/trading/Price   :f64)
-(newtype :project/trading/TradeId :u64)
+(:wat/core/newtype :project/trading/Price   :f64)
+(:wat/core/newtype :project/trading/TradeId :u64)
 
 ;; --- 2. struct: named product type with typed fields ---
 ;; Compiles to Rust: `struct Name { field: Type, ... }`
 
-(struct :project/market/Candle
+(:wat/core/struct :project/market/Candle
   (open   :f64)
   (high   :f64)
   (low    :f64)
@@ -195,9 +195,9 @@ Users declare types using FOUR compile-time forms, each with a distinct head key
 ;; Compiles to Rust: `enum Name { Variant, Variant(Fields), ... }`
 ;; Variants are unit (no payload) or tagged (with typed fields).
 
-(enum :project/trading/Direction :long :short)
+(:wat/core/enum :project/trading/Direction :long :short)
 
-(enum :project/market/Event
+(:wat/core/enum :project/market/Event
   (candle  (asset :Atom) (candle :project/market/Candle))
   (deposit (asset :Atom) (amount :f64)))
 
@@ -205,9 +205,9 @@ Users declare types using FOUR compile-time forms, each with a distinct head key
 ;; Compiles to Rust: `type Name = Expr;`
 ;; :A and its expansion are the SAME type — useful for naming complex shapes.
 
-(typealias :alice/types/Amount         :f64)
-(typealias :alice/market/CandleSeries  :List<Candle>)
-(typealias :alice/trading/Scores       :HashMap<Atom,f64>)
+(:wat/core/typealias :alice/types/Amount         :f64)
+(:wat/core/typealias :alice/market/CandleSeries  :List<Candle>)
+(:wat/core/typealias :alice/trading/Scores       :HashMap<Atom,f64>)
 ```
 
 All four forms use keyword-path names for namespacing (discipline, not mechanism). They materialize into the Rust-backed wat-vm binary at build time; they cannot be redefined at runtime.
@@ -228,12 +228,12 @@ Users pick based on what they mean: distinct nominal wrapper (`newtype`), new pr
 "A function that works on multiple types" is expressed via **enum wrapping**, not via traits or subtype declarations. Example: a function that handles both `Candle` and `BullishCandle`:
 
 ```scheme
-(enum :alice/market/Candleish
+(:wat/core/enum :alice/market/Candleish
   (Regular  (c :project/market/Candle))
   (Bullish  (c :alice/market/BullishCandle)))
 
-(define (:alice/market/analyze (c :Candleish) -> :Signal)
-  (match c
+(:wat/core/define (:alice/market/analyze (c :Candleish) -> :Signal)
+  (:wat/core/match c
     ((Regular candle)   ...)
     ((Bullish candle)   ...)))
 ```
@@ -243,8 +243,8 @@ The set of types the function accepts is **closed** at the enum declaration. Cal
 Alternatively, write per-type functions with distinct names:
 
 ```scheme
-(define (:alice/market/analyze-candle   (c :Candle)         -> :Signal) ...)
-(define (:alice/market/analyze-bullish  (c :BullishCandle)  -> :Signal) ...)
+(:wat/core/define (:alice/market/analyze-candle   (c :Candle)         -> :Signal) ...)
+(:wat/core/define (:alice/market/analyze-bullish  (c :BullishCandle)  -> :Signal) ...)
 ```
 
 No polymorphism needed — the caller picks which function to invoke. Simple, Rust-honest.
@@ -257,10 +257,10 @@ Rust groups methods under `impl Type { ... }` blocks. But wat's function declara
 
 ```scheme
 ;; wat source:
-(define (:my/market/open     (c :Candle) -> :f64) body1)
-(define (:my/market/high     (c :Candle) -> :f64) body2)
-(define (:my/market/low      (c :Candle) -> :f64) body3)
-(define (:my/market/close    (c :Candle) -> :f64) body4)
+(:wat/core/define (:my/market/open     (c :Candle) -> :f64) body1)
+(:wat/core/define (:my/market/high     (c :Candle) -> :f64) body2)
+(:wat/core/define (:my/market/low      (c :Candle) -> :f64) body3)
+(:wat/core/define (:my/market/close    (c :Candle) -> :f64) body4)
 
 ;; Compiler generates:
 ;;   impl Candle {
@@ -279,8 +279,8 @@ The wat type system has no nominal subtype relation (no `:A :is-a :B` keyword, n
 
 ```scheme
 ;; Pattern-matching extracts the variant:
-(define (encode (h :Holon) -> :Vector)
-  (match h
+(:wat/core/define (:my/app/encode (h :Holon) -> :Vector)
+  (:wat/core/match h
     ((Atom literal)         ...)
     ((Bind a b)             ...)
     ((Bundle items)         ...)
@@ -317,11 +317,11 @@ This is a simpler variance story than the previous `:is-a`-driven covariance rul
 From 058-028-define and 058-029-lambda, type annotations are required. The return type goes INSIDE the signature parens using `->`:
 
 ```scheme
-(define (:my/ns/amplify (x :Holon) (y :Holon) (s :f64) -> :Holon)
-  (Blend x y 1 s))
+(:wat/core/define (:my/ns/amplify (x :Holon) (y :Holon) (s :f64) -> :Holon)
+  (:wat/algebra/Blend x y 1 s))
 
-(lambda ((t :Holon) -> :Holon)
-  (Permute t 1))
+(:wat/core/lambda ((t :Holon) -> :Holon)
+  (:wat/algebra/Permute t 1))
 
 ;; Matches Rust's fn name(args) -> ReturnType:
 ;;   fn amplify(x: Holon, y: Holon, s: f64) -> Holon { ... }
@@ -332,8 +332,8 @@ Each parameter uses `(name :Type)` — parenthesized sublist with a bare symbol 
 **Macros use the same signature syntax as `define` and `lambda`** — every parameter is explicitly typed `: AST`; return is explicitly `-> :AST`. One consistent signature form across all three definition primitives. No implicit rules for the reader to remember.
 
 ```scheme
-(defmacro (:wat/std/Subtract (x :AST) (y :AST) -> :AST)
-  `(Blend ,x ,y 1 -1))
+(:wat/core/defmacro (:wat/std/Subtract (x :AST) (y :AST) -> :AST)
+  `(:wat/algebra/Blend ,x ,y 1 -1))
 ;; parameters and return are explicitly typed.
 ;; type-correctness of the EXPANSION is enforced by type-checking the expanded form
 ;; against the signatures of its constituent primitives (Blend, etc.).
@@ -362,8 +362,8 @@ Per FOUNDATION's "Cryptographic provenance" section, ASTs are signed. A `define`
 **3. Types enable static verification of stdlib compositions.**
 
 ```scheme
-(define (:wat/std/Chain (holons :List<Holon>) -> :Holon)
-  (Bundle (pairwise-map :wat/std/Then holons)))
+(:wat/core/define (:wat/std/Chain (holons :List<Holon>) -> :Holon)
+  (:wat/algebra/Bundle (pairwise-map :wat/std/Then holons)))
 ```
 
 The startup verifier can check:
@@ -381,10 +381,10 @@ Users author their own types with the same naming discipline as functions. `:ali
 User types are usable anywhere built-in types are used:
 
 ```scheme
-(define (:my/trading/analyze (c :project/market/Candle) -> :Holon)
-  (Sequential
-    (list (Thermometer (:close c) 0 100)
-          (Thermometer (:volume c) 0 10000))))
+(:wat/core/define (:my/trading/analyze (c :project/market/Candle) -> :Holon)
+  (:wat/std/Sequential
+    (:wat/core/list (:wat/algebra/Thermometer (:close c) 0 100)
+          (:wat/algebra/Thermometer (:volume c) 0 10000))))
 ```
 
 ## Arguments For

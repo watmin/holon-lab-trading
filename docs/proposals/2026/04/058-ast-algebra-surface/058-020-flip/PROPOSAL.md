@@ -12,9 +12,9 @@
 A wat stdlib macro (per 058-031-defmacro) that inverts `y`'s contribution in a blend with `x`:
 
 ```scheme
-(defmacro (Flip (x :AST) (y :AST) -> :AST)
-  `(Blend ,x ,y 1 -2))
-;; Expands at parse time to: (Blend x y 1 -2)
+(:wat/core/defmacro (:wat/std/Flip (x :AST) (y :AST) -> :AST)
+  `(:wat/algebra/Blend ,x ,y 1 -2))
+;; Expands at parse time to: (:wat/algebra/Blend x y 1 -2)
 ;; which computes: threshold(1·x + (-2)·y) — inverts y's sign contribution, double weighted
 ```
 
@@ -156,8 +156,8 @@ Yes — `(Blend x y 1 -2)`. Named form earns its place via the inversion-intent 
 **wat stdlib addition** — `wat/std/blends.wat`:
 
 ```scheme
-(defmacro (Flip (x :AST) (y :AST) -> :AST)
-  `(Blend ,x ,y 1 -2))
+(:wat/core/defmacro (:wat/std/Flip (x :AST) (y :AST) -> :AST)
+  `(:wat/algebra/Blend ,x ,y 1 -2))
 ```
 
 Registered at parse time (per 058-031-defmacro): every `(Flip x y)` invocation is rewritten to `(Blend x y 1 -2)` before hashing.
