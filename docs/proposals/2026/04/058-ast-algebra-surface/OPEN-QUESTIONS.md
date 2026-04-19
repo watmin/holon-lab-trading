@@ -102,17 +102,10 @@ Everything else in this document is RESOLVED inline (with a pointer to the resol
 
 ---
 
-## 058-009: Sequential — Reframing
+## 058-009: Sequential — ACCEPTED (reframed)
 
-1. **Does `map-with-index` exist in the wat stdlib?** — **RESOLVED.** `:wat/std/list/map-with-index` per the core/stdlib Rust-correspondence rule — it's a short composition (`xs.iter().enumerate().map(f)`) so it's stdlib, not core. See FOUNDATION-CHANGELOG 2026-04-18 entry "Core/stdlib division line named: Rust-direct correspondence."
+**All questions in this section are RESOLVED.** Sequential is stdlib with a **bind-chain** expansion (not the original bundle-sum) — `(Sequential [a b c]) = Bind(Bind(a, Permute(b, 1)), Permute(c, 2))`. Matches the primer's "positional list encoder" idiom and the trading lab's `indicator_rhythm` production pattern. The `map-with-index` dependency dissolves (bind-chain uses a left-fold); other questions resolved via 058-031 defmacro. See 058-009/PROPOSAL.md's ACCEPTED banner.
 
-2. **Is the permutation indexing 0-based or 1-based?** Convention here is 0-based (first element gets `Permute by 0` = identity). Some implementations might use 1-based. Pick one, document it.
-
-3. **Should the AST preserve `Sequential` as a semantic name?** As with Linear/Log/Circular, preserving stdlib forms in AST walks keeps semantics visible. Cache keys can be on the stdlib form or on the expanded form. Decision should be consistent across all reframings.
-
-4. **Relationship to `Array` (058-026).** Array is also an indexed list-of-thoughts form. Does Array's expansion internally rely on Sequential, or does Array have its own independent expansion? If Array uses Sequential, making Sequential stdlib is prerequisite for Array's stdlib form.
-
-5. **Historical note: why was Sequential grandfathered?** Understanding why it was kept as a variant originally (perf? clarity?) helps decide if this reframing is the right call or if there's a forgotten reason for the special case. If the reason was just "we had it before we had Permute as a clean variant," grandfathering can end cleanly.
 
 ---
 
@@ -130,35 +123,17 @@ Everything else in this document is RESOLVED inline (with a pointer to the resol
 
 ---
 
-## 058-012: Chain
+## 058-012: Chain — REJECTED
 
-1. **Edge case semantics.** What does `(Chain [])` produce? What does `(Chain [a])` produce? Proposal: empty → zero vector (or error, matching Bundle's empty behavior); singleton → `a` unchanged. Confirm conventions.
+**All questions in this section are MOOT.** Chain was rejected — redundant with Bigram (new named stdlib form in 058-013's reframe). `Chain xs` = `Ngram 2 xs` = Bigram. See 058-012/PROPOSAL.md's REJECTED banner and FOUNDATION-CHANGELOG 2026-04-18 entry.
 
-2. **Dependency on Then's resolution.** If Then (058-011) is rejected, Chain must re-express directly. Should this sub-proposal be explicitly deferred until Then resolves, or should both be reviewed together?
-
-3. **Bounded vs. unbounded chain length.** For very long chains (hundreds of thoughts), the bundle's capacity is exhausted and individual transitions may not be recoverable via cleanup. Should Chain carry a length warning/limit, or is this a documentation concern only?
-
-4. **Position information or not.** Chain encodes pairwise transitions but loses absolute position information (transition `a→b` in a long chain is indistinguishable from `a→b` at the start of a short chain). Is this the right tradeoff, or should Chain optionally encode starting position too?
-
-5. **Relationship to Sequential.** Both are ordered encodings of lists. Should vocab modules prefer Chain (transition-aware) or Sequential (position-aware), and under what circumstances? Documentation guidance would help vocab authors choose.
-
-6. **`Chain2`, `Chain3`, etc.?** If Chain becomes too restrictive (always pairwise), there may be pressure to add `Chain3` (triplet adjacency) and beyond. Ngram (058-013) generalizes this — the n=2 case is Chain, higher `n` is Ngram. Resolve by keeping Chain as the n=2 idiom and using Ngram for everything else.
 
 ---
 
-## 058-013: Ngram
+## 058-013: Ngram — ACCEPTED (reframed + ships Bigram/Trigram)
 
-1. **Window encoding: Sequential or custom?** The cleanest definition uses Sequential to encode each window. If 058-009 keeps Sequential as a stdlib form, this is clean. If Sequential is rejected (stays as variant), Ngram's internal window encoding inlines the Bundle+Permute pattern.
+**All questions in this section are RESOLVED.** Ngram is stdlib. The 2026-04-18 reframe ships three macros: `Ngram` (general), `Bigram` (= Ngram 2), `Trigram` (= Ngram 3). Uses the reframed bind-chain Sequential (058-009). Users extend for higher n in their own namespace. Matches the trading lab's `indicator_rhythm` pattern exactly. See 058-013/PROPOSAL.md's ACCEPTED banner.
 
-2. **Edge cases.** What does `(Ngram 0 xs)` produce? `(Ngram 5 [a b c])`? `(Ngram 2 [])`? Proposal: `n=0` is error, `n > length` is empty bundle (zero vector), `xs = []` is empty bundle. Confirm conventions.
-
-3. **Specialized names for small `n`: `Bigram`, `Trigram`?** Pros: readable for the common cases. Cons: name proliferation. Recommendation: keep only `Ngram` as the parameterized form, and `Chain` as the `n=2` specialization (already in 058-012). Avoid `Bigram`/`Trigram` unless they earn distinct semantic intent beyond "Ngram with specific n."
-
-4. **Stdlib dependencies.** — **RESOLVED.** Core (single Rust method): `:wat/core/take`, `:wat/core/length`, `:wat/core/map`, `:wat/core/rest`. Stdlib (short compositions): `:wat/std/list/n-wise-map`, `:wat/std/list/window`. See FOUNDATION-CHANGELOG 2026-04-18 core/stdlib division entry for the Rust-correspondence rule.
-
-5. **Performance.** An Ngram over a list of length `k` with window `n` produces `k-n+1` windows, each requiring a Sequential encoding. This is `O(k·n)` sub-AST construction and encoding, plus one top-level Bundle of `k-n+1` items. Acceptable for reasonable `k, n`; could be expensive for long lists. Document the scaling.
-
-6. **Relationship to the generalist-observer's rhythm encoding.** The holon-lab-trading project uses an n-gram-like approach for indicator rhythms (bundled bigrams of trigrams). Is this proposal's `Ngram` the right primitive to replace that bespoke encoding, or is the trading-specific encoding subtly different?
 
 ---
 

@@ -85,7 +85,7 @@ Forms that used to be HolonAST variants; reframed as stdlib over Blend:
 18. **058-008-linear** — **REJECTED** (2026-04-18). Under the new 3-arity Thermometer signature `(Thermometer value min max)`, Linear is identical to Thermometer itself. Use `Thermometer` directly. Log (058-017) and Circular (058-018) keep their stdlib slots — they demonstrate distinct transformations (log, cyclic).
 19. **058-017-log** — **ACCEPTED.** Stdlib macro over Thermometer with log-transformed inputs. 15+ concrete uses across the trading-lab vocab (ROC, ATR ratios, BB width, exit excursion/age, and more).
 20. **058-018-circular** — **ACCEPTED.** Stdlib macro over Blend Option B. Encodes all cyclic time components in `vocab/shared/time.rs` (minute/hour/DoW/DoM/MoY + pairwise compositions).
-21. **058-009-sequential-reframing** — end the grandfathered variant; Sequential becomes stdlib over Bundle and Permute.
+21. **058-009-sequential-reframing** — **ACCEPTED with reframe** (2026-04-18). Sequential becomes stdlib macro — **bind-chain with positional Permute**, not bundle-sum. Matches the primer's "positional list encoder" and the trading lab's `rhythm.rs` trigram pattern. The original bundle-sum expansion diverged from both.
 
 ### Phase 7 — Algebra stdlib (new compositions, 30 min)
 
@@ -97,8 +97,8 @@ New named compositions:
 25. **058-020-flip** — **REJECTED.** Primer's `flip` is single-arg elementwise negation; proposal's 2-arg Flip-with-weight-`-2` is a different operation with no cited production use.
 26. **058-010-concurrent** — **REJECTED** (2026-04-18). Redundant with Bundle; no runtime specialization. Enclosing context carries the temporal meaning. Kept as audit record. Userland may define it as a macro if needed.
 27. **058-011-then** — **REJECTED** (2026-04-18). Arity-specialization of Sequential; no new pattern. Userland macro if desired.
-28. **058-012-chain** — Bundle of pairwise Thens.
-29. **058-013-ngram** — n-wise adjacency, generalizing Chain.
+28. **058-012-chain** — **REJECTED.** Redundant with Bigram (new named form under 058-013 Ngram). `Chain xs` = `Ngram 2 xs` = Bigram.
+29. **058-013-ngram** — **ACCEPTED with reframe + two named shortcuts**. Ships `Ngram`, `Bigram` (= Ngram 2), `Trigram` (= Ngram 3). Uses bind-chain Sequential from the 058-009 reframe. Users write their own higher-n named macros (`:my/app/Pentagram = Ngram 5`) in their namespace.
 30. **058-014-analogy** — `c + (b − a)` via Bundle + Difference.
 31. **058-024-unbind** — **REJECTED** (2026-04-18). Identity alias for Bind; demonstrates no new pattern. Bind-on-Bind IS Unbind — a fact about the algebra, not a name worth projecting.
 

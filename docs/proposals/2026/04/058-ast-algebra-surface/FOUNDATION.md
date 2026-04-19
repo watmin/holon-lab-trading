@@ -1747,7 +1747,7 @@ Algebra Core     Atom, Bind, Bundle, Permute, Thermometer, Blend,
     ↓            (what produces holon vectors)
     ↓
 Stdlib           Sequential, Chain, Ngram, Analogy,
-                 Amplify, Subtract, HashMap, Vec, HashSet,
+                 Amplify, Subtract, HashMap, Vec, HashSet, Sequential, Ngram, Bigram, Trigram,
                  Linear, Log, Circular, ...
                  (named compositions — defined with language core, using algebra core)
 ```
@@ -1908,8 +1908,10 @@ wat/std/
 
       wat/std/Subtract.wat        ;; :wat/std/Subtract       (macro)
       wat/std/Amplify.wat         ;; :wat/std/Amplify        (macro)
-      wat/std/Chain.wat           ;; :wat/std/Chain          (macro)
+      wat/std/Sequential.wat      ;; :wat/std/Sequential     (macro, bind-chain)
       wat/std/Ngram.wat           ;; :wat/std/Ngram          (macro)
+      wat/std/Bigram.wat          ;; :wat/std/Bigram         (macro: Ngram 2)
+      wat/std/Trigram.wat         ;; :wat/std/Trigram        (macro: Ngram 3)
       wat/std/Analogy.wat         ;; :wat/std/Analogy        (macro)
       wat/std/HashMap.wat         ;; :wat/std/HashMap        (macro)
       wat/std/Vec.wat             ;; :wat/std/Vec            (macro)

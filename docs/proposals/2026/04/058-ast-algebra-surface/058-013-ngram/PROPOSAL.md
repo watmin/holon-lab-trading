@@ -1,10 +1,92 @@
-# 058-013: `Ngram` — n-Wise Adjacency
+# 058-013: `Ngram` — n-Wise Adjacency + Bigram / Trigram Shortcuts
 
 **Scope:** algebra
-**Class:** STDLIB
+**Class:** STDLIB — **ACCEPTED** (reframed 2026-04-18)
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
-**Depends on:** 058-009-sequential-reframing (window-encoding primitive), 058-012-chain (generalizes)
+
+---
+
+## ACCEPTED with reframe + two named shortcuts — 2026-04-18
+
+Ngram is stdlib. Its expansion uses the **bind-chain Sequential** from 058-009 (also reframed in the same pass). The proposal now ships **three stdlib forms**: `Ngram`, `Bigram`, `Trigram`.
+
+### The three forms
+
+```scheme
+;; General n-wise adjacency. Sliding window of size n, each window
+;; encoded as a bind-chain Sequential, all windows bundled.
+(:wat/core/defmacro (:wat/std/Ngram (n :AST<:usize>) (xs :AST<:List<:Holon>>) -> :AST<:Holon>)
+  `(:wat/algebra/Bundle
+     (:wat/std/list/map
+       (:wat/std/list/window ,n ,xs)
+       :wat/std/Sequential)))
+
+;; Named shortcut for n=2 — pairs.
+(:wat/core/defmacro (:wat/std/Bigram (xs :AST<:List<:Holon>>) -> :AST<:Holon>)
+  `(:wat/std/Ngram 2 ,xs))
+
+;; Named shortcut for n=3 — triples.
+(:wat/core/defmacro (:wat/std/Trigram (xs :AST<:List<:Holon>>) -> :AST<:Holon>)
+  `(:wat/std/Ngram 3 ,xs))
+```
+
+**Stdlib-as-blueprint logic:**
+- `Ngram` demonstrates the general pattern (slide, Sequential-encode, bundle).
+- `Bigram` and `Trigram` name the two universally common cases.
+- Users write their own `:my/app/Pentagram`, `:my/app/Heptagram`, etc. in their own namespace by calling `(:wat/std/Ngram 5 xs)` / `(:wat/std/Ngram 7 xs)`. Datamancer 2026-04-18: *"A user once wants a 5-gram can call (that-thing 5) and give it name."*
+
+### Why bind-chain Sequential matters here
+
+Ngram windows are Sequential-encoded. Sequential's reframe (058-009 — bind-chain, not bundle-sum) flows directly into Ngram's expansion:
+
+- `(:wat/std/Trigram facts)` → `(:wat/std/Ngram 3 facts)` → `(Bundle (map Sequential (window 3 facts)))`
+- Each window becomes `Sequential([fact_i, fact_{i+1}, fact_{i+2}])` = `Bind(Bind(fact_i, Permute(fact_{i+1}, 1)), Permute(fact_{i+2}, 2))` — bind-chain compound, exactly what the trading lab's `indicator_rhythm` hand-rolls.
+
+Under the earlier bundle-sum Sequential, Ngram produced soft superposition of windows — mathematically different, not matching production. The reframe corrects this.
+
+### Production use
+
+**Trading lab's `indicator_rhythm`** (`src/encoding/rhythm.rs`) — will migrate to stdlib forms:
+
+```rust
+// Before (hand-rolled trigrams):
+facts.windows(3).map(|w| {
+    Bind(Bind(w[0], Permute(w[1], 1)), Permute(w[2], 2))
+}).collect()
+
+// After (stdlib):
+(:wat/std/Trigram facts)
+```
+
+**Bigram pattern** — when the trading lab or other apps need pairwise compound encoding, `(:wat/std/Bigram items)` gives a named form where the previous Chain proposal would have lived.
+
+Datamancer 2026-04-18: *"I expect we will use this in the trading-lab — we just didn't have a useful tool yet."*
+
+### Questions for Designers — resolved
+
+- **Q1** (window encoding: Sequential or custom): RESOLVED — Sequential (bind-chain, per 058-009 reframe).
+- **Q2** (edge cases — `n=0`, `n > length`, `xs=[]`): `n=0` is an error (empty window has no meaning); `n > length` produces an empty bundle (zero vector) per Bundle's empty-input behavior; `xs=[]` produces an empty bundle.
+- **Q3** (specialized names `Bigram`/`Trigram`): RESOLVED — **ship both as stdlib macros** per the blueprint logic above. Users write higher-n names in their own namespace.
+- **Q4** (stdlib dependencies): RESOLVED — `:wat/std/list/window` (sliding window combinator, iterator-method composition), `:wat/std/list/map` (core), `:wat/std/Sequential` (this batch). All available.
+- **Q5** (performance): Ngram(n) over a list of length k produces (k − n + 1) windows. At d=10,000, each window's Sequential encode is n − 1 Bind operations and n − 1 Permutes. Total: O(k · n) AST nodes, O(k · n) encode operations, O(k · n) cache entries if fully materialized. The cache absorbs most repeat work (identical windows across overlapping invocations share sub-computation). Document scaling; don't optimize preemptively.
+- **Q6** (relationship to the trading lab's rhythm): RESOLVED — Trigram IS the trading lab's trigram construction. Migration follows once the wat-vm is live.
+
+### What got rejected in the same pass
+
+- **Chain (058-012)** — redundant with Bigram. Same expansion `(Ngram 2 xs)`. Reject; keep Bigram as the named form.
+- The original bundle-sum Sequential expansion (058-009 initial draft) — corrected to bind-chain.
+
+### What stays
+
+Algebra stdlib inventory gains Bigram and Trigram as new macros, loses Chain. Net +1 stdlib form.
+
+---
+
+## Historical content (preserved as audit record)
+
+**Original proposal dependency line:**
+> Depends on: 058-009-sequential-reframing (window-encoding primitive), 058-012-chain (generalizes)
 
 > **Updated 2026-04-18:** Dropped dependency on Then (058-011 REJECTED). The `n=2` special case expands to a bundle of binary Sequentials (equivalent to what Chain produces), not to `(Then ...)` calls.
 

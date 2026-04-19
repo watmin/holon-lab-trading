@@ -1,9 +1,77 @@
-# 058-009: `Sequential` — Reframe as Pure Stdlib
+# 058-009: `Sequential` — Reframed to Bind-Chain Positional Compound
 
 **Scope:** algebra
-**Class:** STDLIB (reclassification from current CORE variant)
+**Class:** STDLIB — **ACCEPTED** (reframed 2026-04-18)
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
+
+---
+
+## ACCEPTED with reframe — 2026-04-18
+
+Sequential is stdlib, and its expansion is **bind-chain with positional Permute** — not the bundle-sum form the original proposal specified. The reframe matches (1) the primer's "positional list encoder" idiom and (2) the trading lab's production trigram pattern in `src/encoding/rhythm.rs`.
+
+### The correct expansion
+
+```scheme
+(:wat/core/defmacro (:wat/std/Sequential (items :AST<:List<:Holon>>) -> :AST<:Holon>)
+  ;; Bind-chain with positional Permute:
+  ;;   (Sequential [a])       = a
+  ;;   (Sequential [a b])     = Bind(a, Permute(b, 1))
+  ;;   (Sequential [a b c])   = Bind(Bind(a, Permute(b, 1)), Permute(c, 2))
+  ;;   (Sequential [a b c d]) = Bind(Bind(Bind(a, Permute(b, 1)), Permute(c, 2)), Permute(d, 3))
+  ...)
+```
+
+Position is carried by `Permute(item, i)` at each step. Items at different positions produce different vectors; the nested Bind composition creates a **compound** — a single entangled vector encoding the ordered tuple. Two sequences with the same items in different order produce different compound vectors.
+
+### Why bind-chain, not bundle-sum
+
+| Shape | Composition | Semantics |
+|---|---|---|
+| **Bind-chain** (this proposal) | `Bind(Bind(a, Permute(b,1)), Permute(c,2))` | **Compound** — strict identity; exact sequence match |
+| Bundle-sum (original 058-009) | `Bundle([a, Permute(b,1), Permute(c,2)])` | Superposition — soft; partial recovery possible |
+
+Both encode position via `Permute`. But:
+
+- The primer (`series-001-002-holon-ops.md`, Permute entry): "Applied to a sequence item before binding, it encodes position: `bind(permute(item, position), role)`." Bind-based.
+- The trading lab (`src/encoding/rhythm.rs:91-99`, trigram construction): `Bind(Bind(fact_0, Permute(fact_1, 1)), Permute(fact_2, 2))`. Bind-chain.
+
+The bundle-sum form was a classical-VSA-literature convention (Plate / Kanerva). The bind-chain form is what the holon library actually implements and what production code uses. **This proposal corrects the divergence.**
+
+### Production use (pending trading-lab migration)
+
+The trading lab's `indicator_rhythm` function hand-rolls the bind-chain trigram pattern. With Sequential accepted, the hand-rolled construction migrates to the stdlib form:
+
+```rust
+// Before (hand-rolled):
+Bind(Bind(fact_0, Permute(fact_1, 1)), Permute(fact_2, 2))
+
+// After (stdlib):
+(:wat/std/Sequential (:wat/core/list fact_0 fact_1 fact_2))
+```
+
+Datamancer 2026-04-18: *"I expect we will use this in the trading-lab — we just didn't have a useful tool yet."* The migration is the production-evidence commitment.
+
+### Questions for Designers — resolved
+
+- **Q1** (`map-with-index` exists in stdlib): RESOLVED — this question dissolves. The bind-chain expansion uses a simple left-fold, no `map-with-index` needed. The `:wat/std/list/` combinators still exist for other uses; Sequential doesn't need them.
+- **Q2** (0-based or 1-based): 0-based. First element gets `Permute(_, 0) = identity`; subsequent get `Permute(_, i)`.
+- **Q3** (preserve Sequential as semantic name in AST): RESOLVED via 058-031 defmacro. Macros expand at parse time; hash is on the expanded AST. Sequential's name exists at source; its identity is the expanded Bind-chain.
+- **Q4** (relationship to Array / Vec): Vec (058-026) is an indexed container with O(1) runtime lookup via Rust's `std::vec::Vec`. Sequential is an algebra encoding for sequences. Different: Vec stores values addressed by index; Sequential composes holons into a position-encoded compound vector. No dependency; they serve different purposes.
+- **Q5** (historical note): Sequential was grandfathered as a CORE variant because `(Bundle (list-of-Permuted-items))` was the classical expansion and the early encoder optimized that path. The reframe to Bind-chain + removing the variant unifies the implementation with production.
+
+### What this unblocks
+
+- **Ngram (058-013)** — reframes to use bind-chain Sequential; math now matches production.
+- **Bigram (new)** — named stdlib macro, `(:wat/std/Bigram xs) → (:wat/std/Ngram 2 xs)`.
+- **Trigram (new)** — named stdlib macro, `(:wat/std/Trigram xs) → (:wat/std/Ngram 3 xs)`.
+- **Chain (058-012)** — REJECTED. Redundant with Bigram. See its PROPOSAL.md for the record.
+- **Trading lab migration** — `indicator_rhythm` trigrams become `(:wat/std/Trigram facts)`.
+
+---
+
+## Historical content (preserved as audit record — note that the original proposal specified bundle-sum expansion; the reframe above replaces it with bind-chain)
 
 ## Reclassification Claim
 

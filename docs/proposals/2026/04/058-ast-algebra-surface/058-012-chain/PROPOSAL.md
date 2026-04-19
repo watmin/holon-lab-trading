@@ -1,12 +1,36 @@
 # 058-012: `Chain` — Bundle of Pairwise Transitions
 
-> **Updated 2026-04-18:** Chain no longer depends on `Then` (058-011 REJECTED). The binary Sequential pattern is inlined directly — Chain remains a distinct stdlib form because its encoding (pairwise transitions) is categorically different from Sequential's (absolute positions). The rejection of Then does not affect Chain's algebraic status; only its expansion changes.
-
 **Scope:** algebra
-**Class:** STDLIB
+**Class:** ~~STDLIB~~ **REJECTED**
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
-**Depends on:** 058-003-bundle-list-signature, 058-009-sequential-reframing, 058-022-permute
+
+---
+
+## REJECTED — 2026-04-18
+
+**Redundant with `Bigram` (058-013's new named stdlib shortcut).**
+
+Chain's proposed expansion — `(Bundle (pairwise-map (λ a b → (Sequential (list a b))) xs))` — is exactly `(Ngram 2 xs)` under the reframed Sequential (058-009, now bind-chain). Ngram at n=2 produces pairs, each Sequential-encoded, bundled. That's Bigram.
+
+058-013 Ngram's reframe ships **Bigram** (`(:wat/std/Ngram 2 xs)`) as a named stdlib macro. Chain and Bigram are the same form. Keep the clearer name and the family (Bigram, Trigram, user-defined Pentagram, ...) — reject the redundant alias.
+
+**What users who said "chain" write instead:**
+- `(:wat/std/Bigram xs)` — the canonical name for pairwise transitions.
+- `(:wat/std/Ngram 2 xs)` — the direct form if they prefer parameter-explicit.
+
+**What this doesn't affect:**
+- Ngram (058-013) stays ACCEPTED with its reframe.
+- Sequential (058-009) stays ACCEPTED with its reframe.
+- Bigram ships as a new named stdlib macro within 058-013's updated proposal.
+
+Algebra stdlib: −1 form (Chain). +2 forms (Bigram, Trigram in 058-013). Net +1.
+
+See FOUNDATION-CHANGELOG 2026-04-18 entry for the rejection + reframe record.
+
+---
+
+## Historical content (preserved as audit record)
 
 ## The Candidate
 
