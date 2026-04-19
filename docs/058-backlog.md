@@ -42,7 +42,9 @@ the I/O model (`:user::main` receives real `:io::Stdin` /
 `:io::Stdout` / `:io::Stderr`; `:wat::io::write` and
 `:wat::io::read-line` primitives go straight to the OS stream), and
 the Console stdlib program (dual-sink gateway; `Console/out` +
-`Console/err` helpers). **454+ tests green; zero warnings; zero
+`Console/err` helpers), Round 4b's `HashMap<K,V>` + `HashSet<T>` +
+`:wat::std::{get,contains?,member?}` + `foldr` + `filter` +
+`:wat::std::list::zip`. **476+ tests green; zero warnings; zero
 Mutex.** The vector-level proof runs end-to-end:
 
 ```
@@ -171,14 +173,34 @@ At `:wat::std::list::*`:
   `map-with-index`, `zip`, `unzip`, `take-while`, `drop-while`)
   deferred** — each lands when something wants it.
 
-**Round 4b (later) — data structures:**
-- [ ] `HashMap<K,V>` + `get` / `contains?`
-- [ ] `HashSet<T>` + `member?`
-- [ ] The rest of the list combinators above, as need arises.
+**Round 4b — SUBSTANTIVELY DONE (2026-04-19):**
+
+- [x] `HashMap<K,V>` + `:wat::std::get` (polymorphic over HashMap +
+  HashSet) + `:wat::std::contains?`. Flat alternating-pair
+  constructor. Primitive-key scoped; type-tagged canonical strings
+  as the backing so heterogeneous K don't collide.
+- [x] `HashSet<T>` + `:wat::std::member?`. Variadic flat-elements
+  constructor. `get` works identically; returns `(Some stored)` on
+  hit, `:None` on miss.
+- [x] `:wat::core::foldr` — right-associative fold.
+- [x] `:wat::core::filter` — keep elements where pred is :bool true.
+- [x] `:wat::std::list::zip` — `Vec<T> × Vec<U> → Vec<(T,U)>`,
+  short-circuits at min length.
+
+Remaining list combinators — each a short Rust iterator
+composition; lands when a caller demands:
+- [ ] `:wat::core::for-each`, `reduce`, `cons`
+- [ ] `:wat::std::list::pairwise-map`, `n-wise-map`, `map-with-index`
+  (already shipped), `unzip`, `take-while`, `drop-while`
+
+Composite-holon keys for HashMap / HashSet — graduate when a
+caller demands them. Currently the algebra's unified-data-model
+vision is described in FOUNDATION's data-structures section but
+only primitive keys are shipping in wat-rs.
 
 (`Vec<T>` is the typed existing form; `:wat::core::vec` is its
-constructor, already shipped. `nth` is `get` on Vec — graduates with
-HashMap/HashSet's `get`.)
+constructor, already shipped. Index-get on Vec graduates with
+HashMap/HashSet's `get` → `:Option<T>` if a caller demands it.)
 
 ### Step 5 — stdlib programs (Console + Cache) — PARTIAL (2026-04-19)
 
