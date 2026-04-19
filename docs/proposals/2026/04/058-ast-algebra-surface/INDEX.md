@@ -83,8 +83,8 @@ Genuinely new algebraic operations:
 Forms that used to be HolonAST variants; reframed as stdlib over Blend:
 
 18. **058-008-linear** — **REJECTED** (2026-04-18). Under the new 3-arity Thermometer signature `(Thermometer value min max)`, Linear is identical to Thermometer itself. Use `Thermometer` directly. Log (058-017) and Circular (058-018) keep their stdlib slots — they demonstrate distinct transformations (log, cyclic).
-19. **058-017-log** — same skeleton, log-normalized weights.
-20. **058-018-circular** — same skeleton, sin/cos weights. Proves Blend Option B's independent-weights signature.
+19. **058-017-log** — **ACCEPTED.** Stdlib macro over Thermometer with log-transformed inputs. 15+ concrete uses across the trading-lab vocab (ROC, ATR ratios, BB width, exit excursion/age, and more).
+20. **058-018-circular** — **ACCEPTED.** Stdlib macro over Blend Option B. Encodes all cyclic time components in `vocab/shared/time.rs` (minute/hour/DoW/DoM/MoY + pairwise compositions).
 21. **058-009-sequential-reframing** — end the grandfathered variant; Sequential becomes stdlib over Bundle and Permute.
 
 ### Phase 7 — Algebra stdlib (new compositions, 30 min)

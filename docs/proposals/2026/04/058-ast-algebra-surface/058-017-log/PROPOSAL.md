@@ -1,11 +1,50 @@
 # 058-017: `Log` — Reframe as Stdlib over Blend
 
 **Scope:** algebra
-**Class:** STDLIB (reclassification from current CORE variant)
+**Class:** STDLIB — **ACCEPTED**
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
-**Depends on:** 058-002-blend (pivotal — if Blend rejected, Log stays core)
-**Companion proposals:** 058-008-linear, 058-018-circular
+
+---
+
+## ACCEPTED — 2026-04-18
+
+`Log` is stdlib. Closed on overwhelming production evidence and the Blend acceptance.
+
+**Production use:** Log is load-bearing across the trading lab's vocab. At least 15 concrete indicator encodings:
+
+- `vocab/market/oscillators.rs` — `roc-1`, `roc-3`, `roc-6`, `roc-12` (rate-of-change indicators across four windows)
+- `vocab/market/momentum.rs` — `atr-ratio`
+- `vocab/market/keltner.rs` — `bb-width` (Bollinger Band width)
+- `vocab/market/price_action.rs` — `range-ratio`, `consecutive-up`, `consecutive-down`
+- `vocab/exit/regime.rs` — `variance-ratio`
+- `vocab/exit/trade_atoms.rs` — `exit-excursion`, `exit-age`, `exit-peak-age`, `exit-trail-distance`, `exit-stop-distance`, `exit-r-multiple`, `phases-since-entry`, `phases-survived`
+
+Every ratio, rate, and multiplicative quantity in the vocab passes through Log. It is how the trading lab gets scale-invariant encoding for "how much X per Y."
+
+**Macro expansion** (after Blend acceptance — 058-002):
+
+```scheme
+(:wat/core/defmacro (:wat/std/Log (value :AST) (min :AST) (max :AST) -> :AST)
+  `(:wat/algebra/Thermometer (:wat/std/math/ln ,value)
+                              (:wat/std/math/ln ,min)
+                              (:wat/std/math/ln ,max)))
+```
+
+Log-transform the inputs, then the standard Thermometer gradient. Natural log (`:wat/std/math/ln`) is the conventional base; any base produces the same result (base cancels in the ratio).
+
+**Questions for Designers — all resolved:**
+- Q1 (`log` in wat stdlib): RESOLVED — `:wat/std/math/ln` (single Rust method `f64::ln`); see FOUNDATION-CHANGELOG 2026-04-18 core/stdlib division entry.
+- Q2 (numerical preconditions): document as user responsibility — `value, min, max` must all be positive for `ln` to be defined. Trading-lab callers pass `.max(0.0001)` guards where inputs can touch zero (see `trade_atoms.rs`).
+- Q3 (log base): natural log is conventional; any base cancels in the ratio.
+- Q4 (consistency concerns with Linear/Circular): RESOLVED via 058-031 defmacro — macros expand at parse time; hash is on the expanded AST.
+- Q5 (LogLinear / Exponential family): deferred; propose with concrete application evidence when a real need emerges.
+
+**Companion proposals:** 058-008 Linear REJECTED (identical to Thermometer under the 3-arity signature). 058-018 Circular — also ACCEPTED as stdlib (see its PROPOSAL.md).
+
+---
+
+## Historical content (preserved as audit record)
 
 ## Reclassification Claim
 

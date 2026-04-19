@@ -208,35 +208,17 @@ Everything else in this document is RESOLVED inline (with a pointer to the resol
 
 ---
 
-## 058-017: Log
+## 058-017: Log — ACCEPTED
 
-1. **Is `log` in the wat stdlib?** — **RESOLVED.** `:wat/std/math/log` and `:wat/std/math/ln` are stdlib (single Rust method: `f64::log` / `f64::ln`). See FOUNDATION-CHANGELOG 2026-04-18 core/stdlib division entry (math primitives at `:wat/std/math/`).
+**All questions in this section are RESOLVED.** Log is stdlib macro over Thermometer with log-transformed inputs: `(Thermometer (ln value) (ln min) (ln max))`. Concrete production evidence — at least 15 uses across the trading lab's vocab (`vocab/market/oscillators.rs` ROC-1/3/6/12, `vocab/market/momentum.rs` atr-ratio, `vocab/market/keltner.rs` bb-width, `vocab/market/price_action.rs` range-ratio and consecutive-up/down, `vocab/exit/regime.rs` variance-ratio, `vocab/exit/trade_atoms.rs` eight exit-vocab uses). See 058-017/PROPOSAL.md's ACCEPTED banner for per-question resolution.
 
-2. **Numerical preconditions.** `min, max, value` must all be positive (log requires positive arguments). Should the stdlib Log enforce this, or treat violations as undefined?
-
-3. **Log base choice.** Natural log is conventional; base-10 or base-2 produce the same result (the base cancels in the ratio). Does holon-rs have a preference?
-
-4. **Same consistency concerns as 058-008.** — **RESOLVED via 058-031 (defmacro).** Macros expand at parse time; hash is on the expanded AST. Two source files differing only in alias choice produce the same expanded AST and same hash. No separate canonicalization layer needed.
-
-5. **Alternatives: `LogLinear`, `Exponential`?** Log is one log-scale encoder. Others (log-sigmoid, stretched-log, signed-log for values crossing zero) are plausible stdlib additions. Linear's reframing opens the door; does Log have a family of companions?
 
 ---
 
-## 058-018: Circular
+## 058-018: Circular — ACCEPTED
 
-1. **Are `sin`, `cos`, `pi` available in the wat stdlib?** — **RESOLVED.** `:wat/std/math/sin`, `:wat/std/math/cos`, `:wat/std/math/pi` are stdlib (single Rust methods / constants: `f64::sin`, `f64::cos`, `std::f64::consts::PI`). See FOUNDATION-CHANGELOG 2026-04-18 core/stdlib division entry.
+**All questions in this section are RESOLVED.** Circular is stdlib macro over Blend (Option B — which is why Circular is the proof case for independent weights, since `cos(θ)+sin(θ)≠1`). Concrete production use in `vocab/shared/time.rs` — all five cyclic time components (`minute`/`hour`/`day-of-week`/`day-of-month`/`month-of-year`) plus three pairwise compositions. Every broker thought carries these facts. See 058-018/PROPOSAL.md's ACCEPTED banner for per-question resolution.
 
-2. **Scale argument shape.** Circular's `scale = (period,)` differs from Linear/Log's `scale = (min, max)`. Unify (e.g., `(0, period)` for Circular) or document per-encoder? Consistency may help readability.
-
-3. **Blend Option B verification.** Circular is the test case for Option B's independent weights. Any Blend implementation must correctly handle negative weights. Confirm this is in the Blend acceptance criteria.
-
-4. **Angle conventions.** This proposal uses `angle = 2π · value / period` — standard radians, counterclockwise from 0. Alternative conventions (degrees, clockwise, phase offset) are possible. Document the choice.
-
-5. **Starting angle offset.** Some applications want `value = 0` to correspond to a specific position (e.g., "noon" maps to angle 0, "midnight" maps to π). This is an offset parameter. Should Circular's stdlib form support it, or should users write a variant?
-
-6. **Same consistency concerns as 058-008 and 058-017.** — **RESOLVED via 058-031 (defmacro).** See cross-cutting theme "AST preservation vs. eager expansion" — macros expand at parse time, hash is on the expanded AST.
-
-7. **New circular encoders.** "Half-circle" (values in `[0, π]`), "cyclic-Gaussian" (peaked at some phase), "wavelet" — all potential stdlib extensions once Circular is reframed. Not in this proposal's scope but opens the door.
 
 ---
 

@@ -1,11 +1,56 @@
 # 058-018: `Circular` — Reframe as Stdlib over Blend
 
 **Scope:** algebra
-**Class:** STDLIB (reclassification from current CORE variant)
+**Class:** STDLIB — **ACCEPTED**
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
-**Depends on:** 058-002-blend (pivotal — if Blend rejected, Circular stays core)
-**Companion proposals:** 058-008-linear, 058-017-log
+
+---
+
+## ACCEPTED — 2026-04-18
+
+`Circular` is stdlib. Closed on concrete production use and the Blend acceptance (Option B, independent weights — which is what enables Circular's `(cos θ, sin θ)` weighting).
+
+**Production use:** Circular encodes every cyclic time component in the trading lab's `vocab/shared/time.rs`. Five leaf binds plus three pairwise compositions per candle:
+
+| Component | Period | Usage |
+|---|---|---|
+| `minute` | 60 | leaf bind |
+| `hour` | 24 | leaf bind, composition `minute × hour` |
+| `day-of-week` | 7 | leaf bind, composition `hour × day-of-week` |
+| `day-of-month` | 31 | leaf bind |
+| `month-of-year` | 12 | leaf bind, composition `day-of-week × month` |
+
+`time_facts(candle)` produces 8 time-related facts per candle; every broker thought carries them. Without Circular, hour 23 and hour 0 would look maximally distant; with Circular, they are adjacent points on the unit circle. Load-bearing for temporal pattern recognition.
+
+**Macro expansion** (after Blend acceptance with Option B independent weights):
+
+```scheme
+(:wat/core/defmacro (:wat/std/Circular (value :AST) (period :AST) -> :AST)
+  `(:wat/core/let ((theta (:wat/core/* 2 :wat/std/math/pi
+                                       (:wat/core// ,value ,period))))
+     (:wat/algebra/Blend (:wat/algebra/Atom :wat/std/circular-cos-basis)
+                          (:wat/algebra/Atom :wat/std/circular-sin-basis)
+                          (:wat/std/math/cos theta)
+                          (:wat/std/math/sin theta))))
+```
+
+Two reserved basis atoms (`:wat/std/circular-cos-basis`, `:wat/std/circular-sin-basis`) plus `cos(θ)` and `sin(θ)` weights produce the 2D cyclic encoding. This is the proof that Blend needs Option B — `cos(π/4) + sin(π/4) ≈ 1.414 ≠ 1`, so Option A's convex constraint cannot express it.
+
+**Questions for Designers — all resolved:**
+- Q1 (`sin`/`cos`/`pi` in stdlib): RESOLVED — `:wat/std/math/sin`, `:wat/std/math/cos`, `:wat/std/math/pi` are stdlib (single Rust methods / constant).
+- Q2 (scale argument shape: period vs `(min, max)`): keep `period` single argument — cyclic semantics wrap naturally over `[0, period)`; the `(min, max)` shape only makes sense for monotone-value encoders like Linear/Log. Per-encoder shape is honest.
+- Q3 (Blend Option B verification): RESOLVED — 058-002 ACCEPTED as Option B with negative weights, which is exactly what Circular needs.
+- Q4 (angle conventions): standard radians, counterclockwise from 0, `θ = 2π · value / period`.
+- Q5 (starting angle offset): userland — users who want `θ = 2π · (value - offset) / period` wrap the macro themselves.
+- Q6 (consistency with Linear/Log): RESOLVED via 058-031 defmacro.
+- Q7 (new circular encoders — half-circle, cyclic-Gaussian, wavelet): deferred until real application demand.
+
+**Companion proposals:** 058-008 Linear REJECTED (identical to Thermometer). 058-017 Log ACCEPTED as stdlib (see its PROPOSAL.md).
+
+---
+
+## Historical content (preserved as audit record)
 
 ## Reclassification Claim
 
