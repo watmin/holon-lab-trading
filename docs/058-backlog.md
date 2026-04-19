@@ -116,43 +116,38 @@ already spec-shaped.
 - [x] `recv` returns `:Option<T>` (`:None` on disconnect)
 - [ ] `try-recv` returns `:Option<T>` (lands with Step 1's try-recv)
 
-### Step 3 — stdlib algebra macros — PARTIAL
+### Step 3 — stdlib algebra macros — DONE (2026-04-19)
 
-- [x] `Amplify` / `Subtract` (round 1 — 2026-04-19)
+- [x] `Amplify` / `Subtract` (round 1)
 - [x] `Log` / `Circular` (round 2 — needed `:wat::std::math::{ln,sin,cos,pi}`
   and the typed-arith split into `:wat::core::{i64,f64}::*`)
 - [x] `Reject` / `Project` (round 3 — needed `:wat::algebra::dot` primitive)
-- [ ] `Sequential` / `Bigram` / `Trigram` / `Ngram` (needs Step 4 list
-  combinators first)
+- [x] `Sequential` / `Bigram` / `Trigram` / `Ngram` (round 4 — needed
+  core list primitives + `:wat::std::list::{window,map-with-index}` +
+  `first`/`second`/`third` polymorphic over Vec and tuple)
 
 `Linear` is REJECTED (058-008; identical to Thermometer under the
 3-arity signature). Does not ship.
 
 ### Step 4 — stdlib data structures + list combinators
 
-**Round 4a (this slice) — minimum set to unblock Step 3's Sequential/Ngram:**
+**Round 4a — DONE (2026-04-19). Minimum set that unblocked Step 3.**
 
 At `:wat::core::*`:
-- [ ] `list` — Lisp-y constructor. Used for wat-level lists (items
-  passed to `foldl`, holons passed to `Sequential`, macro inputs).
-- [ ] `map` — `Vec<T>, (T → U) → Vec<U>`
-- [ ] `length` — `Vec<T> → :i64`
-- [ ] `empty?` — `Vec<T> → :bool`
-- [ ] `reverse` — `Vec<T> → Vec<T>`
-- [ ] `range` — **two-arg only**: `(range start end)` → `Vec<i64>`
-  (`start..end`). Callers write `(range 0 n)` explicitly; no one-arg
-  overload. Matches Rust's single iterator method.
-- [ ] `take` — `Vec<T>, :i64 → Vec<T>`
-- [ ] `drop` — `Vec<T>, :i64 → Vec<T>`
-- [ ] `foldl` — **canonical name** (direction is load-bearing for
-  Sequential). Signature `(foldl xs init f)` with `f : (acc, item) →
-  new-acc`. No `fold` / `reduce` aliases: `fold` is ambiguous without
-  a direction; `reduce` is the init-less special case that panics on
-  empty input.
+- [x] `list` — Lisp-y constructor alias of `vec`.
+- [x] `map` — `Vec<T>, fn(T)→U → Vec<U>`
+- [x] `length`, `empty?`, `reverse`
+- [x] `range` — two-arg `(range start end) → Vec<i64>`
+- [x] `take`, `drop`
+- [x] `foldl` — canonical; no `foldr` / `fold` / `reduce` yet
+- [x] `first`, `second`, `third` — polymorphic over Vec and tuple
+  (per 2026-04-19 user direction: "both are index-accessed data
+  structs"). Runtime error on out-of-range.
+- [x] `rest` — `Vec<T>` → `Vec<T>`.
 
 At `:wat::std::list::*`:
-- [ ] `window` — `Vec<T>, :i64 → Vec<Vec<T>>`, spec's sliding window
-  (Rust `slice.windows(n)`). Needed by Ngram.
+- [x] `window` — sliding window.
+- [x] `map-with-index` — added to support Sequential's indexed fold.
 
 **Design decisions — frozen here so compaction can't erase them:**
 
