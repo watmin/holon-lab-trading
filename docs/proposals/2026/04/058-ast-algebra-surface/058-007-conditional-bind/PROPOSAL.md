@@ -1,10 +1,37 @@
 # 058-007: `ConditionalBind` — 3-Argument Gated Binding
 
 **Scope:** algebra
-**Class:** CORE
+**Class:** ~~CORE~~ **REJECTED**
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
-**Depends on:** conceptually adjacent to 058-006-resonance (both are per-dimension gating)
+**Depends on:** conceptually adjacent to 058-006-resonance (both are per-dimension gating; both REJECTED)
+
+---
+
+## REJECTED from 058
+
+**Reason — speculative, no production use.** ConditionalBind appears in the Holon Python library with four mode strings (`"positive"` / `"negative"` / `"nonzero"` / `"strong"`) — the unmistakable fingerprint of exploratory API exploration, not a settled primitive. No cited application in any challenge batch, the DDoS lab, or the trading lab. Its entry in `blog/primers/series-001-002-holon-ops.md` has no "Application:" citation.
+
+**Also, the operation is half an abstraction.** ConditionalBind consumes a gate vector without proposing a gate-production mechanism. "Bind A to B only where context C is active" requires knowing which dimensions encode C — and there is no canonical way to derive that gate from a role atom. The classical VSA way to update a role in a composite is straightforward arithmetic with existing primitives:
+
+```
+person_new = Bundle(Subtract(person, Bind(old_age, role_age)),
+                    Bind(new_age, role_age))
+```
+
+Subtract and Bind, both already in core/stdlib. No ConditionalBind required. No gate-derivation problem.
+
+**Q3 of Round 2 reveals the same structural issue.** The more general primitive is `Select(x, y, gate)` — per-dim choose-between-two — but `Select` isn't proposed either, and a Select-plus-gate-derivation pair would be the honest abstraction. Neither exists; the classical update path doesn't need either.
+
+**If real use emerges later**, propose with concrete motivation: which application needs gated binding, what gate-derivation mechanism accompanies it, and what couldn't be expressed via the classical Subtract+Bind+Bundle pattern. Until then, the algebra stays simpler without it.
+
+The algebra core shrinks to 7 forms: Atom, Bind, Bundle, Blend, Permute, Thermometer, Orthogonalize.
+
+See FOUNDATION-CHANGELOG for the 2026-04-18 rejection record.
+
+---
+
+## Historical content (preserved as audit record)
 
 ## The Candidate
 

@@ -26,12 +26,6 @@ The substantive decisions that still need designer opinions — everything else 
 - **Q2** Should `Project` also be proposed first-class (the complement)?
 - **Q3** Name: `Orthogonalize` or `Reject`? (Holon's existing name is `reject`.)
 
-**058-006 Resonance.**
-- **Q2** Is `Mask(x, boolean-vector)` the more general primitive, with Resonance as a stdlib idiom over Mask?
-
-**058-007 ConditionalBind.**
-- **Q3** Is `Select(x, y, gate)` the lower-level primitive, with ConditionalBind as a stdlib idiom over Select?
-
 Everything else in this document is RESOLVED inline (with a pointer to the resolution source), MOOT (in a rejected proposal), or documentation-only (the recommendation IS the resolution).
 
 ---
@@ -103,33 +97,17 @@ Everything else in this document is RESOLVED inline (with a pointer to the resol
 
 ---
 
-## 058-006: Resonance
+## 058-006: Resonance — REJECTED
 
-1. **Ternary output as a supported kind.** — **RESOLVED in FOUNDATION "Output Space" section.** The algebra's output space is `{-1, 0, +1}^d` ternary-by-default, with `threshold(0) = 0`. Zero is a first-class "no information here" signal that propagates through Bind (0·b=0), Bundle (contributes 0 to sum), and cosine similarity. No distinct "ternary kind" typesystem change — the substrate was always ternary; Resonance is the first form that produces zeros by selection rather than by arithmetic cancellation.
+**All questions in this section are MOOT.** 058-006 was rejected — speculative primitive with no cited production use beyond unit tests. Sign-agreement masking is a three-primitive composition over existing core forms (threshold + Bind). When real use demands it, propose with concrete application evidence or the refined `Mask(x, boolean)` abstraction. See FOUNDATION-CHANGELOG for the rejection record. Designers need not opine.
 
-2. **Should `Mask`/`Gate` be the primitive instead?** A more general `Mask(x, boolean-vector)` primitive would make Resonance stdlib. Is the right level of generality "sign-agreement masking" (Resonance, concrete) or "arbitrary masking" (Mask, more general)?
-
-3. **Complement form `AntiResonance` or `Dissonance`?** "Keep only the dimensions that DISAGREE" — `Dissonance(v, ref) = v - Resonance(v, ref)`. Can be stdlib once Resonance and Blend exist. Worth a first-class form for symmetry, or let stdlib handle it?
-
-4. **Relationship to `threshold`.** If we pass Resonance output through threshold (rounding 0 → +1), we lose the "no information" semantics. Should threshold be aware of ternary input and leave zeros alone, or is it purely a `x<0 → -1, x≥0 → +1` mapping with no nuance?
-
-5. **Holon's `attend` vs this `Resonance`.** Holon's `attend` is related but not identical (attend uses magnitude-weighted filtering, not just sign-agreement). Is this proposal naming the operation correctly, or should it reference `attend`'s exact definition? Clarify the lineage.
 
 ---
 
-## 058-007: ConditionalBind
+## 058-007: ConditionalBind — REJECTED
 
-1. **Is functional update at this granularity the right level?** ConditionalBind enables "update one role's binding in a bundled structure." Is this the kind of operation the algebra should expose, or is it too close to imperative thinking?
+**All questions in this section are MOOT.** 058-007 was rejected — speculative primitive with no cited production use. Half-abstraction — consumes a gate without proposing how to derive one from a role atom. Classical functional update in VSA uses Subtract + Bind + Bundle, all already in core/stdlib. See FOUNDATION-CHANGELOG for the rejection record. Designers need not opine.
 
-2. **Gate semantics: sign-based or magnitude-based?** Convention in this proposal: `gate[i] > 0` triggers bind. Alternatives: `gate[i] == +1` (strict), or `|gate[i]| > threshold`. Strict sign-based is simplest; consistent with bipolar vector conventions.
-
-3. **Should `Select(x, y, gate)` be the more general primitive instead?** `Select` is lower-level ("choose x or y per dimension"); ConditionalBind is higher-level idiom. Case for Select: more primitive, enables more derived operations. Case for ConditionalBind: captures the common case (update via bind) without requiring composition. Which belongs in core?
-
-4. **Relationship to `Resonance` (058-006).** Both are per-dimension operations with one vector as a "control." Should they share a conceptual category in FOUNDATION — "gated/masked operations"? Would make the algebra more organized.
-
-5. **Ternary gate handling.** If `gate` is produced by `Resonance` (can contain zeros), the rule "gate > 0 → bind, else pass-through" means zero dimensions pass through. Is this the right default, or should zeros have distinct behavior (e.g., output zero)?
-
-6. **Holon's precedent.** Does the holon library have a direct analog to ConditionalBind, and if so, what does it call it? The name here is descriptive but could align with existing terminology (e.g., `bind_masked`, `selective_bind`).
 
 ---
 
@@ -505,9 +483,8 @@ Bind, Permute, and Thermometer are affirmed core primitives already present in h
 - 058-025 (Cleanup) REJECTED.
 
 ### Theme: Ternary / non-bipolar vectors — RESOLVED via FOUNDATION "Output Space"
-- 058-006 Q1 — ternary kind formalization → resolved: substrate is `{-1, 0, +1}^d` ternary by default; no distinct kind needed.
-- 058-006 Q4 — threshold-aware of ternary input → resolved: `threshold(0) = 0`.
-- 058-007 Q5 — ternary gate handling → passes through (zeros are pass-through under sign-based gate).
+- ~~058-006 Q1/Q4~~ — Resonance REJECTED; questions moot.
+- ~~058-007 Q5~~ — ConditionalBind REJECTED; questions moot.
 - 058-021 Q2 — Bind reversibility on ternary → resolved: Bind as query, similarity-measured not elementwise; see FOUNDATION "Bind as query."
 - ~~058-023 Q6~~ — Thermometer ternary extensions → Thermometer continues to produce bipolar; ternary comes from downstream ops.
 - ~~058-024 Q3~~ — Unbind REJECTED.

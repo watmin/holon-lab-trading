@@ -4,7 +4,7 @@
 
 **What an audit entry is not:** a proposal. There is no "Arguments For," no "Questions for Designers." Each primitive's inclusion in the core is settled; this document states the load-bearing facts — operation, canonical form, MAP/VSA role, and the specific conventions downstream code relies on.
 
-**What an audit entry is:** a reference. A single place to read "what is Bind in wat?" without wading through proposal-shaped argumentation about a decision already made. Each primitive has a short section; readers looking for debate should consult the proposal batch's **new** entries (Blend, Orthogonalize, Resonance, ConditionalBind).
+**What an audit entry is:** a reference. A single place to read "what is Bind in wat?" without wading through proposal-shaped argumentation about a decision already made. Each primitive has a short section; readers looking for debate should consult the proposal batch's **new** entries (Blend, Orthogonalize).
 
 ---
 
@@ -17,9 +17,11 @@
 
 **Cross-reference — REJECTED primitives recorded elsewhere:**
 - `Cleanup` — REJECTED in 058-025. AST-primary framing dissolves the need; retrieval is presence measurement (cosine against a noise floor), not argmax-over-codebook. Not audited here; see 058-025/PROPOSAL.md for the record.
+- `Resonance` — REJECTED in 058-006. Speculative primitive with no cited production use; sign-agreement masking is a three-primitive composition over existing core forms (threshold + Bind). See 058-006/PROPOSAL.md.
+- `ConditionalBind` — REJECTED in 058-007. Speculative primitive with no cited production use; half-abstraction (consumes a gate without proposing how to produce one). Classical functional update uses Subtract + Bind + Bundle. See 058-007/PROPOSAL.md.
 
 **Not audited (genuine new or reframing proposals, not affirmations):**
-- `Blend` (058-002), `Orthogonalize` (058-005), `Resonance` (058-006), `ConditionalBind` (058-007) — new core forms; argued in their own proposals.
+- `Blend` (058-002), `Orthogonalize` (058-005) — new core forms; argued in their own proposals.
 - `Atom` (058-001) — not an affirmation; 058-001 generalizes Atom to typed literals with type-aware hashing.
 - `Bundle` (058-003) — not a pure affirmation either; 058-003 locks the list-signature convention.
 

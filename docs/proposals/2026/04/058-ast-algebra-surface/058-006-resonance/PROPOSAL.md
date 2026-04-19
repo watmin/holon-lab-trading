@@ -1,9 +1,29 @@
 # 058-006: `Resonance` — Sign-Agreement Mask
 
 **Scope:** algebra
-**Class:** CORE
+**Class:** ~~CORE~~ **REJECTED**
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
+
+---
+
+## REJECTED from 058
+
+**Reason — speculative, no production use.** Resonance appears in the Holon Python library as API surface but does NOT have a cited application in any challenge batch (001–018), the DDoS lab, or the trading lab. Its entry in `blog/primers/series-001-002-holon-ops.md` has no "Application:" citation — the only operations without citations in that primer are Resonance and ConditionalBind (058-007). The 2026 primer documents what the library contains, not what the algebra has earned.
+
+**Also, Q2 of Round 2 reveals it's at the wrong level.** The more general primitive is `Mask(x, boolean-vector)` — zero dimensions where a mask says so. Resonance is then a stdlib idiom: `Resonance(x, y) = Mask(x, sign-agreement(x, y))`. But `Mask` is not proposed in 058 either, and `sign-agreement` is a threshold composition over `Bind`. Adding Resonance as core would lock in the wrong abstraction before the right one was justified.
+
+**What to do when you need it.** If an application demands "keep dimensions where two vectors agree in sign," it's a three-primitive composition using existing forms: `threshold(Bind(x, y), +1)` gives the agreement mask as a `{0, 1}^d` vector; multiplying against `x` (itself a Bind) applies it. No new core primitive required.
+
+**If real use emerges later**, propose the refined primitive: either `Mask(x, boolean-vector)` as the general abstraction with Resonance as a stdlib macro over it, or Resonance itself with concrete application evidence (which challenge batch, what measurement, what couldn't be expressed via the three-primitive composition).
+
+The algebra core shrinks to 7 forms: Atom, Bind, Bundle, Blend, Permute, Thermometer, Orthogonalize.
+
+See FOUNDATION-CHANGELOG for the 2026-04-18 rejection record.
+
+---
+
+## Historical content (preserved as audit record)
 
 ## The Candidate
 

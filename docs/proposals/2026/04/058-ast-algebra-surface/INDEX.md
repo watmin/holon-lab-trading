@@ -75,8 +75,8 @@ Existing holon-rs primitives; core status is settled. Consult `CORE-AUDIT.md` fo
 Genuinely new algebraic operations:
 
 15. **058-005-orthogonalize** — `X - ((X·Y)/(Y·Y))·Y` with computed projection coefficient. Was one mode of the original Negate; the other modes became stdlib idioms.
-16. **058-006-resonance** — sign-agreement mask. First core form producing ternary `{-1, 0, +1}` output.
-17. **058-007-conditional-bind** — three-argument gated binding; per-dimension control.
+16. **058-006-resonance** — **REJECTED.** Speculative, no production use. See proposal REJECTED banner.
+17. **058-007-conditional-bind** — **REJECTED.** Speculative, no production use. See proposal REJECTED banner.
 
 ### Phase 6 — Algebra stdlib (reframings, 15 min)
 
@@ -153,9 +153,10 @@ Shows which proposals must resolve before which others. Arrows flow from prerequ
        │                       │
        v                       v
    058-003 (Bundle sig)     058-005 (Orthogonalize)
-   CORE-AUDIT.md            058-006 (Resonance)
-   (Bind/Permute/Therm)     058-007 (ConditionalBind)
-   [058-025 REJECTED]
+   CORE-AUDIT.md
+   (Bind/Permute/Therm)     [058-006 Resonance — REJECTED]
+                            [058-007 ConditionalBind — REJECTED]
+                            [058-025 Cleanup — REJECTED]
 
 
  Stdlib cascades downstream of Blend:
@@ -217,8 +218,8 @@ Shows which proposals must resolve before which others. Arrows flow from prerequ
 | 003 | Bundle list signature | CORE | clarification | Lock Bundle's arg as a single list (not variadic) |
 | 004 | Difference | STDLIB | reclassification | `Blend(a, b, 1, -1)`, delta framing |
 | 005 | Orthogonalize | CORE | new | Projection removal with computed coefficient |
-| 006 | Resonance | CORE | new | Sign-agreement mask, first ternary output |
-| 007 | ConditionalBind | CORE | new | 3-arg gated binding |
+| 006 | Resonance | REJECTED | — | Speculative, no production use beyond unit tests |
+| 007 | ConditionalBind | REJECTED | — | Speculative, no production use; half-abstraction (no gate-producer) |
 | 008 | Linear | REJECTED | — | Identical to Thermometer under new 3-arity signature; userland alias if desired |
 | 009 | Sequential | STDLIB | reframing | End grandfathered variant; Bundle of Permutes |
 | 010 | Concurrent | REJECTED | — | Bundle alias with no runtime specialization; enclosing context carries temporal meaning. Userland macro if desired. |
@@ -285,7 +286,7 @@ Once designer decisions are made, implementation priorities shape up:
 
 1. **Land types, define, lambda.** The language core must exist before stdlib can land.
 2. **Land Blend.** Pivotal for stdlib cascade.
-3. **Land the new algebra core (Orthogonalize, Resonance, ConditionalBind).** Small Rust changes each.
+3. **Land the new algebra core (Orthogonalize).** Small Rust change. (Resonance and ConditionalBind REJECTED.)
 4. **Land the stdlib as real wat files.** Most proposals become small `.wat` additions once the language supports them.
 5. **Reframe the existing variants.** Linear/Log/Circular/Sequential move from HolonAST variants to stdlib functions.
 6. **Verify with HYPOTHETICAL-CANDLE-DESCRIBERS.wat.** When this file runs end-to-end, the 058 batch is functionally delivered.
