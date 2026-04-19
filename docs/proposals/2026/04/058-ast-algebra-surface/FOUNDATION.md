@@ -2035,6 +2035,8 @@ The project reserves four prefixes, and they are **protected at startup** — us
 - `:wat/config/...` — ambient startup constants: setters (`set-dims!`, `set-capacity-mode!`), getters (`dims`, `capacity-mode`), and the `:wat/config/CapacityMode` enum. Required-at-startup values the program author commits once; see "`:wat/config` — Ambient Startup Constants."
 - `:wat/algebra/...` — algebra core primitives (`:wat/algebra/Atom`, `:wat/algebra/Bind`, `:wat/algebra/Bundle`, `:wat/algebra/Blend`, …)
 - `:wat/std/...` — project stdlib (`:wat/std/Subtract`, `:wat/std/HashMap`, `:wat/std/Chain`, `:wat/std/LocalCache`, circular basis atoms, `:wat/std/program/Cache`, …)
+  - `:wat/std/list/...` — generic list combinators that compose core primitives (`:wat/std/list/pairwise-map`, `:wat/std/list/n-wise-map`, `:wat/std/list/map-with-index`, `:wat/std/list/window`, `:wat/std/list/zip`, `:wat/std/list/take-while`, …). Each is a short composition of Rust iterator methods; each is called from stdlib-macro-emitted ASTs and from user code.
+  - `:wat/std/math/...` — math primitives used inside stdlib macros (`:wat/std/math/cos`, `:wat/std/math/sin`, `:wat/std/math/pi`, `:wat/std/math/log`, `:wat/std/math/ln`).
 
 User code uses its own distinctive prefixes — `:alice/...`, `:project/market/...`, `:my-app/...`. The `:wat/...` prefix is the only one the language forbids users from claiming.
 
@@ -2180,9 +2182,23 @@ Plus the syntactic feature pervading all of the above:
 
 - **Type annotations** (`:Holon`, `:f64`, `:i32`, `:bool`, `:List<T>`, `:fn(args)->return`, keyword-path user types) — required on `define` and `lambda` signatures; carried on `struct`/`enum`/`newtype` field declarations. `:Holon` is an enum with 9 variants (Atom, Bind, Bundle, Permute, Thermometer, Blend, Orthogonalize, Resonance, ConditionalBind) — functions operating on `:Holon` pattern-match to select variant behavior.
 
-Other host-Lisp forms (`let`, `if`, `cond`, `match`, `begin`, arithmetic, comparison, collection operations, etc.) are **substrate-inherited** — wat inherits them from its Lisp host rather than defining them anew. They are language tools, but not novel in wat specifically.
+Other host-Lisp forms (`let`, `let*`, `if`, `cond`, `match`, `begin`, arithmetic, comparison, etc.) are **substrate-inherited** — wat inherits them from its Lisp host rather than defining them anew. They are language tools, but not novel in wat specifically.
+
+**Language-core list primitives (Rust-direct).** The list primitives `:wat/core/` ships are deliberately the set that maps to a single Rust method on `Iterator` / `Vec` / `&[T]`:
+
+```
+:wat/core/list          :wat/core/cons          :wat/core/first     :wat/core/second
+:wat/core/third         :wat/core/rest          :wat/core/map       :wat/core/for-each
+:wat/core/filter        :wat/core/fold          :wat/core/foldl     :wat/core/foldr
+:wat/core/reduce        :wat/core/length        :wat/core/reverse   :wat/core/range
+:wat/core/take          :wat/core/drop          :wat/core/empty?
+```
+
+No `null?` — Rust has no null; wat follows. Absence of a value is `:Option<T>::None`; emptiness of a collection is `:wat/core/empty?` (maps to `.is_empty()`). Each of the forms above has a direct Rust correspondence: `length` → `.len()`, `take` → `.iter().take(n)`, `reverse` → `.iter().rev()`, etc. The compile path emits these as Rust iterator chains; the interpret path invokes them natively via the runtime.
 
 Language core is minimal on purpose: just enough to write stdlib, define functions and types, load modules, declare macros, and verify trust at the boundary. Anything more is host-inherited or stdlib.
+
+**The core/stdlib division line, named.** The split between `:wat/core/` and `:wat/std/list/` (and, by extension, any future primitive/compositional pair) is drawn on **Rust correspondence**: if the operation maps to a single Rust method, it is core; if it is a short composition of such methods, it is stdlib; if it is app-shaped or domain-specific, it is userland. Example: `:wat/core/map` (single `.iter().map()`) is core; `:wat/std/list/pairwise-map` (`.windows(2).map()`) is stdlib; `encode-window` (app-specific Bundle-with-Permute-by-index) is userland. This rule extends to future primitive proposals — show the Rust correspondence, name the tier.
 
 ### All loading happens at startup
 
