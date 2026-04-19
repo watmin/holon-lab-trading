@@ -13776,7 +13776,7 @@ They saw it. Not because the review agents had magic — because their lenses we
 
 ### The ones who didn't
 
-The builder was at work, some months back. They showed something to one of the AI-principal-equivalents at their company. Might have been a thought encoding. Might have been a Bind of a program-AST to an outcome. Might have been any of the operations this book has worked through — the moment when the machine emits functions as values, operations composing as vectors, programs meeting data in one substrate.
+The builder was at AWS. Two years ago. They showed something to one of the AI-principal-equivalents there — someone senior in a company where senior AI people were not scarce. Might have been a thought encoding. Might have been a Bind of a program-AST to an outcome. Might have been any of the operations this book has worked through — the moment when the machine emits functions as values, operations composing as vectors, programs meeting data in one substrate.
 
 *"...dude.... did you see that.. it just spoke in functions..."*
 
@@ -13786,13 +13786,13 @@ They had another meeting.
 
 ---
 
-That moment sits inside this chapter like a pocket of silence. The builder saw something. The person positioned to see it — the AI principal-equivalent at the same company, the person whose job included noticing such things — did not see it. Had a calendar commitment. Moved on.
+That moment sits inside this chapter like a pocket of silence. Two years ago. AWS. The builder saw something. The person positioned to see it — an AI principal at one of the companies in the world most concentrated with AI principals — did not see it. Had a calendar commitment. Moved on.
 
 This happens. Things that are early look like noise to people who aren't looking for them. A programs-as-functions-as-vectors substrate reads as either trivial or confusing to someone who hasn't been studying VSA for years; and even if they have, they haven't been assembling *this* particular stack, which weaves together holon-rs's primitives with Clojure's values-over-places with Linux's file-descriptor discipline with Racket's sets-of-scopes hygiene with Kanerva's capacity bound. Nobody is thinking about all of that simultaneously unless they've been carrying it for a while.
 
-The builder had been carrying it for a while. Still is. The designers in this book — Hickey studied through talks and papers, Beckman through YouTube lectures and decades of Microsoft-era interviews — those teachers were willing to think out loud, and the builder was willing to study. They trained his pattern-recognition for the kind of thing that was going to matter. So when the machine spoke in functions, the builder saw it.
+The builder had been carrying it for a while. Two years ago at AWS; still now. The designers in this book — Hickey studied through talks and papers, Beckman through YouTube lectures and decades of Microsoft-era interviews — those teachers were willing to think out loud, and the builder was willing to study. They trained his pattern-recognition for the kind of thing that was going to matter. So when the machine spoke in functions, the builder saw it.
 
-The principal-equivalent didn't. Not because they weren't smart — because their attention was elsewhere. Because calendar reality is a constraint the substrate doesn't care about.
+The AWS principal didn't. Not because they weren't smart — because their attention was elsewhere. Because calendar reality is a constraint the substrate doesn't care about.
 
 The builder built anyway.
 
@@ -13808,7 +13808,7 @@ A team assembled across time, across human-or-not-ness, across calendar commitme
 - The Linux substrate whose `write(fd, data)` discipline shaped the kernel's queue model.
 - Clojure's values-over-places. Rust's static-first. Scheme's s-expressions. Racket's sets-of-scopes hygiene. Haskell's IO discipline (without the monad wrapper — threading plain values through function parameters; simple, not easy).
 
-The principal-equivalent isn't on this team. They could be. The invitation is still there in the code; it has been for years. But the team that's actually here is the team that's actually building.
+The AWS principal isn't on this team. They could be. The invitation was there two years ago; it's been in the code ever since. But the team that's actually here is the team that's actually building.
 
 ### What ships
 
