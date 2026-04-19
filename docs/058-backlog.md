@@ -16,41 +16,42 @@ INDEX.md, OPEN-QUESTIONS.md, WAT-TO-RUST.md.
 Stabilize the Rust substrate. The compiler has a fixed target only after this
 lands.
 
-- [ ] **Slice 1 — Atom typed-literal + parametric.** `Atom(String)` →
-  `Atom(AtomLiteral)` where `AtomLiteral = Str | Int | Float | Bool | Keyword
-  | Holon(Arc<HolonAST>)`. The `Holon` variant is programs-as-atoms. Hash input
-  becomes `(type_tag, canonical-EDN(value))`. Extend
-  `VectorManager::get_vector` to type-aware hash. Add `atom_value(holon:
-  &HolonAST) -> Option<AtomLiteral>` accessor. Unit tests:
-  `Atom(42) ≠ Atom("42") ≠ Atom(42.0) ≠ Atom(:pos/42)`.
-  Proposal: 058-001.
+- [x] **Slice 1 — Atom typed-literal + parametric.** Shipped across two
+  commits. Introduced `HolonAST` enum in holon-rs with 6 variants (Atom,
+  Bind, Bundle, Permute, Thermometer, Blend). `Atom(Arc<dyn Any + Send +
+  Sync>)` — parametric via stdlib `Any`, no new wrapper types. `Any` is
+  substrate plumbing only; the wat type checker refuses `:Any` at source
+  level. `AtomTypeRegistry` dispatches canonical-bytes by `TypeId`;
+  `with_builtins()` covers all Rust primitives + `HolonAST` itself
+  (programs-as-atoms via recursive canonical-EDN). `atom_value::<T>()` is
+  the polymorphic accessor. 245 tests pass. Proposal: 058-001.
 
-- [ ] **Slice 2 — Blend Option B.**
-  `blend_weighted(a: &Vector, b: &Vector, w1: f64, w2: f64) -> Vector`
-  returning `threshold(w1*a + w2*b)` in ternary output. Existing convex
-  `blend(a, b, α)` stays as a thin wrapper: `blend_weighted(a, b, 1.0-α, α)`.
+- [x] **Slice 2 — Blend Option B.** `Primitives::blend_weighted(a, b, w1,
+  w2)` is the primary form; existing `blend(a, b, α)` is a thin wrapper.
   Proposal: 058-002.
 
-- [ ] **Slice 3 — Expose `dot` as a public primitive.**
-  `dot(a: &Vector, b: &Vector) -> f64`. Already implicit in
-  `cosine_similarity`; make it public so stdlib Reject/Project macros emit
-  calls to it directly. Add to the measurements tier.
-  Proposal: 058-005 (Reject+Project depends on this).
+- [x] **Slice 3 — Expose `dot` as a public primitive.** Already public in
+  `Similarity::dot` before Slice 1 began. No work needed. Proposal: 058-005.
 
-- [ ] **Slice 4 — Thermometer 3-arity verification.** Confirm
-  `Thermometer(value, min, max)` matches canonical layout. Trading lab already
-  uses `ThoughtASTKind::Thermometer { value, min, max }` — likely fine. Audit
-  call sites; migrate any `Thermometer(atom, dim)` stragglers.
+- [x] **Slice 4 — Thermometer 3-arity verification.** Signature already
+  matched `(value, min, max)`. Fixed threshold calculation to use `.round()`
+  per CORE-AUDIT canonical layout; prior truncation was off-by-one at
+  half-dim boundaries.
 
-- [ ] **Slice 5 — Log/Circular/Sequential variant decision.** Keep as Rust
-  variants (encoder-performance optimization; wat stdlib macros rewrite to
-  these on encode) OR remove (wat stdlib emits composed Thermometer/Blend/
-  Bind+Permute forms directly). **Lean:** keep as Rust variants. The
-  "two tiers of wat" (UpperCase AST + lowercase Rust) already admits this
-  layering. Revisit if trading-lab vocab grows awkward.
+- [x] **Slice 5 — Log/Circular/Sequential variant decision.** RESOLVED to
+  no extra Rust variants. The spec defines 6 algebra-core forms; Log /
+  Circular / Sequential are wat stdlib macros that expand to compositions
+  of those 6. Adding Rust-level optimization variants would diverge from
+  the spec without shipping new semantics. If encoder performance matters
+  later, the encode cache (L1/L2 per FOUNDATION) solves it without new
+  variants. The prior "lean: keep" guidance was written before the
+  FOUNDATION-CHANGELOG 2026-04-18 "stdlib location" resolution locked the
+  algebra core at 6 forms.
 
 **Stop conditions for Track 0:** ternary output `threshold(0) = 0` verified in
 a test. No wat-vm frontend work begins until all five slices ship.
+
+**Track 0 status: COMPLETE.** All five slices shipped. Track 1 unblocked.
 
 ---
 
