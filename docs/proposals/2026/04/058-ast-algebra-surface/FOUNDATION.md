@@ -734,6 +734,29 @@ The kernel primitives are exposed to wat programs as lowercase keyword-path func
 (:wat/kernel/drop handle)                ;; → :()     close a sender/receiver end
                                           ;;          downstream sees :None on next recv
 
+;; Senders and receivers are SINGLE-OWNER — not cloneable. A sender belongs
+;; to exactly one producer; a receiver to exactly one consumer. This is the
+;; `write(fd, data)` discipline of Linux — whoever holds the fd owns the
+;; capability, and sharing requires holding both sides yourself.
+;;
+;; Fan-out (1 producer → N consumers) is a LOOP of N sends, written inline
+;; by the program that owns the N senders. No "Topic" proxy; the loop IS
+;; the fan-out.
+;;
+;; Fan-in (N producers → 1 consumer) uses `select` (below). No "Mailbox"
+;; proxy; the select IS the fan-in. Earlier drafts of the substrate included
+;; Topic and Mailbox as stdlib programs; in practice they added a pointless
+;; thread hop, so they are DEAD. Patterns are written where they are used.
+
+(:wat/kernel/select receivers)
+;; receivers : :List<:QueueReceiver<T>>
+;; → :Pair<:usize, :Option<T>>
+;; Block until ANY receiver has a value or is disconnected. Returns the
+;; index of the receiver and :None if that receiver disconnected or
+;; (Some value) if it produced. The caller typically writes a loop that
+;; drops disconnected receivers from the list and exits when the list
+;; is empty. This is fan-in; the caller owns the select loop.
+
 ;; --- Programs ---
 
 (:wat/kernel/spawn func arg1 arg2 ...)
@@ -744,65 +767,197 @@ The kernel primitives are exposed to wat programs as lowercase keyword-path func
 (:wat/kernel/join handle)
 ;; → :ReturnType     blocks until the program exits, returns its state
 
-;; --- Console (kernel program, accessed via kernel-provided handles) ---
-
-(:wat/kernel/console-out)                ;; → :QueueSender<String>     to stdout
-(:wat/kernel/console-err)                ;; → :QueueSender<String>     to stderr
-(:wat/kernel/console-in)                 ;; → :QueueReceiver<String>   from stdin
+;; --- Console ---
+;;
+;; There are NO ambient console accessors. `:user/main` receives stdin,
+;; stdout, and stderr as parameters from the kernel. Any function that
+;; wants to write to the console receives the handle it needs in its
+;; signature. Honest threading — simple, not easy. The frustration IS
+;; the discipline; it makes every capability visible at the call site.
 ```
 
-**Hello-world:**
+**Hello-world — spawn Console, write through it, join to flush:**
 
 ```scheme
-(define (:my/app/hello -> :())
-  (let ((out (:wat/kernel/console-out)))
-    (:wat/kernel/send out "hello, world")))
+(:wat/core/define (:my/app/hello (console :ConsoleHandle) -> :())
+  (:wat/std/program/Console/send console "hello, world"))
 
-(define (:user/main -> :())
-  (let ((handle (:wat/kernel/spawn :my/app/hello)))
-    (:wat/kernel/join handle)))
+(:wat/core/define (:user/main (stdin  :QueueReceiver<String>)
+                               (stdout :QueueSender<String>)
+                               (stderr :QueueSender<String>)
+                               -> :())
+  ;; stdin and stderr are slot-required by the kernel signature, but this
+  ;; program does not use them. Only stdout is passed onward. Naming the
+  ;; unused parameters is honest — the kernel gives us three handles; we
+  ;; acknowledge all three; we use one.
+  (:wat/core/let* (((pool console-driver)
+                    (:wat/kernel/spawn :wat/std/program/Console stdout 1))
+                   (console (:wat/std/HandlePool/pop pool)))
+    (:wat/std/HandlePool/finish pool)
+    (:my/app/hello console)
+    ;; Drop the client handle → Console's input queue disconnects.
+    ;; Join the driver → Console drains remaining writes to stdout and exits.
+    ;; Without the join, buffered writes may be lost on program exit.
+    (:wat/kernel/drop console)
+    (:wat/kernel/join console-driver)))
 ```
 
-**The `:user/main` convention.** The entry point is `:user/main` — a keyword-path name the **kernel looks for at startup**. The user declares it via `(define (:user/main -> :()) ...)` and the wat-vm invokes it. Same convention as C and Rust `main`, but expressed honestly under the keyword-path naming discipline: no bare-name exception.
+**Why this is hello-world, not a one-liner.** Writing to `stdout` directly is possible — the kernel hands `:user/main` a raw sender — but hello-world is pedagogical, and the honest pedagogy is: **every real program uses the Console stdlib to serialize writes.** The Console program owns the raw sender, runs a fan-in loop internally, and guarantees no garbled interleaving when multiple clients write concurrently. A single-writer program could skip it, but then the reader would learn a shortcut they have to un-learn when they add a second writer. Showing the Console pattern in hello-world means every subsequent program is a small variation on the same shape.
+
+**`:wat/std/program/Console` is a single-sink fan-in.** It takes one output sender (a stdio handle, typically `stdout` or `stderr`, but also any other `:QueueSender<String>`) and a producer count, and returns a `HandlePool` of `:ConsoleHandle` clients plus a driver handle. Writers send via `:wat/std/program/Console/send`; the driver selects across all client queues and forwards to the owned sender. If a program wants serialized stdout AND serialized stderr, it spawns TWO Console programs — one per sink. Orthogonal. A Console owns exactly one resource.
+
+**The `:user/main` signature is fixed by the kernel.** Every `:user/main` receives the three stdio handles as parameters whether it uses them or not. This is the kernel contract. Naming them in the signature without binding them to locals is honest — the handles exist, the program acknowledges them, the program chooses not to use them. A program that wants only stderr threads `stderr` down through its spawns and ignores `stdout` and `stdin`. The type system enforces it: you cannot write to a handle you weren't given.
+
+This is the Haskell discipline without the monad wrapper: threading plain values through function parameters. The frustration is the point — every side effect is visible at the call site. Simple, not easy.
+
+**The `:user/main` convention.** The entry point is `:user/main` — a keyword-path name the **kernel looks for at startup**. The user declares it with the three stdio parameters the kernel passes in: `(:wat/core/define (:user/main (stdin :QueueReceiver<String>) (stdout :QueueSender<String>) (stderr :QueueSender<String>) -> :()) ...)`. Same convention as C's `main(argc, argv)` and Rust's `fn main()` — but with the stdio handles made explicit in the signature, and expressed under the keyword-path naming discipline: no bare-name exception.
 
 `:user/main` is a **kernel-looked-up slot** that the USER provides. This is the inverse of `:wat/kernel/...` paths, which are kernel-PROVIDED implementations (protected from redefinition). `:user/main` is kernel-REQUIRED (user provides; kernel invokes); there is no default implementation; the user's definition fills the slot.
 
 Two `:user/main` declarations across loaded files produce a startup name collision and halt the wat-vm (same rule as any other name collision). Zero `:user/main` declarations also halt: a wat program needs an entry point. Hypothetical future kernel slots (e.g., `:user/shutdown-handler`, `:user/on-signal`) would follow the same pattern under `:user/...`: kernel-required name, user provides the implementation.
 
-**A program with the canonical lifecycle — observer-style:**
+**A program with the canonical lifecycle — observer-style with fan-out, fan-in, and the shutdown cascade:**
 
 ```scheme
-(define (:my/app/observer-loop
-          (input-rx :QueueReceiver<Candle>)
-          (output-tx :QueueSender<Result>)
-          (state :ObserverState)
-          -> :ObserverState)
-  (match (:wat/kernel/recv input-rx)
+;; Each worker consumes its candle queue, produces results, and logs
+;; through its own console handle. State comes home via join.
+(:wat/core/define (:my/app/observer-loop
+                    (input-rx  :QueueReceiver<Candle>)
+                    (output-tx :QueueSender<Result>)
+                    (console   :ConsoleHandle)
+                    (state     :ObserverState)
+                    -> :ObserverState)
+  (:wat/core/match (:wat/kernel/recv input-rx)
     ((Some candle)
-     (let* ((result    (process candle state))
-            (new-state (update state candle)))
+     (:wat/core/let* ((result    (:my/app/process candle state))
+                      (new-state (:my/app/update state candle)))
        (:wat/kernel/send output-tx result)
-       (:my/app/observer-loop input-rx output-tx new-state)))
+       (:wat/std/program/Console/send console
+         (:wat/std/format "observed: ~a" candle))
+       (:my/app/observer-loop input-rx output-tx console new-state)))
     (:None
-     ;; input disconnected — drain anything else the program knows to drain,
-     ;; then come home with final state.
+     ;; input disconnected — drain what we own, then come home with final state.
      state)))
 
-(define (:user/main -> :())
-  (let* (((candle-tx candle-rx) (:wat/kernel/make-bounded-queue :Candle 1))
-         ((result-tx result-rx) (:wat/kernel/make-bounded-queue :Result 1))
-         (observer-handle       (:wat/kernel/spawn :my/app/observer-loop
-                                                    candle-rx result-tx
-                                                    (initial-observer-state))))
-    ;; feed the graph...
-    (:wat/kernel/drop candle-tx)                ;; trigger shutdown cascade
-    (let ((final (:wat/kernel/join observer-handle)))
-      (save-state final))))
+;; Inline fan-in: select across N receivers, keep going until all disconnect.
+;; `select` returns (index, :None) when a receiver disconnects — drop it.
+(:wat/core/define (:my/app/drain-results
+                    (rxs      :List<:QueueReceiver<Result>>)
+                    (console  :ConsoleHandle)
+                    -> :())
+  (:wat/core/if (:wat/core/empty? rxs)
+      :()
+      (:wat/core/match (:wat/kernel/select rxs)
+        ((Pair i (Some r))
+         (:wat/std/program/Console/send console
+           (:wat/std/format "result: ~a" r))
+         (:my/app/drain-results rxs console))
+        ((Pair i :None)
+         (:my/app/drain-results (:wat/std/list/remove-at rxs i) console)))))
+
+(:wat/core/define (:user/main (stdin  :QueueReceiver<String>)
+                               (stdout :QueueSender<String>)
+                               (stderr :QueueSender<String>)
+                               -> :())
+  (:wat/core/let*
+      ((N 4)  ;; four observers
+
+       ;; (1) COUNT every consumer up front. One handle for main, one per worker.
+       (num-console (:wat/core/+ 1 N))
+
+       ;; (2) Spawn the Console stdlib program — a single-sink fan-in that
+       ;;     serializes writes to stdout from `num-console` client handles.
+       ;;     Returns a HandlePool + a driver handle. Console is concrete (it
+       ;;     owns a specific OS resource); generic Topic/Mailbox proxies are
+       ;;     NOT stdlib — fan-out and fan-in of user values are inline loops
+       ;;     at the call site. If we needed serialized stderr too, we would
+       ;;     spawn a second Console instance for stderr.
+       ((pool console-driver)
+        (:wat/kernel/spawn :wat/std/program/Console stdout num-console))
+
+       ;; (3) POOL discipline — main claims its handle first.
+       (main-console (:wat/std/HandlePool/pop pool))
+
+       ;; (4) Per-worker queues: candle input + result output.
+       (worker-queues
+        (:wat/std/list/init N
+          (:wat/core/lambda (_)
+            (:wat/core/list (:wat/kernel/make-bounded-queue :Candle 1)
+                             (:wat/kernel/make-bounded-queue :Result 1)))))
+
+       ;; (5) Spawn N workers. Each claims its console handle.
+       (worker-handles
+        (:wat/std/list/init N
+          (:wat/core/lambda (i)
+            (:wat/core/let ((qs (:wat/std/list/nth worker-queues i)))
+              (:wat/kernel/spawn :my/app/observer-loop
+                (:wat/core/second (:wat/core/first  qs))    ;; candle-rx
+                (:wat/core/first  (:wat/core/second qs))    ;; result-tx
+                (:wat/std/HandlePool/pop pool)
+                (:my/app/initial-observer-state i)))))))
+
+    ;; (6) Assert EVERY handle was claimed — orphans deadlock the driver.
+    (:wat/std/HandlePool/finish pool)
+
+    ;; (7) Feed the graph. Broadcast each candle via inline loop (no Topic).
+    (:wat/core/let
+        ((candle-txs (:wat/std/list/map worker-queues
+                       (:wat/core/lambda (qs)
+                         (:wat/core/first (:wat/core/first qs))))))
+      (:wat/std/program/Console/send main-console "starting")
+      (:my/app/feed-candles stdin candle-txs main-console)
+
+      ;; (8) SHUTDOWN CASCADE — drop all candle senders first. Workers
+      ;;     see :None on recv, drain, return. Their result-tx senders
+      ;;     drop at thread exit, disconnecting the result receivers.
+      (:wat/std/list/for-each candle-txs :wat/kernel/drop))
+
+    ;; (9) Drain result receivers via inline select (no Mailbox).
+    ;;     drain-results exits when every receiver has disconnected.
+    (:wat/core/let
+        ((result-rxs (:wat/std/list/map worker-queues
+                       (:wat/core/lambda (qs)
+                         (:wat/core/second (:wat/core/second qs))))))
+      (:my/app/drain-results result-rxs main-console))
+
+    ;; (10) Join workers to collect final observer state.
+    (:wat/core/let
+        ((final-states (:wat/std/list/map worker-handles :wat/kernel/join)))
+      (:my/app/save-states final-states main-console))
+
+    ;; (11) Console is LAST. Drop our handle → Console's select sees
+    ;;      the final input disconnect → it exits.
+    (:wat/kernel/drop main-console)
+    (:wat/kernel/join console-driver)))
 ```
 
-**The pattern is complete.** `make-*-queue` produces a sender/receiver pair. `spawn` takes a function value and its arguments and runs it on a new thread. `send` / `recv` / `try-recv` / `drop` are the operations. `join` collects the program's return value at shutdown. Six primitives — enough to express any wat-vm program graph.
+**The pattern is complete.** `make-*-queue` produces a sender/receiver pair. `spawn` takes a function value and its arguments and runs it on a new thread. `send` / `recv` / `try-recv` / `drop` / `select` are the operations. `join` collects the program's return value at shutdown. Eight primitives — enough to express any wat-vm program graph. Fan-out is a loop of `send`; fan-in is a loop over `select`. Generic Topic/Mailbox proxies are NOT in the stdlib — the trading lab tried them and found they added a pointless thread hop. Patterns are inlined where used.
+
+The stdlib names a small set of CONCRETE programs that own specific OS-level resources or provide reusable invariants: `:wat/std/program/Console` (owns stdout/stderr), `:wat/std/program/Cache` (owns a memoization table behind a queue), `:wat/std/HandlePool` (enforces the claim-or-panic invariant). Generic fan-out/fan-in proxies are not among them.
 
 No `spawn-thread` separate from `spawn-program`; a program is just a function that runs on its own thread. Same Rust primitive underneath. The kernel doesn't distinguish "threaded program" from "function call" beyond the thread boundary — the function either runs inline (normal call) or on its own thread (`spawn`).
+
+### Pipeline discipline — the hard-earned patterns
+
+The observer example above encodes seven patterns the project paid for in deadlocks. The wat-vm substrate makes them expressible; the stdlib programs make them reusable; this subsection names them so reviewers can find them by name.
+
+**1. Count every consumer before creating the I/O program.** The number of handles is a budget declared up front. `(:wat/kernel/spawn :wat/std/program/Console stdout stderr num-console)` takes the count as a parameter — the program allocates exactly that many client queues. No dynamic handle creation, no subscribe/unsubscribe semantics. If your count is wrong at startup, you find out at `:wat/std/HandlePool/finish` with an orphan error, not at runtime with a deadlock.
+
+**2. Claim or panic — the HandlePool discipline.** `pool.pop` claims one handle. `pool.finish` asserts the pool is empty. An orphaned handle is an I/O driver waiting forever for an input that never disconnects. The pool catches the mistake at construction time, naming the resource — `"broker-cache: 2 orphaned handle(s)"` — rather than leaving the program to hang on shutdown. Belt-and-suspenders: the pool's drop impl also panics if handles remain, in case `finish` is forgotten.
+
+**3. No self-pipes.** A program cannot write to a queue it also reads from — the circular dependency deadlocks as soon as backpressure engages. The trading lab's database program emits its own telemetry by direct write, not by sending through its own ingestion pipe. State this rule before it's violated: **any program that produces messages for an I/O driver writes its own telemetry by direct method call, not through its own input queue.**
+
+**4. Bounded(1) is the default rendezvous.** Every queue in the trading lab is `make-bounded-queue size 1` — a one-slot lockstep handoff. Backpressure propagates: a slow consumer stalls the producer, which stalls the consumer's producer, and the whole graph runs at the pace of the slowest path. Intentional. Unbounded queues are for truly fire-and-forget events (`:wat/kernel/make-unbounded-queue`) where unbounded buffering is acceptable; use them sparingly.
+
+**5. Inline your fan-out and fan-in — no generic proxies.** Earlier drafts included `:wat/std/program/Topic` (fan-out proxy) and `:wat/std/program/Mailbox` (fan-in proxy). In practice both added a pointless thread hop: their entire body was a loop the caller could write inline at lower latency and with less wiring. REJECTED from the stdlib. Fan-out is `(for-each senders (lambda (tx) (send tx msg)))`; fan-in is a loop over `:wat/kernel/select`. Concrete programs that OWN a specific resource (Console owns stdout/stderr, Cache owns a memo table) remain legitimate — they earn their thread by owning state, not by being a proxy.
+
+**6. Shutdown is a drop cascade, not a signal.** No `SIGTERM`-equivalent wat primitive. To shut a graph down, drop the root producers' senders: `(for-each candle-txs :wat/kernel/drop)`. Workers see `:None` on their next `recv`, drain their own work, return via join, their output senders drop at thread exit, the consumer's `select` sees disconnects, it exits. One set of drops propagates through the whole graph. The cascade IS the shutdown guarantee.
+
+**7. Drivers join in reverse dependency order.** If program A's state contains a sender owned by program B (e.g., Cache's emit closure holds a Database sender), A must exit BEFORE B — otherwise B's `select` sees A's sender still alive and waits. In the trading lab: Cache driver joins first, releasing its db-handle; then Database driver joins, seeing all senders disconnect. The cascade is directed: leaves first, roots last. Console is usually the root (everyone writes to it); join it last.
+
+**8. No `Drop` implementation on driver handles.** Host-runtime drop order within a scope is unspecified. If a driver handle joined in Drop, and the scope also owned some senders that hadn't been explicitly dropped yet, the join would deadlock waiting for those still-alive senders. The stdlib's `:wat/std/program/Console/Driver`, `:wat/std/program/Cache/Driver` expose `join` as an explicit operation; the programmer calls it after the cascade, when they know the senders are gone. Explicit is simple; implicit is easy (and sometimes deadlocks).
+
+These eight patterns were expensive to learn. The wat-vm substrate makes them expressible in wat source with the same discipline the Rust enterprise pays.
 
 ### Implications for prior sections
 
@@ -1470,7 +1625,7 @@ Language core is therefore **required for the project to ship**, not "nice to ha
 
 ### The three layers, one naming discipline
 
-All three layers — language core, algebra core, stdlib (project and user) — use the same keyword-path naming convention (`:wat/lang/...`, `:wat/algebra/...`, `:wat/std/...`, `:user/...`). No namespace mechanism; just naming discipline. See `## Naming Discipline — Keyword Paths, No Mechanism` for the canonical policy.
+All three layers — language core, algebra core, stdlib (project and user) — use the same keyword-path naming convention (`:wat/core/...`, `:wat/algebra/...`, `:wat/std/...`, `:user/...`). No namespace mechanism; just naming discipline. See `## Naming Discipline — Keyword Paths, No Mechanism` for the canonical policy.
 
 ### Executable semantics — functions run, holons are realized on demand
 
@@ -1579,6 +1734,7 @@ wat/std/
       wat/std/Flip.wat            ;; :wat/std/Flip           (macro)
       wat/std/LocalCache.wat      ;; :wat/std/LocalCache     (data + functions)
       wat/std/cached-encode.wat   ;; :wat/std/cached-encode  (function)
+      wat/std/HandlePool.wat      ;; :wat/std/HandlePool     (type + pop/finish)
       ... one file per form.
 
 wat/std/program/
@@ -1588,7 +1744,15 @@ wat/std/program/
       a program is spawned by the kernel; a macro is expanded by the
       parser.
 
+      wat/std/program/Console.wat     ;; :wat/std/program/Console
+                                       ;;   owns raw stdout+stderr, fans in
+                                       ;;   N client handles via mailbox
+      wat/std/program/Topic.wat       ;; :wat/std/program/Topic
+                                       ;;   fan-out: 1 producer → N consumers
+      wat/std/program/Mailbox.wat     ;; :wat/std/program/Mailbox
+                                       ;;   fan-in: N producers → 1 consumer
       wat/std/program/Cache.wat       ;; :wat/std/program/Cache
+                                       ;;   memoize over a queue boundary
       ... (future: Database, MetricsLogger, etc. — as stdlib grows)
 
       The two-directory split reflects the substrate distinction:
@@ -1617,9 +1781,9 @@ This section is the **single canonical statement** of the naming policy. Other F
 All four naming positions in the language — language core, algebra core, stdlib (project and user), and Atom literal keywords — use the same keyword-path convention:
 
 ```
-:wat/lang/define            ; language core primitive
-:wat/lang/lambda
-:wat/lang/if
+:wat/core/define            ; language core primitive
+:wat/core/lambda
+:wat/core/if
 
 :wat/algebra/Atom           ; algebra core primitive
 :wat/algebra/Bind
@@ -1664,89 +1828,60 @@ This makes the discipline enforceable in practice: conflicts fail loudly and ear
 
 ### Reserved prefixes — protected
 
-The project reserves four prefixes, and they are **protected at startup** — users cannot define anything at these paths. Attempting `(define (:wat/kernel/my-func ...) ...)` or `(defmacro (:wat/std/MyAlias ...) ...)` halts the wat-vm with a startup error.
+The project reserves four prefixes, and they are **protected at startup** — users cannot define anything at these paths. Attempting `(:wat/core/define (:wat/kernel/my-func ...) ...)` or `(:wat/core/defmacro (:wat/std/MyAlias ...) ...)` halts the wat-vm with a startup error.
 
-- `:wat/lang/...` — language core primitives (`define`, `lambda`, `if`, `defmacro`, `load`, …)
-- `:wat/kernel/...` — wat-vm kernel primitives (`make-bounded-queue`, `spawn`, `send`, `recv`, `console-out`, …)
-- `:wat/algebra/...` — algebra core primitives (`Atom`, `Bind`, `Bundle`, `Blend`, …)
-- `:wat/std/...` — project stdlib (`Subtract`, `HashMap`, `Chain`, `LocalCache`, circular basis atoms, `:wat/std/program/Cache`, …)
+- `:wat/core/...` — language core primitives (`:wat/core/define`, `:wat/core/lambda`, `:wat/core/let`, `:wat/core/let*`, `:wat/core/if`, `:wat/core/match`, `:wat/core/cond`, `:wat/core/defmacro`, `:wat/core/load`, `:wat/core/list`, `:wat/core/first`, `:wat/core/second`, `:wat/core/+`, `:wat/core/-`, `:wat/core/*`, `:wat/core/>`, `:wat/core/=`, …)
+- `:wat/kernel/...` — wat-vm kernel primitives (`:wat/kernel/make-bounded-queue`, `:wat/kernel/make-unbounded-queue`, `:wat/kernel/spawn`, `:wat/kernel/send`, `:wat/kernel/recv`, `:wat/kernel/try-recv`, `:wat/kernel/select`, `:wat/kernel/drop`, `:wat/kernel/join`)
+- `:wat/algebra/...` — algebra core primitives (`:wat/algebra/Atom`, `:wat/algebra/Bind`, `:wat/algebra/Bundle`, `:wat/algebra/Blend`, …)
+- `:wat/std/...` — project stdlib (`:wat/std/Subtract`, `:wat/std/HashMap`, `:wat/std/Chain`, `:wat/std/LocalCache`, circular basis atoms, `:wat/std/program/Cache`, …)
 
-User code uses its own distinctive prefixes — `:alice/...`, `:project/market/...`, `:my-app/...` — or short bare keywords (`:rsi`, `:portfolio`) where collision isn't a concern. The choice of how distinctive to be is the user's cost/benefit call. The `:wat/...` prefix is the only one the language forbids users from claiming.
+User code uses its own distinctive prefixes — `:alice/...`, `:project/market/...`, `:my-app/...`. The `:wat/...` prefix is the only one the language forbids users from claiming.
 
-### Bare aliases — convenience without sacrifice
+### No bare aliases — every call uses a full keyword path
 
-Every form the wat-vm provides at a `:wat/...` path is **also** registered in the symbol table under its **bare name**. Users get both:
+Earlier drafts allowed **bare aliases**: every form the wat-vm provided at a `:wat/...` path was also registered under its bare name (`Subtract`, `Bind`, `define`, `make-bounded-queue`). Users could write either. This was convenience, and it was dishonest.
 
-```
-:wat/kernel/make-bounded-queue    (protected; always the kernel)
-make-bounded-queue                 (alias; shadowable)
-
-:wat/std/Subtract                  (protected; always the stdlib)
-Subtract                           (alias; shadowable)
-
-:wat/algebra/Bind                  (protected; always the algebra primitive)
-Bind                               (alias; shadowable)
-
-:wat/lang/define                   (protected; always the language-core form)
-define                             (alias; shadowable)
-```
-
-At a call site, the parser resolves bare names against the symbol table. The user's own defined names (with matching bare names) win over the kernel's aliases. The full path is always available, unambiguous, always the kernel's.
+REJECTED. Every call to a wat-vm-provided form uses its full keyword path, always:
 
 ```scheme
-;; Default: the bare alias resolves to the stdlib
-(Subtract a b)                     ;; → (:wat/std/Subtract a b)
+(:wat/core/define (:my/app/hello (name :String) -> :String)
+  (:wat/std/string/join "" (:wat/core/list "Hello, " name "!")))
 
-;; User shadows the alias in their own code
-(define (Subtract x y) (- x y))    ;; user's integer subtract
-
-(Subtract 5 3)                     ;; → 2 (user's version wins)
-
-;; The full path still resolves to the stdlib, always
-(:wat/std/Subtract a b)            ;; → (Blend a b 1 -1) after expansion
+(:wat/algebra/Bundle (:wat/core/list x y z))
+(:wat/kernel/send out "hello")
 ```
 
-**Why bare aliases exist:** convenience. Users shouldn't have to type `:wat/kernel/make-bounded-queue` every time they create a queue. The bare alias lets them write `make-bounded-queue`. The full path remains the authoritative identity for cryptographic hashing, signing, and distributed verification.
+No shorter form exists. The frustration is the point: every side, every capability, every identity is visible in source. A reader knows at a glance whether a call targets the algebra, the kernel, or the stdlib. Hash identity is always on the full path, because the full path is the only form that ever appears.
 
-**Why bare aliases are shadowable:** users may have their own concept that shares a short name. A DDoS lab might define `Subtract` to mean "remove this IP from the block list." Under bare-alias shadowing, they can — without losing access to the stdlib's holon `Subtract` via its full path. No namespace gymnastics, no alias-import directives; the user just writes their function and the shadowing happens by symbol-table precedence.
+**Why this is simpler, not easier.** Convenience aliases look small but pay a cost: the reader must track shadowing to know which `Subtract` a call resolves to, and diffing becomes ambiguous when two files use different conventions. Without aliases, the language has one rule — "write the full path" — and the source text is the identity claim. No symbol-table precedence, no shadowing-by-symbol-table, no dual-tier lookup. Simple. Not easy; type more. But simple.
 
-**Hash identity is on the FULL path, always.** When a wat program is hashed, signed, or transmitted, the canonical AST uses full keyword paths. Bare aliases are a call-site convenience, not an identity claim. Two files that invoke `Subtract` resolve to different full paths if the files have different shadowings — but the resolved ASTs (after name resolution) hash deterministically.
+### Lexical shadowing is the only shadowing
 
-**The protection and the shadowing are complementary.** `:wat/...` paths are permanently reserved (no user accident or malicious load can replace them). Bare aliases are permanently shadowable (users always have the option to repurpose a short name without fighting the language). Best of both.
-
-### Shadowing also works at lexical scope
-
-Bare-alias shadowing is not special — it's ordinary lexical scoping applied to the outermost (symbol-table) scope. Any inner scope — `let`, `lambda` parameters, `match` pattern bindings, `cond` bindings — shadows any name in the enclosing scope, including bare kernel/stdlib aliases:
+The one place names can shadow is **lexical scope**: a `let` binding, a `lambda` parameter, or a `match` pattern introduces a local name that the body of that scope sees in preference to any enclosing scope. This is ordinary Lisp lexical scoping, and it applies only to BARE names introduced in that scope — never to `:wat/...` paths, which are not bindings you can shadow.
 
 ```scheme
-(let ((recv "bad-idea"))
-  recv)                              ;; → "bad-idea"  (the let binding wins)
+;; A parameter named `x` shadows any outer `x`:
+(:wat/core/define (:my/app/add-one (x :i64) -> :i64)
+  (:wat/core/+ x 1))                         ;; `x` is the parameter
 
-;; Inside the let, the kernel's `recv` is unreachable by its bare name.
-;; The full path is always reachable:
-(let ((recv "bad-idea"))
-  (:wat/kernel/recv some-receiver))  ;; → kernel recv, unaffected
+;; A let binding introduces a bare local:
+(:wat/core/let ((result (compute-something)))
+  (:wat/kernel/send out result))             ;; `result` is the let binding
+
+;; The full path :wat/kernel/send is NEVER shadowable — no let binding can
+;; "capture" it, because :wat/kernel/send is not a bindable name. It's a
+;; path literal the parser resolves against the symbol table, not a
+;; variable reference.
 ```
 
-Function parameters shadow too:
-
-```scheme
-(define (process (recv :f64) -> :f64)
-  (+ recv 1))                        ;; `recv` is the parameter here
-                                      ;; NOT the kernel's queue recv
-```
-
-The symbol table's bare-alias entries are the **outermost** scope. Any inner binding pre-empts them, and the full `:wat/...` path is always available when the user needs to reach past the shadow. Same pattern Clojure uses — `clojure.core/recv` would always be reachable even if a local `recv` was bound.
-
-This is **not a rule to remember.** It is what lexical scoping always does in a Lisp. Naming the behavior explicitly here is for readers who might worry that bare kernel aliases are "protected" from local shadowing — they are not; they are shadowable by any enclosing scope, same as any other outer binding. The protection is on the FULL PATH, not the bare alias.
+There is no "shadowable alias" tier and no "outermost bare scope" — just lexical scopes of bare names introduced by the programmer, and full keyword paths that always resolve to their canonical target.
 
 ### How this relates to `:allow-redef`
 
-The `### Redefinition mode — opt-in startup knob` subsection covers collision behavior for user-defined names. The interaction with bare aliases is explicit:
+The `### Redefinition mode — opt-in startup knob` subsection covers collision behavior for user-defined names. With no bare aliases, the rules simplify:
 
-- **`:wat/...` paths are protected in BOTH modes.** `:strict` and `:allow-redef` agree: you cannot redefine anything at `:wat/lang/`, `:wat/kernel/`, `:wat/algebra/`, or `:wat/std/`. Attempt = halt.
-- **Bare aliases are shadowed, not redefined.** When a user defines `(define (Subtract ...) ...)`, they are NOT redefining `:wat/std/Subtract` — that stays intact. They are adding a user-owned entry to the symbol table that also happens to carry the bare name `Subtract`. Precedence resolves the bare name to the user's version. The kernel's alias remains in the table; the full path still reaches it.
-- **`:allow-redef` only matters for user-path collisions.** Two files both defining `:alice/math/clamp` with different bodies: that's a user-path collision. `:strict` halts; `:allow-redef` permits with logging. Bare-alias shadowing is not a collision; it's the designed resolution behavior.
+- **`:wat/...` paths are protected in BOTH modes.** `:strict` and `:allow-redef` agree: you cannot redefine anything at `:wat/core/`, `:wat/kernel/`, `:wat/algebra/`, or `:wat/std/`. Attempt = halt.
+- **`:allow-redef` only matters for user-path collisions.** Two files both defining `:alice/math/clamp` with different bodies: that's a user-path collision. `:strict` halts; `:allow-redef` permits with logging. No bare-alias interaction to worry about — aliases do not exist.
 
 ### Type-tagged hashing keeps literal types distinct
 
