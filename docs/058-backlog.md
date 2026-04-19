@@ -116,20 +116,66 @@ already spec-shaped.
 - [x] `recv` returns `:Option<T>` (`:None` on disconnect)
 - [ ] `try-recv` returns `:Option<T>` (lands with Step 1's try-recv)
 
-### Step 3 — stdlib algebra macros
+### Step 3 — stdlib algebra macros — PARTIAL
 
-- [ ] `Sequential` / `Bigram` / `Trigram` / `Ngram`
-- [ ] `Linear` / `Log` / `Circular`
-- [ ] `Amplify` / `Subtract`
-- [ ] `Reject` / `Project` (the Gram-Schmidt pair)
+- [x] `Amplify` / `Subtract` (round 1 — 2026-04-19)
+- [x] `Log` / `Circular` (round 2 — needed `:wat::std::math::{ln,sin,cos,pi}`
+  and the typed-arith split into `:wat::core::{i64,f64}::*`)
+- [x] `Reject` / `Project` (round 3 — needed `:wat::algebra::dot` primitive)
+- [ ] `Sequential` / `Bigram` / `Trigram` / `Ngram` (needs Step 4 list
+  combinators first)
+
+`Linear` is REJECTED (058-008; identical to Thermometer under the
+3-arity signature). Does not ship.
 
 ### Step 4 — stdlib data structures + list combinators
 
+**Round 4a (this slice) — minimum set to unblock Step 3's Sequential/Ngram:**
+
+At `:wat::core::*`:
+- [ ] `list` — Lisp-y constructor. Used for wat-level lists (items
+  passed to `foldl`, holons passed to `Sequential`, macro inputs).
+- [ ] `map` — `Vec<T>, (T → U) → Vec<U>`
+- [ ] `length` — `Vec<T> → :i64`
+- [ ] `empty?` — `Vec<T> → :bool`
+- [ ] `reverse` — `Vec<T> → Vec<T>`
+- [ ] `range` — **two-arg only**: `(range start end)` → `Vec<i64>`
+  (`start..end`). Callers write `(range 0 n)` explicitly; no one-arg
+  overload. Matches Rust's single iterator method.
+- [ ] `take` — `Vec<T>, :i64 → Vec<T>`
+- [ ] `drop` — `Vec<T>, :i64 → Vec<T>`
+- [ ] `foldl` — **canonical name** (direction is load-bearing for
+  Sequential). Signature `(foldl xs init f)` with `f : (acc, item) →
+  new-acc`. No `fold` / `reduce` aliases: `fold` is ambiguous without
+  a direction; `reduce` is the init-less special case that panics on
+  empty input.
+
+At `:wat::std::list::*`:
+- [ ] `window` — `Vec<T>, :i64 → Vec<Vec<T>>`, spec's sliding window
+  (Rust `slice.windows(n)`). Needed by Ngram.
+
+**Design decisions — frozen here so compaction can't erase them:**
+
+- **`list` vs `vec` — both legal, naming-convention distinction.**
+  Runtime identical (both produce `Value::Vec<Value>`), type surface
+  identical (`∀T. T* → Vec<T>`). `list` signals wat-level Lisp-y
+  intent; `vec` signals data-of-T intent. The keyword chosen at the
+  call site tells the reader which mental model applies.
+- **`foldr` is deferred** — not needed for Sequential/Ngram. Lands
+  when a concrete call site demands it.
+- **`for-each`, `filter`, `reduce`, `cons`, `third`, `rest`, and the
+  rest of the stdlib list combinators (`pairwise-map`, `n-wise-map`,
+  `map-with-index`, `zip`, `unzip`, `take-while`, `drop-while`)
+  deferred** — each lands when something wants it.
+
+**Round 4b (later) — data structures:**
 - [ ] `HashMap<K,V>` + `get` / `contains?`
-- [ ] `Vec<T>` + `nth` / `length`
 - [ ] `HashSet<T>` + `member?`
-- [ ] `map` / `filter` / `fold` / `reduce` / `range` / `take` / `drop` /
-  `reverse` / `pairwise-map` / `n-wise-split` / `zip`
+- [ ] The rest of the list combinators above, as need arises.
+
+(`Vec<T>` is the typed existing form; `:wat::core::vec` is its
+constructor, already shipped. `nth` is `get` on Vec — graduates with
+HashMap/HashSet's `get`.)
 
 ### Step 5 — stdlib programs (Console + Cache)
 
