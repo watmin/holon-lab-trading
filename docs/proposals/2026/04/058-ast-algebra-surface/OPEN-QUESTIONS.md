@@ -1,8 +1,38 @@
 # 058 — Consolidated Open Questions for Designers
 
-**Purpose:** single-scan sheet of every designer-facing question across the 29 sub-proposals. Each question preserved verbatim with its source proposal noted. Audited primitives (Bind, Permute, Thermometer) have no open questions — see `CORE-AUDIT.md`. FOUNDATION's own Open Questions (Q1–Q7) and their resolutions live in `FOUNDATION.md` (`## Open Questions`).
+**Purpose:** single-scan sheet of every designer-facing question across the 29 sub-proposals. Audited primitives (Bind, Permute, Thermometer) have no open questions — see `CORE-AUDIT.md`. FOUNDATION's own Open Questions (Q1–Q7) and their resolutions live in `FOUNDATION.md` (`## Open Questions`).
 
-**Generated from:** sub-proposals' "Questions for Designers" sections.
+**Generated from:** sub-proposals' "Questions for Designers" sections. Since Round 2 many have been resolved by architectural decisions recorded in `FOUNDATION-CHANGELOG.md`; the ones needing designer input are summarized below.
+
+---
+
+## Live questions for Round 3
+
+The substantive decisions that still need designer opinions — everything else in this document is either RESOLVED (marked inline), MOOT (in a REJECTED proposal), or documentation-only.
+
+**058-002 Blend — the keystone.** All of 058-008 (Linear), 058-015 (Amplify), 058-018 (Circular), 058-019 (Subtract), 058-020 (Flip) branch on its resolution.
+- **Q1** Is scalar-weighted vector addition a distinct source category from Bundle?
+- **Q2** Option A (convex, single alpha) vs Option B (two independent weights)?
+- **Q3** Should negative weights be allowed?
+- **Q4** Variadic temptation — binary or generalized?
+- **Q6** If rejected, path for Linear/Circular?
+
+**058-001 Atom — typed literals.**
+- **Q1** Is the typed hash axis sound — `(type_tag, literal_bytes)` right shape?
+- **Q2** One variant `Atom(AtomLiteral)` or separate `AtomStr`/`AtomInt`/…?
+
+**058-005 Orthogonalize.**
+- **Q1** Orthogonalize as core vs. widened Blend with computed weights?
+- **Q2** Should `Project` also be proposed first-class (the complement)?
+- **Q3** Name: `Orthogonalize` or `Reject`? (Holon's existing name is `reject`.)
+
+**058-006 Resonance.**
+- **Q2** Is `Mask(x, boolean-vector)` the more general primitive, with Resonance as a stdlib idiom over Mask?
+
+**058-007 ConditionalBind.**
+- **Q3** Is `Select(x, y, gate)` the lower-level primitive, with ConditionalBind as a stdlib idiom over Select?
+
+Everything else in this document is RESOLVED inline (with a pointer to the resolution source), MOOT (in a rejected proposal), or documentation-only (the recommendation IS the resolution).
 
 ---
 
@@ -12,7 +42,7 @@
 
 2. **Should `Atom` remain one variant, or should typed atoms be distinct variants?** Option A: `Atom(AtomLiteral)` — one variant, internally tagged. Option B: `AtomStr(String)`, `AtomInt(i64)`, `AtomFloat(f64)`, etc. — separate variants. Option A is simpler and keeps the ThoughtAST enum small. Option B allows pattern-matching on literal type without destructuring the inner `AtomLiteral`. Which fits the algebra better?
 
-3. **What about `Null` as an atom?** FOUNDATION's foundational principle says literals live on AST nodes. A null/none literal raises a question: is "no value" a first-class atom, or should it be represented structurally (absence of a Bind, or a specific absence marker)? Holon traditionally has no `nil` — absence is structural. Does allowing `(Atom null)` break this convention?
+3. **What about `Null` as an atom?** — **RESOLVED.** `:Null` removed from wat; Rust has no null, wat follows. Absence of a value is `:Option<T>::None`; structural absence is simply a form not being present. `Atom` accepts string/int/float/bool/keyword literals — no null. See FOUNDATION-CHANGELOG 2026-04-18 entry "Type grammar locked to Rust-surface form; `:Any` and `:Null` removed."
 
 4. **Keyword naming conventions — no namespace mechanism.** The language does NOT have namespaces as a structural feature. Slashes in keyword names are just characters — `:wat/std/cos-basis` is a single keyword whose name is `wat/std/cos-basis`. FOUNDATION uses the `:wat/std/...` prefix as a stdlib naming discipline to avoid collision with user atoms. Is naming convention alone sufficient, or does the language need a more robust collision-avoidance mechanism? (The type-aware hash ensures `(Atom :foo)` and `(Atom "foo")` differ; same-type collision is the user's responsibility.)
 
@@ -52,17 +82,10 @@
 
 ---
 
-## 058-004: Difference
+## 058-004: Difference — REJECTED
 
-1. **Should `Difference` and `Subtract` both exist?** Same math. Different reader intent. Case for both: serves readers scanning for different patterns. Case for one: avoid complection by redundancy. Which way does Hickey's simplicity principle lean here?
+**All questions in this section are MOOT.** 058-004 was rejected — same math as Subtract, no new pattern demonstrated; `:wat/std/Subtract` (058-019) is the canonical delta macro. See FOUNDATION-CHANGELOG for the rejection record. Designers need not opine.
 
-2. **If only one, which?** "Subtract" is imperative-ish. "Difference" is noun-ish. The stdlib of most Lisps would use `Subtract` for the operation and `Difference` for the result of applying it to observations. Under that convention, `Subtract` might be the primary name and `Difference` a documentation alias.
-
-3. **Dependency on Blend's resolution.** This sub-proposal CANNOT resolve before 058-002-blend. If Blend is rejected, Difference must re-propose as a core variant (subtraction is then genuinely a new operation not expressible in existing primitives). Should the resolution of this sub-proposal be explicitly deferred until Blend resolves?
-
-4. **Stdlib name for the `Analogy` context.** Analogy needs a named delta operation: `C + (B - A)`. Both `Difference(B, A)` and `Subtract(B, A)` work mathematically. The Analogy sub-proposal (058-014) should be consistent with whichever stdlib name wins here.
-
-5. **Classification change precedent.** This sub-proposal was moved from CORE to STDLIB during sub-proposal review, after realizing the Blend dependency. Is this the right procedure — reclassifying mid-review when downstream effects become clear — or should it have been anticipated earlier? Lessons for future batch proposals.
 
 ---
 
@@ -82,7 +105,7 @@
 
 ## 058-006: Resonance
 
-1. **Ternary output as a supported kind.** Resonance is the first core form producing `{-1, 0, +1}` output. Do we formalize ternary vectors as a distinct kind in the algebra, or do we treat the zeros as "encoded-as-zero but still conceptually bipolar"? The former is cleaner categorically; the latter avoids cascading type changes.
+1. **Ternary output as a supported kind.** — **RESOLVED in FOUNDATION "Output Space" section.** The algebra's output space is `{-1, 0, +1}^d` ternary-by-default, with `threshold(0) = 0`. Zero is a first-class "no information here" signal that propagates through Bind (0·b=0), Bundle (contributes 0 to sum), and cosine similarity. No distinct "ternary kind" typesystem change — the substrate was always ternary; Resonance is the first form that produces zeros by selection rather than by arithmetic cancellation.
 
 2. **Should `Mask`/`Gate` be the primitive instead?** A more general `Mask(x, boolean-vector)` primitive would make Resonance stdlib. Is the right level of generality "sign-agreement masking" (Resonance, concrete) or "arbitrary masking" (Mask, more general)?
 
@@ -110,23 +133,16 @@
 
 ---
 
-## 058-008: Linear
+## 058-008: Linear — REJECTED
 
-1. **Is Thermometer itself core?** This reframing assumes Thermometer stays core. 058-023-thermometer treats Thermometer as the primitive. Confirm.
+**All questions in this section are MOOT.** 058-008 was rejected — identical to Thermometer under the 3-arity signature `(Thermometer value min max)`; no new pattern beyond the existing core primitive. See FOUNDATION-CHANGELOG for the rejection record. Designers need not opine.
 
-2. **Should stdlib forms be preserved in AST or eagerly expanded?** Preserving keeps the semantic name in AST walks. Eager expansion collapses cache keys to canonical Blend. Either works; consistency across Linear/Log/Circular is the key.
-
-3. **Are there hidden differences between the current variant implementation and the reframing?** Float-to-integer rounding, clipping, specialized arithmetic — audit before committing to confirm the reframing is byte-for-byte equivalent to the current Linear encoder.
-
-4. **Dependency on 058-002-blend.** If Blend is rejected, Linear stays core. Should resolution be explicitly deferred until Blend resolves?
-
-5. **Scale argument shape.** `scale` here is a list `(min max)`. Is this the conventional shape across Linear/Log/Circular? Log also uses min/max; Circular uses a single period. Inconsistent shapes may complicate stdlib code. Confirm per-encoder conventions.
 
 ---
 
 ## 058-009: Sequential — Reframing
 
-1. **Does `map-with-index` exist in the wat stdlib?** The expansion assumes a `map-with-index` combinator (or equivalent iteration primitive). If the wat stdlib does not yet have one, this proposal depends on its addition — either a proposal to add it, or folding the expansion to use explicit index arithmetic (less elegant but works without `map-with-index`).
+1. **Does `map-with-index` exist in the wat stdlib?** — **RESOLVED.** `:wat/std/list/map-with-index` per the core/stdlib Rust-correspondence rule — it's a short composition (`xs.iter().enumerate().map(f)`) so it's stdlib, not core. See FOUNDATION-CHANGELOG 2026-04-18 entry "Core/stdlib division line named: Rust-direct correspondence."
 
 2. **Is the permutation indexing 0-based or 1-based?** Convention here is 0-based (first element gets `Permute by 0` = identity). Some implementations might use 1-based. Pick one, document it.
 
@@ -138,31 +154,17 @@
 
 ---
 
-## 058-010: Concurrent
+## 058-010: Concurrent — REJECTED
 
-1. **Synonym policy.** If `Concurrent` is accepted, are `Simultaneous`, `Parallel`, `Together`, etc. DOCUMENTATION ALIASES (multiple names resolve to the same stdlib function) or REJECTED (only one canonical name)? This proposal leans toward rejected — one canonical name keeps the vocabulary lean.
+**All questions in this section are MOOT.** 058-010 was rejected — no runtime specialization, no corresponding type annotation, purely reader-intent; temporal-co-occurrence is carried by the enclosing context, not by a named alias of Bundle. See FOUNDATION-CHANGELOG for the rejection record. Designers need not opine.
 
-2. **Should Bundle be reserved for primitive use and everything else go through named aliases?** An alternative style: vocab modules NEVER call `Bundle` directly, they always go through `Concurrent`, `Set`, `Pattern`, etc. Bundle is the primitive, the named forms are the surface. Pros: clear layer separation. Cons: requires a proliferation of names to cover all intents.
-
-3. **Cache canonicalization.** Should `Concurrent` and `Bundle` share cache entries (eager expansion, canonical AST) or have separate cache entries (preserve the semantic name)? This mirrors the same decision for Linear/Log/Circular in 058-008/017/018.
-
-4. **Dependency on Set and Sequential.** This proposal groups Concurrent with other "list-operating Bundle wrappers." If Set (058-027) is rejected, Concurrent might want to absorb that role. If Sequential (058-009) stays as its current variant, the trio is less symmetric. These three should resolve together.
-
-5. **Is "Concurrent" the right word?** In programming contexts, "concurrent" often implies parallelism, interleaving, or race conditions. In the temporal semantics used here, it means "at the same time." Could be confusing for readers with systems programming backgrounds. Alternatives: `Simultaneous`, `SameMoment`, `Coincident`. Recommendation: accept `Concurrent` (matches holon precedent, short, readable) and explicitly document the meaning.
 
 ---
 
-## 058-011: Then
+## 058-011: Then — REJECTED
 
-1. **Permutation count convention.** This proposal uses `(Permute b 1)`. Is 1 the right convention, or should it be a larger gap (e.g., 7, 13) for better dimensional decorrelation? Small permutations may not mix dimensions enough for downstream cleanup to distinguish positions. Should the stdlib form use a carefully-chosen constant, or always 1?
+**All questions in this section are MOOT.** 058-011 was rejected — arity-specialization of Sequential; demonstrates no new pattern. Chain (058-012) inlines the binary Sequential directly rather than depending on Then. See FOUNDATION-CHANGELOG for the rejection record. Designers need not opine.
 
-2. **Relationship to `Sequential` at length 2.** `(Then a b) = (Sequential [a b])` if both use the same permutation scheme. Should they be enforced-equivalent at this length, or could their implementations diverge (different permutation choices)? Consistency seems valuable.
-
-3. **Should Then also have a reverse form (`After(b, a) = Then(a, b)`)?** "A happens after B" is sometimes more natural than "B happens, then A." Same operation from the opposite reading. Worth a separate stdlib name, or too much alias proliferation?
-
-4. **Chaining `Then` operations.** `(Then (Then a b) c)` creates a nested structure with TWO levels of permutation (b permuted once inside, the whole `(Then a b)` permuted once more when combined with c). Is this the intended recursive structure, or should `Chain` (058-012) handle multi-step chains flat? This proposal assumes `Chain` handles flat chains; nested Then is structurally meaningful but less common.
-
-5. **Application to event sequences.** Vocab modules encoding event sequences (candle → indicator → signal → entry) would chain Thens. At what point does the recursive Then structure break down dimensionally? Small vectors (d=1024) may not support deep chains before cleanup fails. Worth noting in documentation.
 
 ---
 
@@ -190,7 +192,7 @@
 
 3. **Specialized names for small `n`: `Bigram`, `Trigram`?** Pros: readable for the common cases. Cons: name proliferation. Recommendation: keep only `Ngram` as the parameterized form, and `Chain` as the `n=2` specialization (already in 058-012). Avoid `Bigram`/`Trigram` unless they earn distinct semantic intent beyond "Ngram with specific n."
 
-4. **Stdlib dependencies.** `n-wise-split`, `take`, `length`, `map`, `rest` — these are standard list operations that Ngram depends on. Are all present in the current wat stdlib, or does this proposal need to bring them in as prerequisites?
+4. **Stdlib dependencies.** — **RESOLVED.** Core (single Rust method): `:wat/core/take`, `:wat/core/length`, `:wat/core/map`, `:wat/core/rest`. Stdlib (short compositions): `:wat/std/list/n-wise-map`, `:wat/std/list/window`. See FOUNDATION-CHANGELOG 2026-04-18 core/stdlib division entry for the Rust-correspondence rule.
 
 5. **Performance.** An Ngram over a list of length `k` with window `n` produces `k-n+1` windows, each requiring a Sequential encoding. This is `O(k·n)` sub-AST construction and encoding, plus one top-level Bundle of `k-n+1` items. Acceptable for reasonable `k, n`; could be expensive for long lists. Document the scaling.
 
@@ -200,18 +202,11 @@
 
 ## 058-014: Analogy
 
-1. **Dependency on 058-004's delta name.** This proposal uses `Difference`. If 058-019 names it `Subtract` instead, the expansion changes to `(Subtract b a)` or `(Blend b a 1 -1)` direct. The resolution should be consistent — one delta name in stdlib, used by Analogy.
+1. **Dependency on 058-004's delta name.** — **RESOLVED.** 058-004 Difference REJECTED; only `:wat/std/Subtract` (058-019) exists. Analogy uses `(:wat/std/Subtract b a)`. See FOUNDATION-CHANGELOG 2026-04-18 stdlib macro audit entry.
 
 2. **Argument order convention.** The standard `(a, b, c)` is "a is to b as c is to ?". Could alternatively be `(a, b, c, d)` returning a cleanup match, or `(from, to, apply-to)` with keyword-ish naming. Recommendation: stick with the three-term positional form, document clearly.
 
-3. **Should the stdlib also provide the four-term `AnalogyCleanup`?** A convenience form that runs cleanup against a candidate pool:
-
-```scheme
-(:wat/core/define (:my/vocab/AnalogyCleanup a b c candidates)
-  (cleanup (:wat/std/Analogy a b c) candidates))
-```
-
-Over-naming risk, but this is the most common use case. Worth a second named form, or let users compose cleanup around Analogy manually?
+3. **Should the stdlib also provide the four-term `AnalogyCleanup`?** — **RESOLVED: NO.** Cleanup is REJECTED (058-025); argmax is rejected as a substrate primitive. Analogy returns a completion Holon; callers measure presence against their candidate library and apply their own selection policy (top-1 fold, above-threshold filter, top-k sort, weighted Bundle). See FOUNDATION-CHANGELOG 2026-04-18 argmax-purge entry.
 
 4. **Domain applications.** In holon-lab-trading, are there specific analogy use cases? E.g., "trend phase X was to breakout as trend phase Y is to ?" This proposal's existence opens the door; concrete vocab applications should be tracked.
 
@@ -239,7 +234,7 @@ Over-naming risk, but this is the most common use case. Worth a second named for
 
 2. **Accessor variants.** `get` (with cleanup) vs `get-raw` (without). Both useful. Keep both with these names? Or use `get` for raw and `get-cleanup` for the cleanup variant? Recommendation: `get` is the common case (with cleanup); `get-raw` for the raw case.
 
-3. **Key type constraints.** Map keys are often keyword atoms (`:color`, `:price`). Can keys also be integers, strings, composite ASTs? Per 058-001, Atom accepts typed literals; any atom can be a key. Per 058-007-conditional-bind, full ASTs can be used as binding operands. Confirm: Map keys can be any thought.
+3. **Key type constraints.** — **RESOLVED.** Keys can be any `:Holon` value. Typed Atom literals (058-001) include string/int/float/bool/keyword; composite ASTs (Bind, Bundle, etc.) also work as keys because `:Holon` is the substrate's universal type. `:HashMap<K,V>` at declaration time pins the key type; runtime hash lookup (Rust `std::collections::HashMap`) handles any hashable key.
 
 4. **Performance for large Maps.** Bundle's capacity is bounded (~d / ln(K) items for reliable cleanup). Maps with many keys exceed capacity and produce noisy retrieval. Document the capacity bound; stdlib could provide a `LargeMap` variant using partitioning if demand arises.
 
@@ -253,13 +248,13 @@ Over-naming risk, but this is the most common use case. Worth a second named for
 
 ## 058-017: Log
 
-1. **Is `log` in the wat stdlib?** The expansion depends on natural log (or log with a base, though the base cancels out of the ratio). If not available, this proposal depends on adding log primitives to wat.
+1. **Is `log` in the wat stdlib?** — **RESOLVED.** `:wat/std/math/log` and `:wat/std/math/ln` are stdlib (single Rust method: `f64::log` / `f64::ln`). See FOUNDATION-CHANGELOG 2026-04-18 core/stdlib division entry (math primitives at `:wat/std/math/`).
 
 2. **Numerical preconditions.** `min, max, value` must all be positive (log requires positive arguments). Should the stdlib Log enforce this, or treat violations as undefined?
 
 3. **Log base choice.** Natural log is conventional; base-10 or base-2 produce the same result (the base cancels in the ratio). Does holon-rs have a preference?
 
-4. **Same consistency concerns as 058-008.** AST preservation, cache keys, encoder audit — resolve uniformly across all three scalar-encoder reframings.
+4. **Same consistency concerns as 058-008.** — **RESOLVED via 058-031 (defmacro).** Macros expand at parse time; hash is on the expanded AST. Two source files differing only in alias choice produce the same expanded AST and same hash. No separate canonicalization layer needed.
 
 5. **Alternatives: `LogLinear`, `Exponential`?** Log is one log-scale encoder. Others (log-sigmoid, stretched-log, signed-log for values crossing zero) are plausible stdlib additions. Linear's reframing opens the door; does Log have a family of companions?
 
@@ -267,7 +262,7 @@ Over-naming risk, but this is the most common use case. Worth a second named for
 
 ## 058-018: Circular
 
-1. **Are `sin`, `cos`, `pi` available in the wat stdlib?** Required for the expansion. If not, add as prerequisites.
+1. **Are `sin`, `cos`, `pi` available in the wat stdlib?** — **RESOLVED.** `:wat/std/math/sin`, `:wat/std/math/cos`, `:wat/std/math/pi` are stdlib (single Rust methods / constants: `f64::sin`, `f64::cos`, `std::f64::consts::PI`). See FOUNDATION-CHANGELOG 2026-04-18 core/stdlib division entry.
 
 2. **Scale argument shape.** Circular's `scale = (period,)` differs from Linear/Log's `scale = (min, max)`. Unify (e.g., `(0, period)` for Circular) or document per-encoder? Consistency may help readability.
 
@@ -277,7 +272,7 @@ Over-naming risk, but this is the most common use case. Worth a second named for
 
 5. **Starting angle offset.** Some applications want `value = 0` to correspond to a specific position (e.g., "noon" maps to angle 0, "midnight" maps to π). This is an offset parameter. Should Circular's stdlib form support it, or should users write a variant?
 
-6. **Same consistency concerns as 058-008 and 058-017.** AST preservation, cache keys, encoder audit — resolve uniformly across all three scalar-encoder reframings.
+6. **Same consistency concerns as 058-008 and 058-017.** — **RESOLVED via 058-031 (defmacro).** See cross-cutting theme "AST preservation vs. eager expansion" — macros expand at parse time, hash is on the expanded AST.
 
 7. **New circular encoders.** "Half-circle" (values in `[0, π]`), "cyclic-Gaussian" (peaked at some phase), "wavelet" — all potential stdlib extensions once Circular is reframed. Not in this proposal's scope but opens the door.
 
@@ -285,7 +280,7 @@ Over-naming risk, but this is the most common use case. Worth a second named for
 
 ## 058-019: Subtract
 
-1. **Subtract vs Difference: keep both or unify?** Same math. Different reader intents. This proposal keeps both. Alternative: pick one, deprecate the other. Recommendation: keep both; the cost is trivial and the clarity gain is real.
+1. **Subtract vs Difference: keep both or unify?** — **RESOLVED.** 058-004 Difference REJECTED (no new pattern; same math as Subtract). Only `:wat/std/Subtract` exists. See FOUNDATION-CHANGELOG 2026-04-18 stdlib macro audit entry.
 
 2. **Naming: `Subtract` or `Remove`?** "Subtract" has mathematical connotations; "Remove" has more direct intent ("remove the noise"). Recommendation: keep `Subtract` — aligns with holon-rs's `subtract` function; readers recognize it.
 
@@ -319,43 +314,23 @@ Bind, Permute, and Thermometer are affirmed core primitives already present in h
 
 ---
 
-## 058-024: Unbind
+## 058-024: Unbind — REJECTED
 
-1. **Accept the alias or reject it?** The operation is mathematically Bind. This proposal argues the reader-intent distinction earns the alias. Alternative: document that "unbind is Bind" and have vocab code always call Bind. Recommendation: accept Unbind; the clarity gain is load-bearing for accessor stdlib forms like `get`.
+**All questions in this section are MOOT.** 058-024 was rejected — identity alias for Bind — Bind-on-Bind IS Unbind, a fact about the algebra, not a name worth projecting. Simple, not easy. See FOUNDATION-CHANGELOG for the rejection record. Designers need not opine.
 
-2. **Cache canonicalization.** Same issue as Linear/Log/Circular from 058-008+. Preserve stdlib form in AST (separate cache, semantic name visible) or eagerly expand (canonical cache, lose name). Consistency across all stdlib aliases is key.
-
-3. **Non-bipolar future.** If Resonance (058-006) or other forms produce ternary/non-bipolar outputs, Unbind may need a NEW implementation separate from Bind. Is this proposal reserving the name for that future, or strictly a bipolar alias?
-
-4. **Naming within accessor stdlib forms.** `get`, `nth`, and any `lookup`-style accessors use Unbind internally. Is the word "Unbind" consistently usable in all their definitions, or does the argument-order convention (composite first vs. key first) vary?
-
-5. **Dependency on 058-021-bind.** If Bind is in some unexpected way modified (e.g., non-bipolar input support), Unbind's alias relationship may change. Confirm Bind's signature and semantics in 058-021 before finalizing Unbind.
-
-6. **Is "Unbind" the right name?** Alternatives: `Probe`, `Decode`, `Extract`, `Recover`. "Unbind" is convention in VSA literature. Recommendation: keep "Unbind" for convention match; document clearly.
 
 ---
 
-## 058-025: Cleanup
+## 058-025: Cleanup — REJECTED
 
-1. **Is this proposal needed?** Cleanup's core status is universally accepted. Leaves-to-root completeness argues for a doc. Recommendation: accept this doc as affirmation; it clarifies Cleanup's algebraic role even though no change is made.
+**All questions in this section are MOOT.** 058-025 was rejected — AST-primary framing dissolves the need for codebook-based recovery. Retrieval is presence measurement (cosine + noise floor); argmax-over-candidates is the caller's selection policy, not a substrate primitive. See FOUNDATION-CHANGELOG for the rejection record. Designers need not opine.
 
-2. **Should Cleanup decompose into `Similarity` + `Argmax`?** A future proposal could split Cleanup into the scalar similarity primitive and the aggregation over candidates. Pros: cleaner layering, more composable. Cons: changes a well-known primitive's signature. Recommendation: defer to a future proposal; affirm Cleanup as-is for now.
-
-3. **Cleanup as AST variant vs. library function.** Currently holon-rs exposes Cleanup as a library function. Should it also be a ThoughtAST variant (so ASTs can contain Cleanup nodes, and caching applies)? Most cleanup calls are AT RESULT TIME, so AST embedding may not be necessary. But for expressible-in-AST patterns, variant status helps. Design question.
-
-4. **Return type.** Cleanup returns THE best match, or a ranked list, or match-with-score. Different variants in different contexts. Should there be multiple Cleanup forms (`Cleanup`, `CleanupRanked`, `CleanupWithScore`), or one with an options parameter? Recommendation: one primitive returns the match; stdlib `CleanupRanked` and similar are extensions.
-
-5. **Similarity metric convention.** Cosine similarity vs. Hamming distance vs. Euclidean distance. The conventional choice is cosine for continuous bipolar, Hamming for bitwise bipolar. Document the convention; stdlib may expose named-alternative cleanups (e.g., `HammingCleanup`) if needed.
-
-6. **Codebook preprocessing.** Cleanup's performance scales with codebook size. For large codebooks (>10k candidates), eigenvalue-prefiltering (challenge 018) is used. Should this preprocessing be part of the Cleanup contract (always happen), or opt-in? Design choice; likely opt-in via engram libraries.
-
-7. **Relationship to engrams.** Engram caches (L3/L4 per FOUNDATION) are optimized Cleanup targets. Is `EngramCleanup` a distinct stdlib form, or is Cleanup polymorphic over vector-list vs. engram-library candidates? Recommendation: polymorphic — one primitive, multiple acceleration paths.
 
 ---
 
 ## 058-026: Array
 
-1. **Array vs Sequential: keep both or unify?** Same expansion, different reader intents. Recommendation: keep both; the intent distinction is real in vocab code.
+1. **Array vs Sequential: keep both or unify?** — **RESOLVED.** Both stay. Array is renamed to `:wat/std/Vec` per the container-constructor-renaming decision (HashMap/Vec/HashSet share names with their Rust backings). Sequential is positional algebra encoding; Vec is an indexed container with O(1) `get` through Rust's `std::vec::Vec`. Distinct intents, distinct runtime semantics.
 
 2. **Accessor naming.** `nth` is Lisp-idiomatic for positional retrieval. Alternative: `get-at`, `index`, `[]`-style operator. Recommendation: `nth` — matches Lisp tradition.
 
@@ -506,37 +481,36 @@ Bind, Permute, and Thermometer are affirmed core primitives already present in h
 - 058-024 Q2 — cache canonicalization for Unbind alias
 - **Theme-wide RESOLUTION via 058-031 (defmacro).** All of the above dissolve: macros expand at parse time, the canonical (post-expansion) AST is what hashes and caches. Two source files differing only in alias choice produce the same expanded AST and same hash. No separate canonicalization layer needed.
 
-### Theme: Dependency on 058-002 (Blend) resolution
-- 058-004 Q3 — Difference cannot resolve before Blend
-- 058-008 Q4 — Linear stays core if Blend rejected
-- 058-015 Q4 — Amplify cannot exist without Blend
-- 058-018 Q3 — Circular is test case for Blend Option B
-- 058-019 Q4 — Subtract re-proposes as core if Blend rejected
-- 058-020 Q4 — Flip reverts to Negate trilogy if Blend rejected
+### Theme: Dependency on 058-002 (Blend) resolution — still LIVE
+- ~~058-004 Q3~~ — Difference REJECTED; moot.
+- ~~058-008 Q4~~ — Linear REJECTED (identical to Thermometer); moot.
+- 058-015 Q4 — Amplify cannot exist without Blend.
+- 058-018 Q3 — Circular is test case for Blend Option B.
+- ~~058-019 Q4~~ — Subtract accepted as stdlib macro (not core) regardless of Blend shape; the macro expansion adapts to whichever Blend shape wins.
+- ~~058-020 Q4~~ — Same as Subtract; stdlib macro.
+- **Status:** Blend's resolution governs Amplify (058-015) and Circular's Option-B verification (058-018 Q3). Other dependents have been severed by macro rewrites. Blend itself remains the keystone live question for Round 3.
 
-### Theme: Naming — alias proliferation vs. reader-intent clarity
-- 058-004 Q1/Q2 — Difference vs Subtract
-- 058-010 Q1/Q5 — `Concurrent` synonyms policy; is the word right
-- 058-011 Q3 — reverse form `After` for Then
-- 058-019 Q1/Q2 — Subtract vs Difference, Subtract vs Remove
-- 058-020 Q1 — Flip vs Invert/Counter/Oppose
-- 058-024 Q1/Q6 — accept Unbind alias; is "Unbind" the right name
-- 058-026 Q1 — Array vs Sequential
-- 058-027 Q1/Q5 — Set as third Bundle-alias; Group/Collection/Multiset
+### Theme: Naming — alias proliferation vs. reader-intent clarity — LARGELY RESOLVED
+- ~~058-004 Q1/Q2~~ — Difference REJECTED.
+- ~~058-010 Q1/Q5~~ — Concurrent REJECTED.
+- ~~058-011 Q3~~ — Then REJECTED (reverse form question moot).
+- ~~058-019 Q1/Q2~~ — Subtract is the canonical delta; Difference rejected; "Remove" considered and dropped.
+- 058-020 Q1 — Flip vs Invert/Counter/Oppose — LIVE (doc-only; recommendation: keep Flip to match holon-rs).
+- ~~058-024 Q1/Q6~~ — Unbind REJECTED.
+- ~~058-026 Q1~~ — Array stays; renamed Vec per container-rename decision.
+- 058-027 Q1/Q5 — Set as third Bundle-alias; Group/Collection/Multiset naming — LIVE (doc-only).
 
-### Theme: Leaves-to-root completeness — "is this proposal needed" for core-affirmation docs
-- 058-021 Q1 — Bind already core
-- 058-022 Q1 — Permute already core
-- 058-023 Q1 — Thermometer already core
-- 058-025 Q1 — Cleanup already core
+### Theme: Leaves-to-root completeness — RESOLVED
+- 058-021 (Bind), 058-022 (Permute), 058-023 (Thermometer) collapsed to `CORE-AUDIT.md`.
+- 058-025 (Cleanup) REJECTED.
 
-### Theme: Ternary / non-bipolar vectors
-- 058-006 Q1 — Resonance produces `{-1, 0, +1}`; formalize ternary kind
-- 058-006 Q4 — threshold-aware of ternary input
-- 058-007 Q5 — ternary gate handling in ConditionalBind
-- 058-021 Q2 — Bind reversibility weakens on ternary input
-- 058-023 Q6 — ternary Thermometer extensions
-- 058-024 Q3 — non-bipolar future for Unbind
+### Theme: Ternary / non-bipolar vectors — RESOLVED via FOUNDATION "Output Space"
+- 058-006 Q1 — ternary kind formalization → resolved: substrate is `{-1, 0, +1}^d` ternary by default; no distinct kind needed.
+- 058-006 Q4 — threshold-aware of ternary input → resolved: `threshold(0) = 0`.
+- 058-007 Q5 — ternary gate handling → passes through (zeros are pass-through under sign-based gate).
+- 058-021 Q2 — Bind reversibility on ternary → resolved: Bind as query, similarity-measured not elementwise; see FOUNDATION "Bind as query."
+- ~~058-023 Q6~~ — Thermometer ternary extensions → Thermometer continues to produce bipolar; ternary comes from downstream ops.
+- ~~058-024 Q3~~ — Unbind REJECTED.
 
 ### Theme: Edge cases and degenerate inputs
 - 058-005 Q4 — zero-magnitude y in Orthogonalize
