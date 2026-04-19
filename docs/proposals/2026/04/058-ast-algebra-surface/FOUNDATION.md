@@ -542,7 +542,17 @@ An AST in transmission is an **EDN string** — extensible data notation, a seri
   Everything else (`+0.0` vs `-0.0`, subnormals, infinities) has a
   single canonical bit pattern and is deterministic across nodes.
 
-**EDN strings can be signed.** A trusted producer signs the EDN with a private key; any receiver can verify the signature against the known public key. **The AST has a cryptographic provenance.**
+**EDN strings can be signed.** A trusted producer signs the SHA-256 of the canonical-EDN with a private key; any receiver can verify the signature against the known public key. **The AST has a cryptographic provenance** — bound to MEANING, not to formatting. Comments, whitespace, or other byte-level changes that don't alter the parsed AST leave signatures valid. Two levels of signing exist:
+
+- **Per-file**, inside the `signed-load!` form: `(:wat/core/signed-load! :wat/load/<iface> "path" :wat/verify/signed-<algo> :wat/verify/<iface> "sig" :wat/verify/<iface> "pubkey")`. Gates a single loaded file by signing the SHA-256 of its parsed AST.
+- **Full-program**, outside source syntax: after `load!` recursion + macro expansion completes, the flat form list has its own canonical-EDN and SHA-256. Signing THIS closes the glue between loaded files and the entry file. Delivered via the wat-vm CLI (or a companion signature file), not an in-source form — a signature carried inside a file cannot cover the file that carries it.
+
+**Interface keywords** make all byte-fetching decisions explicit in the source:
+
+- `:wat/load/*` — where the SOURCE code comes from (`:wat/load/string` inline, `:wat/load/file-path` from disk; `:wat/load/http-path` / `:wat/load/s3-path` / `:wat/load/git-ref` reserved for future).
+- `:wat/verify/*` — where the VERIFICATION PAYLOAD comes from (`:wat/verify/string` inline, `:wat/verify/file-path` sidecar) AND which algorithm to apply (`:wat/verify/digest-sha256`, `:wat/verify/signed-ed25519`; others under the namespace reserved).
+
+The algorithm is encoded in the verification keyword itself (digest-sha256 vs signed-ed25519) so each load form's grammar is unambiguous — `digest-load!` rejects a `:wat/verify/signed-*` keyword at parse time, and vice versa. Two concerns (loading source, loading payloads) live in two namespaces even though both happen to traffic in filesystem paths today — the concerns are distinct even when the mechanism is shared.
 
 **The wat-vm loads all code at startup.** A single form — `(:wat/core/load! ...)` — pulls in a file of any mixture of declarations: types (struct/enum/newtype/typealias), functions (define), macros (defmacro), config setters (set-<field>!). Everything happens before the main event loop starts. Once startup completes, the symbol table is frozen — no further code enters during runtime.
 
@@ -560,15 +570,26 @@ One form handles every loadable artifact. The file's contents declare what they 
 (:wat/core/load! "project/market/indicators.wat")
 (:wat/core/load! "project/market/macros.wat")
 
-;; Hash-pinned — require the file to hash to a specific value.
-;; Halts startup if the hash does not match.
-(:wat/core/load! "project/market/types.wat"        (md5 "abc123..."))
-(:wat/core/load! "project/market/indicators.wat"   (md5 "def456..."))
+;; Unverified — source fetched via the named :wat/load/<iface>.
+(:wat/core/load! :wat/load/file-path "project/market/types.wat")
 
-;; Signature-verified — require a valid signature from the named public key.
-;; Halts startup if the signature is invalid.
-(:wat/core/load! "project/market/types.wat"        (signed <sig> <pub-key>))
-(:wat/core/load! "project/market/indicators.wat"   (signed <sig> <pub-key>))
+;; Digest-verified — file bytes must hash to the declared digest.
+;; The digest payload itself uses a :wat/verify/<iface> (inline string
+;; or sidecar file).
+(:wat/core/digest-load!
+  :wat/load/file-path "project/market/indicators.wat"
+  :wat/verify/digest-sha256
+  :wat/verify/string "abc123...")
+
+;; Signature-verified — parsed AST must verify under the declared
+;; algorithm with the declared pub-key. Sig and pub-key each declare
+;; their own :wat/verify/<iface>, so a sidecar-file deployment works
+;; without in-band trickery.
+(:wat/core/signed-load!
+  :wat/load/file-path "project/market/types.wat"
+  :wat/verify/signed-ed25519
+  :wat/verify/file-path "project/market/types.wat.sig"
+  :wat/verify/file-path "project/market/types.wat.pubkey")
 ```
 
 A single loaded file may mix kinds freely — type declarations, macro definitions, function definitions, config setters. The startup pipeline sorts them by kind during its phases (config → type → macro-expand → resolve → type-check → freeze). No separate `load!` or `load-macros!` forms exist; one loader is enough because loading is *fetching the file and integrating its forms* — the form's own kind determines what phase registers it.
@@ -618,7 +639,7 @@ redef-mode = :strict         ;; default — name collisions halt startup
 ```scheme
 ;; Build an AST at runtime — perhaps from parsed user input, perhaps from
 ;; a pattern-matching result, perhaps from an LLM's output:
-(:wat/core/let ((composed
+(:wat/core/let (((composed :List<Holon>)
        (:wat/core/list ':wat/std/Difference
              (:wat/core/list ':wat/algebra/Atom :observed)
              (:wat/core/list ':wat/algebra/Atom :baseline))))
@@ -652,7 +673,7 @@ This is a SAFE `eval`. An attacker who supplies a malicious AST cannot invoke ar
 **Lambdas remain first-class at runtime.** Anonymous functions can be constructed, passed, stored, invoked — without registering in the symbol table:
 
 ```scheme
-(:wat/core/let ((transform
+(:wat/core/let (((transform :fn(Holon)->Holon)
        (:wat/core/lambda ((t :Holon) -> :Holon)
          (:wat/algebra/Bundle (:wat/core/list t (:wat/algebra/Atom :tagged))))))
   (transform (:wat/algebra/Atom :input)))
@@ -2323,7 +2344,7 @@ The Rust runtime hosting the wat-vm imposes a static-first model: all code (type
 - `define`, `lambda` are **function definitions**. They register at startup into the symbol table.
 - `defmacro` declarations are **compile-time macros**. They register during the parse phase. Before any hashing, signing, or type-checking, a macro-expansion pass walks every source AST and substitutes macro invocations with their expansions.
 - `(:wat/config/set-<field>! value)` are **config setters**. They commit runtime constants during the config pass (see "`:wat/config` — Ambient Startup Constants"). **Setters appear ONLY in the entry file, and ONLY before any `load!`.** Loaded files cannot contain config setters — seeing one halts parse with "config setter in non-entry file."
-- `(:wat/core/load! "path")` is **the loader**. One form pulls in a wat file; the file's own declarations determine what phase registers each form. Loaded files may contain any mixture of types, functions, macros, and nested `load!` calls — but NOT config setters. The loader fetches, parses, and feeds toplevel forms into the appropriate phase of the pipeline. Verification modes (`(md5 ...)`, `(signed ...)`) run at build/startup.
+- `(:wat/core/load! :wat/load/<iface> "path")` is **the unverified loader**. Two sibling forms add verification: `(:wat/core/digest-load! ... :wat/verify/digest-<algo> ...)` gates by hash of raw bytes; `(:wat/core/signed-load! ... :wat/verify/signed-<algo> ...)` gates by Ed25519 signature of the canonical-EDN hash. All three share the `:wat/load/*` source-interface vocabulary (`:wat/load/string`, `:wat/load/file-path`; http/s3/git reserved for future). Loaded files may contain any mixture of types, functions, macros, and nested load forms — but NOT config setters. Verification runs at build/startup and halts the pipeline on failure.
 
 ### The entry file's discipline
 
@@ -2643,17 +2664,28 @@ All eight forms are loaded at startup. The wat-vm distinguishes them by what kin
 
 ;; --- Function module loading (startup phase) ---
 
-(:wat/core/load! "path/to/file.wat")
+(:wat/core/load! :wat/load/file-path "path/to/file.wat")
 ;; Unverified startup load — reads the file, parses defines, registers.
 ;; Trust the contents; accept whatever's on disk.
 
-(:wat/core/load! "path/to/file.wat" (md5 "abc123..."))
-;; Hash-pinned startup load — requires file content to hash to the given value.
-;; Halts wat-vm startup if mismatched.
+(:wat/core/digest-load!
+  :wat/load/file-path "path/to/file.wat"
+  :wat/verify/digest-sha256
+  :wat/verify/string "abc123...")
+;; Digest-verified startup load — requires file content to hash to the
+;; given value. Halts wat-vm startup if mismatched.
 
-(:wat/core/load! "path/to/file.wat" (signed <signature> <pub-key>))
-;; Signature-verified startup load — verifies signature against supplied public key.
-;; Halts wat-vm startup if signature invalid.
+(:wat/core/signed-load!
+  :wat/load/file-path "path/to/file.wat"
+  :wat/verify/signed-ed25519
+  :wat/verify/string "<b64-sig>"
+  :wat/verify/string "<b64-pub-key>")
+;; Signature-verified startup load. The verification keyword names both
+;; the mode (signed) and the algorithm (ed25519). Sig and pub-key each
+;; declare their own :wat/verify/<iface>; sidecar files use
+;; :wat/verify/file-path instead of :wat/verify/string. Signing target is
+;; the SHA-256 of the canonical-EDN of the parsed AST — signatures survive
+;; comment / whitespace changes. Halts wat-vm startup if signature invalid.
 
 ;; All (:wat/core/load! ...) happens at startup. Files loaded via (:wat/core/load! ...) must
 ;; contain ONLY function definitions — a type declaration is a startup error.
@@ -2710,14 +2742,21 @@ All eight forms are loaded at startup. The wat-vm distinguishes them by what kin
 
 ;; --- Compile-time module loading (types only) ---
 
-(:wat/core/load! "path/to/types.wat")
+(:wat/core/load! :wat/load/file-path "path/to/types.wat")
 ;; Unverified build-time load. Reads the file, parses type declarations,
 ;; feeds them to the build pipeline for Rust code generation.
 
-(:wat/core/load! "path/to/types.wat" (md5 "abc123..."))
-;; Hash-pinned build-time load. Build halts if the file hash does not match.
+(:wat/core/digest-load!
+  :wat/load/file-path "path/to/types.wat"
+  :wat/verify/digest-sha256
+  :wat/verify/string "abc123...")
+;; Digest-verified build-time load. Build halts if the file hash does not match.
 
-(:wat/core/load! "path/to/types.wat" (signed <signature> <pub-key>))
+(:wat/core/signed-load!
+  :wat/load/file-path "path/to/types.wat"
+  :wat/verify/signed-ed25519
+  :wat/verify/string "<b64-sig>"
+  :wat/verify/string "<b64-pub-key>")
 ;; Signature-verified build-time load. Build halts if the signature is invalid.
 
 ;; Compile-time-loaded files must contain ONLY type declarations.

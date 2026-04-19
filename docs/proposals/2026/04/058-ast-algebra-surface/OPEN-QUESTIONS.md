@@ -304,7 +304,7 @@ Bind, Permute, and Thermometer are affirmed core primitives already present in h
 
 1. **Generics scope.** Is `:fn(args)->return` and `:List<T>` sufficient, or do we need variance, bounds (`T extends :Holon`), or existentials? Recommendation: start minimal — just List and fn parametrics. Add more if stdlib needs emerge.
 
-2. **Type inference strength.** Parameter types on `define`/`lambda` are required. Should all intermediate expressions be inferred, or should `let` support optional type annotations? Recommendation: infer intermediates; allow optional `[let [[x : Thought] (Blend a b 1 -1)]]` for explicit annotation when helpful.
+2. **Type inference strength — RESOLVED 2026-04-19 to required typed let bindings.** Parameter types on `define`/`lambda` are required; let bindings are too. Every binding has shape `((name :Type) rhs)` — the typed form is mandatory, not optional. Reversal of the earlier "infer intermediates" recommendation after wat-rs slice 7b surfaced the trade-off: anonymous functions declare their constraints, and the discipline is cleanest when it applies uniformly. See FOUNDATION-CHANGELOG 2026-04-19 "Typed-let discipline" for reasoning.
 
 3. **Nominal vs. structural typing — RESOLVED 2026-04-18.** Nominal for `struct`/`enum`/`newtype`; structural for `typealias` (renamed from `deftype`). Four distinct head keywords, zero ambiguity at parse. `:is-a` removed; no nominal subtyping (polymorphism via enum wrapping, same as `:Holon`).
 
