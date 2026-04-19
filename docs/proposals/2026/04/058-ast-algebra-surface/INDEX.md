@@ -74,7 +74,7 @@ Existing holon-rs primitives; core status is settled. Consult `CORE-AUDIT.md` fo
 
 Genuinely new algebraic operations:
 
-15. **058-005-orthogonalize** — `X - ((X·Y)/(Y·Y))·Y` with computed projection coefficient. Was one mode of the original Negate; the other modes became stdlib idioms.
+15. **058-005-orthogonalize** — **ACCEPTED with reframe and rename.** Ships as `Reject` + `Project` stdlib macros over Blend + `:wat/algebra/dot`. Renamed from `Orthogonalize` to `Reject` to match the primer and holon-rs (cited production use: DDoS sidecar's core detection mechanism, Challenge 010 F1=1.000). Algebra core shrinks 7 → 6 as a consequence.
 16. **058-006-resonance** — **REJECTED.** Speculative, no production use. See proposal REJECTED banner.
 17. **058-007-conditional-bind** — **REJECTED.** Speculative, no production use. See proposal REJECTED banner.
 
@@ -152,7 +152,7 @@ Shows which proposals must resolve before which others. Arrows flow from prerequ
    058-002 (Blend) ────────────┐
        │                       │
        v                       v
-   058-003 (Bundle sig)     058-005 (Orthogonalize)
+   058-003 (Bundle sig)     058-005 (Reject/Project stdlib)
    CORE-AUDIT.md
    (Bind/Permute/Therm)     [058-006 Resonance — REJECTED]
                             [058-007 ConditionalBind — REJECTED]
@@ -216,7 +216,7 @@ Shows which proposals must resolve before which others. Arrows flow from prerequ
 | 002 | Blend | CORE | ACCEPTED | `threshold(w1·a + w2·b)` — two independent weights, negative allowed, binary |
 | 003 | Bundle list signature | CORE | clarification | Lock Bundle's arg as a single list (not variadic) |
 | 004 | Difference | STDLIB | reclassification | `Blend(a, b, 1, -1)`, delta framing |
-| 005 | Orthogonalize | CORE | new | Projection removal with computed coefficient |
+| 005 | Orthogonalize→Reject/Project | STDLIB | ACCEPTED (reframed, renamed) | Gram-Schmidt duo over Blend+dot; DDoS detection primitive |
 | 006 | Resonance | REJECTED | — | Speculative, no production use beyond unit tests |
 | 007 | ConditionalBind | REJECTED | — | Speculative, no production use; half-abstraction (no gate-producer) |
 | 008 | Linear | REJECTED | — | Identical to Thermometer under new 3-arity signature; userland alias if desired |
@@ -285,7 +285,7 @@ Once designer decisions are made, implementation priorities shape up:
 
 1. **Land types, define, lambda.** The language core must exist before stdlib can land.
 2. **Land Blend.** Pivotal for stdlib cascade.
-3. **Land the new algebra core (Orthogonalize).** Small Rust change. (Resonance and ConditionalBind REJECTED.)
+3. **Add `:wat/algebra/dot` measurement primitive to holon-rs.** Small Rust change. (Orthogonalize reframed as stdlib Reject/Project; Resonance and ConditionalBind REJECTED.)
 4. **Land the stdlib as real wat files.** Most proposals become small `.wat` additions once the language supports them.
 5. **Reframe the existing variants.** Linear/Log/Circular/Sequential move from HolonAST variants to stdlib functions.
 6. **Verify with HYPOTHETICAL-CANDLE-DESCRIBERS.wat.** When this file runs end-to-end, the 058 batch is functionally delivered.

@@ -1,10 +1,128 @@
-# 058-005: `Orthogonalize` — Project Out a Component
+# 058-005: `Reject` + `Project` — Gram-Schmidt stdlib Duo
 
 **Scope:** algebra
-**Class:** CORE (renamed and narrowed from FOUNDATION's `Negate`)
+**Class:** STDLIB macros — **ACCEPTED (reframed + renamed 2026-04-18)**
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
-**Depends on:** 058-002-blend (see reclassification note)
+
+---
+
+## ACCEPTED as stdlib — 2026-04-18
+
+The Gram-Schmidt projection-removal and projection operations ship as **two stdlib macros** over the algebra core, not as a single core variant. The proposal was originally named `Orthogonalize` and proposed as CORE; review reframed it to `Reject` + `Project` stdlib under a smaller core. All three designer questions resolve on the reframe.
+
+### The operations
+
+```scheme
+;; Reject — x with y's direction removed.
+;; Formula:  x - ((x·y)/(y·y)) · y
+;; Geometric interpretation: the residual of x after projecting out y's direction.
+;; The Gram-Schmidt reject step; the component of x orthogonal to y.
+
+(:wat/core/defmacro (:wat/std/Reject (x :AST<Holon>) (y :AST<Holon>) -> :AST<Holon>)
+  `(:wat/algebra/Blend ,x ,y 1
+      (:wat/core/- (:wat/core// (:wat/algebra/dot ,x ,y)
+                                (:wat/algebra/dot ,y ,y)))))
+
+;; Project — x's component along y's direction.
+;; Formula:  ((x·y)/(y·y)) · y    equivalently:  x - Reject(x, y)
+;; Geometric interpretation: the shadow x casts on y's axis.
+
+(:wat/core/defmacro (:wat/std/Project (x :AST<Holon>) (y :AST<Holon>) -> :AST<Holon>)
+  `(:wat/std/Subtract ,x (:wat/std/Reject ,x ,y)))
+```
+
+Invariant: `Project(x, y) + Reject(x, y) = x`. The Gram-Schmidt duo — every vector decomposes into an along-y part and an orthogonal-to-y part.
+
+### New measurement primitive: `:wat/algebra/dot`
+
+Both macros depend on a scalar-returning dot-product measurement — `(:wat/algebra/dot x y) -> :f64`. This is a **measurement primitive**, not a HolonAST variant (scalar-out, not vector-out). Sibling to `:wat/algebra/cosine` (already implicit in presence measurement). `cosine` is already computed as normalized dot; this proposal exposes `dot` explicitly as its own primitive.
+
+Signature:
+```
+(:wat/algebra/dot :Holon :Holon) -> :f64
+```
+
+Implementation: elementwise product, sum reduction. Rust: `a.iter().zip(b.iter()).map(|(ai, bi)| ai * bi).sum::<f64>()`. Trivial cost; the operation already exists internally wherever `cosine` is computed.
+
+The measurement primitives — `cosine`, `dot`, and presence (cosine-vs-noise-floor) — form a coherent small set of scalar-returning operations over Holons. Orthogonal to the HolonAST variants (which produce Holons from Holons).
+
+### Rename: Orthogonalize → Reject
+
+Three reasons:
+
+**(1) Production naming.** The primer (`series-001-002-holon-ops.md` lines 277-289) names this operation `reject` with cited production use:
+
+> "**Application:** Anomaly detection. The sidecar scores every packet as `reject(packet_vec, baseline_subspace)`. If the residual exceeds the adaptive threshold, the packet is anomalous. **This is the core detection mechanism.**"
+
+Holon-rs uses `reject`. Challenge 010 writeups use `reject`. The rename aligns wat with the rest of the project.
+
+**(2) Names the operation, not the result.** "Orthogonalize" describes the RESULT (the output is orthogonal to y). "Reject" describes what the operation DOES (rejects y's component from x). Both are accurate; production convention is "reject."
+
+**(3) Parallel to Project.** `Project` and `Reject` are the canonical Gram-Schmidt duo names. The pair reads symmetrically; "Orthogonalize + Project" reads mismatched.
+
+Users who prefer the mathematical term define their own alias in their namespace:
+
+```scheme
+(:wat/core/define (:my/vocab/Orthogonalize (x :Holon) (y :Holon) -> :Holon)
+  (:wat/std/Reject x y))
+```
+
+### Why stdlib, not core
+
+Original 058-005 proposed CORE because Orthogonalize required a computed weight (`-((X·Y)/(Y·Y))`), and Blend's draft signature took literal scalar weights. Under that constraint, Orthogonalize could not reduce to a Blend idiom.
+
+But Blend accepted as Option B (independent real-valued weights — accepted 2026-04-18). Blend's weights are now `:f64` expressions, which can be anything producing an f64 — including computed coefficients from dot products. The constraint that made Orthogonalize core dissolves.
+
+Under the new Blend, the Gram-Schmidt step IS a Blend idiom with a computed negative coefficient. Same pattern as Subtract (`Blend 1 -1`) and Amplify (`Blend 1 s`) — once Blend generalized, the named Blend-idioms migrated to stdlib. Reject follows the pattern.
+
+### Production use
+
+**DDoS sidecar** (Challenge 010, F1=1.000) — the core detection mechanism uses `reject(packet_vec, baseline_subspace)`. The binary Gram-Schmidt step IS load-bearing: subspace projection iterates single-vector Reject calls over a basis.
+
+**Engram matching** (primer line 264-274) — `project(packet_vec, baseline_components)` reconstructs an observation as the subspace sees it; the residual (via reject) measures novelty.
+
+**Any VSA that does Gram-Schmidt** — orthonormal basis construction from an exemplar set requires repeated Reject calls. Foundational for any "learn a subspace of normal" detection strategy.
+
+This is not speculative. Production-cited with concrete measurements.
+
+### Questions for Designers — all resolved
+
+**Q1** (Orthogonalize as core vs. widened Blend with computed weights): RESOLVED — stdlib macro over widened Blend. The Option B Blend acceptance (independent real-valued weights) + `:wat/algebra/dot` measurement primitive make the reframing clean. Algebra core shrinks from 7 to 6 forms.
+
+**Q2** (should Project also be proposed first-class): RESOLVED — YES. Ship Project as companion stdlib macro. `Project + Reject = x` (Gram-Schmidt decomposition). Primer cites both with production use. Both earn stdlib by the distinct-pattern test; together they name the canonical duo.
+
+**Q3** (name: Orthogonalize or Reject): RESOLVED — Reject. Aligns with primer, holon-rs, challenge writeups, and the Gram-Schmidt Project/Reject pair. Users who prefer the mathematical term define their own alias.
+
+**Q4** (handling of zero-magnitude y): document as user responsibility. When `dot(y,y) = 0` (y is the zero vector), the Reject computation divides by zero. The macro expansion produces `NaN` at runtime. Callers that may receive a zero y guard with an explicit check before calling — or define a safe variant in their namespace:
+
+```scheme
+(:wat/core/define (:my/vocab/safe-reject (x :Holon) (y :Holon) -> :Holon)
+  (:wat/core/if (:wat/core/= 0.0 (:wat/algebra/dot y y))
+      x  ;; nothing to project out — return x unchanged
+      (:wat/std/Reject x y)))
+```
+
+The stdlib doesn't ship this safe wrapper (domain-specific; users pick their own convention — skip, panic, error-return, return-x).
+
+**Q5** (classification reconsideration — is the split right): RESOLVED — YES. The original Negate had three modes (subtract, flip, orthogonalize). The split landed as: subtract → stdlib Blend idiom (058-019); flip → REJECTED (058-020, no production use, magic weight); orthogonalize → stdlib Gram-Schmidt duo (this proposal, renamed to Reject). The three modes had categorically different status; splitting them was correct.
+
+### What this unblocks
+
+- **DDoS detection** continues to work; wat-level `:wat/std/Reject` and `:wat/std/Project` name the primitives cleanly.
+- **Subspace operations** — Gram-Schmidt basis construction, engram library projections, baseline residual scoring — all expressible via Reject iteration over a basis.
+- **Algebra core shrinks 7 → 6 forms** — Atom, Bind, Bundle, Blend, Permute, Thermometer. Cleaner core; richer stdlib.
+- **New measurement primitive `:wat/algebra/dot`** — first-class scalar-returning operation. Exposed explicitly rather than implicit in cosine.
+
+### What this doesn't affect
+
+- **Blend (058-002)** stays ACCEPTED as Option B. Reject's stdlib status is a consequence of Blend's expressiveness, not a revision of Blend.
+- **Subtract (058-019)** and **Amplify (058-015)** — also stdlib Blend idioms; same pattern.
+- **Gram-Schmidt iteration** over a subspace basis — a user-level fold, not a stdlib primitive. The binary Reject is the substrate; N-wise subspace iteration is application logic.
+
+---
+
+## Historical content (preserved as audit record)
 
 ## Reclassification Note
 

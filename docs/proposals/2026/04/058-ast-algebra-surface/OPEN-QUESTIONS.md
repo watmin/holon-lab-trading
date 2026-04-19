@@ -6,16 +6,17 @@
 
 ---
 
-## Live questions for Round 3
+## Live questions for Round 3 — NONE REMAINING
 
-The substantive decisions that still need designer opinions — everything else in this document is either RESOLVED (marked inline), MOOT (in a REJECTED proposal), or documentation-only.
+All substantive designer questions across the 058 batch have been resolved through our own due diligence (2026-04-18). Each sub-proposal sits in one of five states:
 
-**058-005 Orthogonalize.**
-- **Q1** Orthogonalize as core vs. widened Blend with computed weights?
-- **Q2** Should `Project` also be proposed first-class (the complement)?
-- **Q3** Name: `Orthogonalize` or `Reject`? (Holon's existing name is `reject`.)
+- **ACCEPTED** — shipping in 058. Algebra core (6): Atom, Bind, Bundle, Blend, Permute, Thermometer. Algebra stdlib (~18): Subtract, Amplify, Log, Circular, Sequential, Ngram/Bigram/Trigram, HashMap, Vec, HashSet, Reject, Project, LocalCache, cached-encode. Language core accepted with parametric polymorphism.
+- **REJECTED** — won't ship, rationale recorded: Difference, Linear, Concurrent, Then, Flip, Chain, Unbind, Cleanup, Resonance, ConditionalBind.
+- **DEFERRED** — proven-working-but-unadopted audit record: Analogy.
+- **AUDITED** — affirmed pre-existing holon-rs primitives (Bind, Permute, Thermometer — see CORE-AUDIT.md).
 
-Everything else in this document is RESOLVED inline (with a pointer to the resolution source), MOOT (in a rejected proposal), or documentation-only (the recommendation IS the resolution).
+Round 3 reviewers may reopen any of these decisions; the per-question reasoning is preserved in each proposal's banner and in `FOUNDATION-CHANGELOG.md` entries dated 2026-04-18.
+
 
 ---
 
@@ -54,17 +55,15 @@ Everything else in this document is RESOLVED inline (with a pointer to the resol
 
 ---
 
-## 058-005: Orthogonalize
+## 058-005: Orthogonalize — ACCEPTED (reframed + renamed to Reject + Project)
 
-1. **Orthogonalize as core vs. widened Blend with computed weights.** The trade-off: Orthogonalize as its own variant (concrete, focused) vs. Blend with expression-valued weights (unifies but widens scope). Which is the right level of generality?
+**All questions in this section are RESOLVED.** The Gram-Schmidt projection-removal operation ships as **two stdlib macros** over the widened Blend + new `:wat/algebra/dot` measurement primitive:
 
-2. **Should `Project` also be proposed?** Related operation — the projection itself, rather than the complement. Can be stdlib (`Project = x - Orthogonalize(x, y)`), but some applications want the projection directly. Worth a first-class form, or let stdlib handle it?
+- `(:wat/std/Reject x y)` — x with y's direction removed. The DDoS sidecar's core detection mechanism (primer line 277-289, Challenge 010 F1=1.000).
+- `(:wat/std/Project x y)` — x's component along y; complement, `= Subtract(x, Reject(x, y))`.
 
-3. **Naming: `Orthogonalize` or `Reject`?** Holon calls this operation `reject` (rejection of y's component from x). "Orthogonalize" describes what the result IS (orthogonal to y); "Reject" describes what the operation DOES (rejects y's component). Which name serves the wat reader better?
+Q1 (core vs stdlib) resolves stdlib — widened Blend absorbs the computed-coefficient case via `:wat/algebra/dot`. Q2 (ship Project) resolves YES — Project + Reject = x (Gram-Schmidt decomposition). Q3 (name) resolves Reject — aligns with primer, holon-rs, and challenge writeups. Q4/Q5 documentation notes landed in the proposal. **Algebra core shrinks 7 → 6.** See 058-005/PROPOSAL.md's ACCEPTED banner for per-question reasoning.
 
-4. **Handling of zero-magnitude y.** If `y` is the zero vector, `Y·Y = 0` and the projection coefficient is undefined. The implementation must handle this edge case — probably by returning `x` unchanged (nothing to project out). Should this be explicit in the semantics?
-
-5. **Classification reconsideration.** This sub-proposal NARROWED the original Negate proposal to just the orthogonalize mode. Subtract mode went to 058-019-subtract, flip mode went to 058-020-flip. Is this the right split, or should Negate have been preserved as a single multi-mode core form?
 
 ---
 

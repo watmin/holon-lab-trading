@@ -440,7 +440,7 @@ Together: the complete cycle. Store → retrieve → execute → learn → compa
 
 ## The Algebra Is Immutable
 
-Under the foundational principle, ASTs are values. The primitives (`Atom`, `Bind`, `Bundle`, `Permute`, `Thermometer`, `Blend`, `Orthogonalize`) are value constructors — they take inputs and return new ASTs. **The algebra has no mutation operators.**
+Under the foundational principle, ASTs are values. The primitives (`Atom`, `Bind`, `Bundle`, `Permute`, `Thermometer`, `Blend`) are value constructors — they take inputs and return new ASTs. **The algebra has no mutation operators.**
 
 No `Bind-set!` that replaces a child. No `Bundle-append!` that appends in place. No `modify-atom!` that changes an atom's literal after construction. Every operation that could "change" an AST instead **returns a new AST.**
 
@@ -1278,7 +1278,6 @@ Operation                              Cost
 (Bind holon1 holon2)                   2
 (Bundle (list h1 h2 ... hN))           N
 (Blend holon1 holon2 w1 w2)            2     (weights are scalars, not Holons)
-(Orthogonalize holon1 holon2)          2
 (Permute holon k)                      1     (k is a scalar)
 (Thermometer value min max)            1     (no Holon inputs)
 ```
@@ -1492,7 +1491,7 @@ Plus the identity function that maps names to vectors:
 
 These four are the **algebraic foundation**. Everything else in the algebra is either:
 - A SCALAR PRIMITIVE — does something MAP cannot (Thermometer, Blend)
-- A NEW OPERATION — a distinct algebraic action (Orthogonalize)
+- A NEW OPERATION — a distinct algebraic action not expressible via existing primitives
 - A STDLIB COMPOSITION — a named pattern built from existing core forms
 
 ---
@@ -1512,14 +1511,14 @@ threshold(x) =
     -1   if x < 0
 ```
 
-**`threshold(0) = 0`**. Zero is a first-class "no information at this dimension" signal, not a convention-picked ±1. This choice is load-bearing: it makes zero propagate cleanly through every downstream operation (cosine similarity, Bind elementwise product, Bundle sum), and it lets degenerate edge cases (like Orthogonalize when X=Y) produce the semantically correct all-zero result rather than a thresholded-rounded ±Y.
+**`threshold(0) = 0`**. Zero is a first-class "no information at this dimension" signal, not a convention-picked ±1. This choice is load-bearing: it makes zero propagate cleanly through every downstream operation (cosine similarity, Bind elementwise product, Bundle sum), and it lets degenerate edge cases (like the Gram-Schmidt Reject step when X=Y) produce the semantically correct all-zero result rather than a thresholded-rounded ±Y.
 
 ### Zero as "no information"
 
 A `0` at dimension `i` means "this position carries no signal." Zero does not participate in similarity (0 · anything = 0). Zero under Bind propagates: `0 * b = 0` — the dimension stays silent. Zero under Bundle contributes nothing to the sum.
 
 This is semantically meaningful. Core operations produce zeros deliberately:
-- `Orthogonalize(X, Y)` produces zeros where the projection-removal coincidentally cancels (and produces the all-zero vector exactly when X=Y — the degenerate case whose "orthogonal complement" is nothing).
+- The stdlib Gram-Schmidt `Reject(x, y)` produces zeros where the projection-removal coincidentally cancels (and produces the all-zero vector exactly when X=Y — the degenerate case whose "orthogonal complement" is nothing).
 - `Bundle` can produce zeros when positive and negative contributions cancel.
 
 Downstream operations treating zero as "no information" keep the algebra internally consistent.
@@ -1569,11 +1568,11 @@ Three routes, two answers. The cause: intermediate thresholds clamp magnitudes �
 
 Chain, Ngram, Sequential, HashMap, and similar stdlib forms are DESIGNED to avoid unnecessary nesting: they produce one Bundle per form, flattening internally. Users who nest Bundles deliberately pay the capacity cost knowingly.
 
-**Orthogonalize — similarity-orthogonal, not elementwise-orthogonal.**
+**Reject (Gram-Schmidt) — similarity-orthogonal, not elementwise-orthogonal.**
 
 For degenerate X = Y, the result is exactly all-zero, which IS elementwise orthogonal to Y (dot = 0 exactly). But for general X, Y where the projection coefficient is fractional, the elementwise claim fails. Counter-example at d=4: X = [+1,+1,+1,-1], Y = [+1,+1,+1,+1], coefficient = 0.5, `X - 0.5·Y = [+0.5, +0.5, +0.5, -1.5]`, threshold ternary → [+1, +1, +1, -1] = X. Dot(X, Y) = 2, not 0.
 
-**Under similarity measurement, Orthogonalize produces a result that is orthogonal to Y up to the capacity budget.** The thresholded result has cosine similarity with Y below the 5σ noise floor at high d for most practical X. The "exact orthogonality" claim is stronger than needed — the substrate guarantees similarity-orthogonality, which is what downstream similarity tests actually measure against.
+**Under similarity measurement, `Reject` produces a result that is orthogonal to Y up to the capacity budget.** The thresholded result has cosine similarity with Y below the 5σ noise floor at high d for most practical X. The "exact orthogonality" claim is stronger than needed — the substrate guarantees similarity-orthogonality, which is what downstream similarity tests actually measure against.
 
 ### Capacity is the universal measurement budget
 
@@ -1584,7 +1583,7 @@ The budget is fungible. You can spend it on:
 - **Bundle stacking** — superposing N bindings into one vector. Each element adds crosstalk to every decode.
 - **Nested Bundles** — magnitude clamping at intermediate thresholds costs signal.
 - **Sparse keys** — unbinding with a key that has k non-zero positions out of d acts like a decode at effective dimension k.
-- **Cascading compositions** — nested Blends and Orthogonalizes accumulate approximation noise.
+- **Cascading compositions** — nested Blends (including Blend-based stdlib like Reject, Project) accumulate approximation noise.
 
 These are not separate phenomena or separate "algebraic flaws." They are the **same substrate property**: signal-to-noise at high dimension, characterized uniformly by Kanerva's formula, measured uniformly by cosine.
 
@@ -1620,7 +1619,6 @@ This means similarity-based retrieval (presence measurement, engram matching, di
 | `Permute(v, k)` | preserves input space | no — dimension shuffle | preserves input density |
 | `Thermometer(value, min, max)` | `{-1, +1}^d` ⊂ `{-1, 0, +1}^d` | no — gradient construction | dense-bipolar (no zeros) |
 | `Blend(a, b, w1, w2)` | `{-1, 0, +1}^d` | ternary threshold after weighted sum | ternary; zeros from cancellation |
-| `Orthogonalize(X, Y)` | `{-1, 0, +1}^d` | ternary threshold after projection removal | ternary; zeros at X=Y edge case |
 
 ---
 
@@ -1781,7 +1779,7 @@ The distinction is about WHERE NEW WORK HAPPENS:
 
 ## Two Cores: Algebra Core and Language Core
 
-The "CORE" designation so far has meant **algebra core** — the holon primitives (Atom, Bind, Bundle, Permute, Thermometer, Blend, Orthogonalize). These produce vectors. They are the mathematical substrate of the holon space.
+The "CORE" designation so far has meant **algebra core** — the holon primitives (Atom, Bind, Bundle, Permute, Thermometer, Blend). These produce vectors. They are the mathematical substrate of the holon space.
 
 But the stdlib — the forms expressed as `(defn (Difference a b) (Blend a b 1 -1))` — needs a substrate too. The syntax `defn`, `lambda`, type annotations, `let`, `if` are not holon-algebra operations; they are language operations. They do not produce vectors themselves; they produce FUNCTIONS that, when called, produce ASTs.
 
@@ -1794,7 +1792,6 @@ Language Core    defn, lambda, let, if, cond, type annotations
     ↓            (how you define things)
     ↓
 Algebra Core     Atom, Bind, Bundle, Permute, Thermometer, Blend,
-    ↓            Orthogonalize
     ↓            (what produces holon vectors)
     ↓
 Stdlib           Sequential, Ngram, Bigram, Trigram,
@@ -1959,6 +1956,8 @@ wat/std/
 
       wat/std/Subtract.wat        ;; :wat/std/Subtract       (macro)
       wat/std/Amplify.wat         ;; :wat/std/Amplify        (macro)
+      wat/std/Reject.wat          ;; :wat/std/Reject         (macro — Gram-Schmidt)
+      wat/std/Project.wat         ;; :wat/std/Project        (macro — Reject's complement)
       wat/std/Sequential.wat      ;; :wat/std/Sequential     (macro, bind-chain)
       wat/std/Ngram.wat           ;; :wat/std/Ngram          (macro)
       wat/std/Bigram.wat          ;; :wat/std/Bigram         (macro: Ngram 2)
@@ -2224,7 +2223,7 @@ The language core from 058 and this FOUNDATION polish pass:
 
 Plus the syntactic feature pervading all of the above:
 
-- **Type annotations** (`:Holon`, `:f64`, `:i32`, `:bool`, `:List<T>`, `:fn(args)->return`, keyword-path user types) — required on `define` and `lambda` signatures; carried on `struct`/`enum`/`newtype` field declarations. `:Holon` is an enum with 7 variants (Atom, Bind, Bundle, Permute, Thermometer, Blend, Orthogonalize) — functions operating on `:Holon` pattern-match to select variant behavior.
+- **Type annotations** (`:Holon`, `:f64`, `:i32`, `:bool`, `:List<T>`, `:fn(args)->return`, keyword-path user types) — required on `define` and `lambda` signatures; carried on `struct`/`enum`/`newtype` field declarations. `:Holon` is an enum with 6 variants (Atom, Bind, Bundle, Permute, Thermometer, Blend) — functions operating on `:Holon` pattern-match to select variant behavior.
 
 Other host-Lisp forms (`let`, `let*`, `if`, `cond`, `match`, `begin`, arithmetic, comparison, etc.) are **substrate-inherited** — wat inherits them from its Lisp host rather than defining them anew. They are language tools, but not novel in wat specifically.
 
@@ -2303,7 +2302,7 @@ Loaded files never see setters at all. When a loaded file is parsed, encounterin
 
 This section freezes the full algebra in its target shape (post-058). Core forms first, stdlib forms second. Each form shown in wat with its signature and semantics.
 
-### Algebra Core (7 forms)
+### Algebra Core (6 forms)
 
 ```scheme
 ;; --- MAP canonical ---
@@ -2356,20 +2355,28 @@ This section freezes the full algebra in its target shape (post-058). Core forms
 ;; scalar-weighted binary combination
 ;; threshold(w1·a + w2·b)
 ;; weights can be any real numbers (including negative)
-
-;; --- New compositions (058 candidates) ---
-
-(:wat/algebra/Orthogonalize x y)
-;; geometric projection removal
-;; X - ((X·Y)/(Y·Y)) × Y — computed projection coefficient
-;; result is orthogonal to y (dot product ≈ 0)
-;; was one mode of the original "Negate"; the other modes became Blend idioms
-
 ```
+
+### Algebra Measurements — scalar-returning primitives (not HolonAST variants)
+
+Orthogonal to the six HolonAST-producing core forms, the algebra exposes scalar-returning measurements as a separate tier. These operate on Holons but return `:f64`, not a new Holon:
+
+```scheme
+(:wat/algebra/cosine a b)     ;; :Holon :Holon -> :f64
+;; Cosine similarity. Returns dot(a, b) / (norm(a) * norm(b)).
+;; Used for presence measurement against the substrate noise floor (5/sqrt(d)).
+
+(:wat/algebra/dot a b)        ;; :Holon :Holon -> :f64
+;; Dot product. Elementwise multiply, sum reduction.
+;; Used by stdlib's Reject/Project for computed Gram-Schmidt coefficients;
+;; available to applications for any scalar measurement on vector pairs.
+```
+
+Both implement as Rust primitives in holon-rs. The cosine was already computed wherever presence measurement runs; dot is the un-normalized sibling, exposed explicitly as its own primitive for stdlib macros that need the raw coefficient (Reject, Project, any future Gram-Schmidt composition).
 
 Retrieval is NOT a core form. Presence is measured by `cosine(encode(target), reference)` against the substrate's noise floor — see "Presence is Measurement, Not Verdict" above. Classical Cleanup is historical: the vector-primary tradition's answer to "which named thing is this?" The wat substrate inverts that question because the AST is always available. Argmax-over-codebook, when an application needs it, is a stdlib composition over presence measurement, not a primitive.
 
-### Algebra Stdlib (17 forms)
+### Algebra Stdlib (18 forms)
 
 ```scheme
 ;; --- Scalar encoders ---
@@ -2438,11 +2445,26 @@ Retrieval is NOT a core form. Presence is measured by `cosine(encode(target), re
   ;; was Negate(x, y, "subtract") — now an explicit Blend idiom
   (:wat/algebra/Blend x y 1 -1))
 
-(:wat/core/define (:wat/std/Flip x y)
-  ;; linear inversion — invert y's contribution in x
-  ;; was Negate(x, y, "flip") — now an explicit Blend idiom
-  ;; weight -2 is the minimum inversion weight for bipolar vectors
-  (:wat/algebra/Blend x y 1 -2))
+;; (Flip REJECTED — see 058-020/PROPOSAL.md; magic weight, no production use.)
+
+;; --- Gram-Schmidt stdlib duo (058-005) ---
+;;
+;; Uses :wat/algebra/dot (scalar-returning measurement) alongside Blend.
+;; Both macros compose Blend with computed negative coefficients.
+
+(:wat/core/define (:wat/std/Reject x y)
+  ;; x with y's direction removed: x - ((x·y)/(y·y)) · y
+  ;; The Gram-Schmidt reject step. Production-cited in the DDoS detection
+  ;; mechanism (primer series-001-002 line 277-289) and engram matching.
+  ;; Renamed from Orthogonalize (058-005) to align with primer + holon-rs.
+  (:wat/algebra/Blend x y 1
+      (:wat/core/- (:wat/core// (:wat/algebra/dot x y)
+                                (:wat/algebra/dot y y)))))
+
+(:wat/core/define (:wat/std/Project x y)
+  ;; x's component along y's direction. The Gram-Schmidt project step.
+  ;; Project + Reject = x (Gram-Schmidt decomposition).
+  (:wat/std/Subtract x (:wat/std/Reject x y)))
 
 ;; --- Relational transfer: DEFERRED ---
 ;; Analogy (058-014) is DEFERRED — proven working but not adopted.
@@ -2642,7 +2664,7 @@ All eight forms are loaded at startup. The wat-vm distinguishes them by what kin
 ;;   :usize :isize :bool :char :String :&str :()
 ;;
 ;; Algebra — :Holon is an enum; :Atom, Bind, Bundle, Permute,
-;;   :Thermometer, Blend, Orthogonalize
+;;   :Thermometer, Blend
 ;;   are its seven variants (not separate subtypes). Pattern-match to
 ;;   select variant behavior.
 ;;
@@ -2891,7 +2913,7 @@ The implementation choice is outside FOUNDATION's scope. FOUNDATION declares the
 
 058 produced 30 sub-proposals covering algebra core, algebra stdlib, and language core. Each argues its candidate against the criteria above. This section is the current inventory after the sub-proposal review pass, the split pass (one UpperCase form per doc), and the language-core addition.
 
-### Algebra Core (7 forms)
+### Algebra Core (6 forms)
 
 **Proposals that argue CORE status:**
 
@@ -2902,7 +2924,6 @@ The implementation choice is outside FOUNDATION's scope. FOUNDATION declares the
 (:wat/algebra/Permute child k)              ; 058-022  — primitive affirmation
 (:wat/algebra/Thermometer value min max)    ; 058-023  — primitive affirmation
 (:wat/algebra/Blend a b w1 w2)              ; 058-002  — PIVOTAL, two independent weights
-(:wat/algebra/Orthogonalize x y)            ; 058-005  — computed-coefficient projection removal
 ```
 
 **058-006 Resonance and 058-007 ConditionalBind are REJECTED.** Speculative primitives with no cited production use beyond unit tests. The "more general primitive" questions (Mask for Resonance, Select for ConditionalBind) reveal neither is the right level of abstraction. When real use demands them, propose with concrete evidence. See FOUNDATION-CHANGELOG 2026-04-18 entry.
@@ -2911,20 +2932,25 @@ The implementation choice is outside FOUNDATION's scope. FOUNDATION declares the
 
 **Blend is ACCEPTED.** Two independent real-valued scalar weights (Option B), negative weights allowed, binary arity. Formalizes scalar-weighted combination, enabling Circular/Amplify/Subtract as stdlib macros. (Flip 058-020 REJECTED separately.) See 058-002/PROPOSAL.md's ACCEPTED banner for the full reasoning.
 
-**Orthogonalize replaces Negate.** The original Negate proposal had three modes; 058 split them: `orthogonalize` became its own CORE (computed coefficient, not a Blend idiom); `subtract` became a stdlib Blend idiom (058-019); `flip` (058-020) REJECTED — see its PROPOSAL.md for rationale.
+**Negate decomposed to three stdlib macros — one rejected.** The original Negate proposal had three modes; 058 split and reclassified them: `subtract` → stdlib Blend idiom (058-019); `flip` → REJECTED (058-020, no production use, magic weight); `orthogonalize` → stdlib Gram-Schmidt duo Reject/Project (058-005, renamed from Orthogonalize, uses Blend + `:wat/algebra/dot`). All three operations live in stdlib; the original Negate name does not appear in the shipped algebra.
 
-### Algebra Stdlib (17 forms)
+### Algebra Stdlib (18 forms)
 
 **Proposals that argue STDLIB status — each one form per doc:**
 
 ```scheme
-;; Blend-derived idioms (6)
-(:wat/std/Difference a b)               ; 058-004  — delta, Blend(a, b, 1, -1)
+;; Blend-derived idioms (accepted)
 (:wat/std/Amplify x y s)                ; 058-015  — scale y's emphasis, Blend(x, y, 1, s)
 (:wat/std/Subtract x y)                 ; 058-019  — remove y linearly, Blend(x, y, 1, -1)
-(:wat/std/Linear v scale)               ; 058-008  — Blend over two Thermometer anchors
-(:wat/std/Log v min max)                ; 058-017  — same shape, log-normalized
-(:wat/std/Circular v period)            ; 058-018  — same shape, sin/cos weights
+(:wat/std/Log v min max)                ; 058-017  — Blend over log-transformed inputs
+(:wat/std/Circular v period)            ; 058-018  — Blend of cos/sin-basis atoms
+
+;; Gram-Schmidt duo (058-005) — use :wat/algebra/dot + Blend
+(:wat/std/Reject x y)                   ; x with y's direction removed (was Orthogonalize)
+(:wat/std/Project x y)                  ; x's component along y; = Subtract(x, Reject(x, y))
+
+;; Rejected Blend-derived names: Difference (058-004), Linear (058-008),
+;; Flip (058-020) — see individual PROPOSAL.md REJECTED banners.
 
 ;; Structural compositions (5)
 (:wat/std/Sequential list)              ; 058-009  — reframing: Bundle of index-permuted
@@ -3036,13 +3062,13 @@ If you are auditing a specific change, read the changelog alongside this documen
 
 2. ~~**Stdlib optimization path.**~~ **RESOLVED — dissolves into the cache.** Q2 rested on a false distinction. After 058-031 macro expansion, a stdlib form's AST and a user-written AST with the same shape are literally the same AST — same hash, same cache entry, same encoding cost. There is no "stdlib form" tier to optimize at runtime because after parse-time expansion, stdlib forms don't exist as distinct nodes. The optimization story for ALL composed forms — stdlib or user — is the L1/L2 holon cache hitting on recurring subtrees (Proposal 057); the encoder walks the AST once, subtree vectors cache, repeated substructure pays encoding cost once. If an expression is big, it's big — the AST IS the program. No Rust-side helper tier. No dual implementation. One source (the wat macro), one walker (the encoder), one cache (L1/L2). A "hot stdlib form" is indistinguishable, after expansion, from any other hot composed AST; both are served by the same cache.
 
-3. ~~**Enum-retained stdlib policy.**~~ **RESOLVED.** 058-008 Linear REJECTED (redundant with Thermometer under the 3-arity signature). Log (058-017), Circular (058-018), Sequential (058-009) are stdlib macros that expand to core compositions at parse time. 058-031 defmacro runs the expansion before hashing. The enum variants for Linear/Log/Circular/Sequential can be removed from HolonAST; the stdlib lives entirely as wat macros over the nine core variants (Atom, Bind, Bundle, Permute, Thermometer, Blend, Orthogonalize).
+3. ~~**Enum-retained stdlib policy.**~~ **RESOLVED.** 058-008 Linear REJECTED (redundant with Thermometer under the 3-arity signature). Log (058-017), Circular (058-018), Sequential (058-009) are stdlib macros that expand to core compositions at parse time. 058-031 defmacro runs the expansion before hashing. The enum variants for Linear/Log/Circular/Sequential can be removed from HolonAST; the stdlib lives entirely as wat macros over the six core variants (Atom, Bind, Bundle, Permute, Thermometer, Blend).
 
 4. ~~**Cache behavior for stdlib.**~~ **RESOLVED** by 058-031. Macros expand at parse time, BEFORE hashing. The canonical (post-expansion) AST is what hashes and caches. Two source files that differ only in macro aliases — `(Subtract a b)` vs `(Blend a b 1 -1)`, `(Concurrent xs)` vs `(Bundle xs)` — produce the same expanded AST and the same hash. No separate canonicalization layer needed; the expansion pass IS the canonicalization.
 
 5. ~~**Ngram's `n` parameter handling.**~~ **RESOLVED.** `Ngram` with different `n` produces a different expanded AST (different Sequential-encoded windows bundled). The integer `n` lives in the structural form after macro expansion, so the cache key naturally distinguishes `(Ngram 2 xs)` from `(Ngram 3 xs)`. No special handling needed beyond the generic expansion + hash pipeline.
 
-6. ~~**The MAP canonical set completeness.**~~ **RESOLVED — wrong question.** "Completeness" is unanswerable without knowing every future application; any answer is either speculation or circular. The honest framing is narrower and true: **this is the set we know we need right now**, argued by the forms the 058 sub-proposals successfully defended against FOUNDATION's criterion. The seven algebra-core variants — `Atom`, `Bind`, `Bundle`, `Permute`, `Thermometer`, `Blend`, `Orthogonalize` — cover every operation 058 identified after the Resonance/ConditionalBind rejection pass; that's the claim. If a future application reveals a primitive that cannot be expressed with existing forms, a new proposal argues it against the criterion (demonstrates a distinct algebraic operation; is domain-agnostic; the encoder must treat it distinctly) and adds it. The proposal process IS the extension mechanism. Same spirit as the stdlib-as-blueprint rule: don't ship forms speculatively; ship only what demonstrates a distinct pattern you need today. Not "is this the complete set?" but "is this every form we know we need?" — yes.
+6. ~~**The MAP canonical set completeness.**~~ **RESOLVED — wrong question.** "Completeness" is unanswerable without knowing every future application; any answer is either speculation or circular. The honest framing is narrower and true: **this is the set we know we need right now**, argued by the forms the 058 sub-proposals successfully defended against FOUNDATION's criterion. The six algebra-core variants — `Atom`, `Bind`, `Bundle`, `Permute`, `Thermometer`, `Blend` — cover every vector-producing operation 058 identified after the Resonance/ConditionalBind rejections and the Orthogonalize → stdlib reframe (Reject/Project live at `:wat/std/` over Blend + `:wat/algebra/dot`). If a future application reveals a primitive that cannot be expressed with existing forms, a new proposal argues it against the criterion (demonstrates a distinct algebraic operation; is domain-agnostic; the encoder must treat it distinctly) and adds it. The proposal process IS the extension mechanism. Same spirit as the stdlib-as-blueprint rule: don't ship forms speculatively; ship only what demonstrates a distinct pattern you need today. Not "is this the complete set?" but "is this every form we know we need?" — yes.
 
 7. ~~**`:allow-redef` expression syntax.**~~ **RESOLVED — by analogy with `:user/main`.** Datamancer's insight: "user declares main by name." The `:user/main` entry-point convention dictates the resolution for redef too. The user doesn't need a special syntax to express "this redefines an existing name"; they just **USE the name**. The CLI flag `redef-mode=:allow-redef` at wat-vm startup permits later-loaded definitions to replace earlier ones; the user expresses intent simply by writing `(define (:some/existing/name ...) ...)` with a name that already exists in a prior-loaded file. The wat-vm logs each replacement (prior file + new file + resolved body) for audit. No per-file pragma, no `(redefines ...)` form at the definition site, no startup manifest directive — just the mode flag at the system level, and "using the name" at the declaration level. Same shape as `:user/main`: kernel-looked-up slot filled by the user's declaration. The mode is a system-wide opt-in; the syntax IS the declaration.
 
@@ -3050,7 +3076,7 @@ If you are auditing a specific change, read the changelog alongside this documen
 
 ## Summary
 
-- **Foundation** = MAP VSA (Multiply-Add-Permute) + Atom identity + scalar primitive (Thermometer) + scalar-weighted combination (Blend) + projection-removal (Orthogonalize)
+- **Foundation** = MAP VSA (Multiply-Add-Permute) + Atom identity + scalar primitive (Thermometer) + scalar-weighted combination (Blend) + scalar-returning measurements (cosine, dot)
 - **Core** = new algebraic operation, lives in HolonAST enum, requires new Rust encoder logic
 - **Stdlib** = composition of existing core forms, lives in wat, no Rust changes
 - **Target state** = 10 core + 16 stdlib
