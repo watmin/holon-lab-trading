@@ -93,9 +93,15 @@ Known deviations from spec, tracked separately:
   conform to the `?`-suffix predicate rule
 - [ ] split `(:wat::core::presence target ref)` (`:f64`) into
   `(:wat::algebra::cosine target ref)` (`:f64`, the measurement) and
-  `(:wat::core::presence? target ref)` (`:bool`, binarized against
-  noise floor). Callers who want the exact value reach for `cosine`;
-  callers who want the verdict reach for `presence?`.
+  `(:wat::algebra::presence? target ref)` (`:bool`, binarized against
+  noise floor). Both land at `:wat::algebra::*` per OPEN-QUESTIONS
+  line 419 — algebra substrate operations take holons, not raw
+  numbers. Callers who want the exact value reach for `cosine`;
+  callers who want the verdict reach for `presence?`. **Not** at
+  `:wat::std::math::*` — that namespace is for raw-number utilities
+  (`ln`, `sin`, `cos`, `pi`); math's `cos(theta)` and algebra's
+  `cosine(x, y)` share a root but do different things — angle vs
+  holon-similarity.
 - [ ] sweep other bare forms that are semantically predicates and
   rename to conform (one-pass audit)
 
