@@ -9,8 +9,8 @@ spec-level changes.
 `docs/proposals/2026/04/058-ast-algebra-surface/`
 — FOUNDATION.md, VISION.md, FOUNDATION-CHANGELOG.md.
 
-**Prior backlog:** `docs/archive/058-backlog.md` — Tracks 0/1/2
-through Phase 1 completion (2026-04-19 morning).
+**Prior backlog:** `archived/058-backlog.md` — Tracks 0/1/2 through
+Phase 1 completion (2026-04-19 morning).
 
 ---
 
@@ -122,5 +122,5 @@ informed by running real programs through them.
 
 ---
 
-When the queue empties, archive this document to `docs/archive/` with
-a dated name and open the next one for whatever arc is next.
+When the queue empties, archive this document to `archived/` with a
+dated name and open the next one for whatever arc is next.
