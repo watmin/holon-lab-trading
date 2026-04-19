@@ -13,7 +13,8 @@
 - `FOUNDATION-CHANGELOG.md` — audit trail of revisions to FOUNDATION. Decision, reasoning, where each change landed. Read alongside FOUNDATION when auditing a specific change.
 - `CORE-AUDIT.md` — affirmation records for Bind, Permute, Thermometer. Load-bearing core primitives already in holon-rs; audit-level entries, not proposals.
 - `VISION.md` — companion reading. Speculative framings: holographic/NP-hard lens, clouds-waking-up distributed cognition, lineage, metaprogramming-is-native. **Optional** — nothing in VISION is required to accept FOUNDATION.
-- `RUST-INTERPRETATION.md` — practical guide for implementing the wat-vm in Rust under Model A
+- `RUST-INTERPRETATION.md` — practical guide for implementing the wat-vm in Rust under Model A (the INTERPRET path).
+- `WAT-TO-RUST.md` — seed sketch of the COMPILE path: a Rust program consumes wat source and emits Rust source, which rustc compiles to a native binary. Two execution paths, one language. Iterate.
 - `HYPOTHETICAL-CANDLE-DESCRIBERS.wat` — worked example demonstrating programs-as-holons
 
 **Sub-proposals** (29 total, each argues one form):
