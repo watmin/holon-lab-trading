@@ -45,7 +45,7 @@ Read in order:
 
 These three are load-bearing; the rest depend on their resolution:
 
-5. **058-002-blend** — **ACCEPTED.** `(:wat/algebra/Blend a b w1 w2)` enters algebra core with two independent real-valued scalar weights (Option B), negative weights allowed, binary arity. Unblocks Circular/Amplify/Subtract/Flip as stdlib macros. See 058-002/PROPOSAL.md's ACCEPTED banner for the per-question reasoning.
+5. **058-002-blend** — **ACCEPTED.** `(:wat/algebra/Blend a b w1 w2)` enters algebra core with two independent real-valued scalar weights (Option B), negative weights allowed, binary arity. Unblocks Circular/Amplify/Subtract as stdlib macros. (Flip 058-020 REJECTED.) See 058-002/PROPOSAL.md's ACCEPTED banner for the per-question reasoning.
 
 6. **058-001-atom-typed-literals** — generalizes `Atom` to accept any typed literal (string, int, float, bool, keyword). Required before data-structure stdlib (HashMap, Vec) can use typed keys.
 
@@ -94,7 +94,7 @@ New named compositions:
 22. **058-004-difference** — `Blend(a, b, 1, -1)`, delta framing.
 23. **058-015-amplify** — `Blend(x, y, 1, s)`, scaled emphasis.
 24. **058-019-subtract** — `Blend(x, y, 1, -1)`, removal framing (sibling to Difference with different reader intent).
-25. **058-020-flip** — `Blend(x, y, 1, -2)`, linear inversion.
+25. **058-020-flip** — **REJECTED.** Primer's `flip` is single-arg elementwise negation; proposal's 2-arg Flip-with-weight-`-2` is a different operation with no cited production use.
 26. **058-010-concurrent** — **REJECTED** (2026-04-18). Redundant with Bundle; no runtime specialization. Enclosing context carries the temporal meaning. Kept as audit record. Userland may define it as a macro if needed.
 27. **058-011-then** — **REJECTED** (2026-04-18). Arity-specialization of Sequential; no new pattern. Userland macro if desired.
 28. **058-012-chain** — Bundle of pairwise Thens.
@@ -164,7 +164,6 @@ Shows which proposals must resolve before which others. Arrows flow from prerequ
    058-002 (Blend) ─┬─> 058-004 (Difference)
                    ├─> 058-015 (Amplify)
                    ├─> 058-019 (Subtract)
-                   ├─> 058-020 (Flip)
                    ├─> 058-008 (Linear) ──┐
                    ├─> 058-017 (Log)      ├─> all need Thermometer (audited, CORE-AUDIT.md)
                    └─> 058-018 (Circular) ┘
@@ -203,7 +202,7 @@ Shows which proposals must resolve before which others. Arrows flow from prerequ
                    ──> also: load, load-types (FOUNDATION-integrated)
 ```
 
-**Resolve Blend early.** It unblocks 7+ stdlib proposals and refines the algebra's shape. If Blend is rejected, several reframings revert (Linear/Log/Circular go back to CORE variants), and Difference/Amplify/Subtract/Flip re-propose as core.
+**Resolve Blend early.** It unblocks 7+ stdlib proposals and refines the algebra's shape. If Blend is rejected, several reframings revert (Linear/Log/Circular go back to CORE variants), and Difference/Amplify/Subtract re-propose as core. (Flip 058-020 REJECTED.)
 
 **Resolve types early.** They unblock `define` and `lambda`, which together unblock the entire stdlib.
 
@@ -232,7 +231,7 @@ Shows which proposals must resolve before which others. Arrows flow from prerequ
 | 017 | Log | STDLIB | reframing | Thermometer with log-transformed inputs; distinct encoding pattern |
 | 018 | Circular | STDLIB | reframing | Same skeleton, sin/cos weights — tests Blend Option B |
 | 019 | Subtract | STDLIB | new | `Blend(x, y, 1, -1)`, removal framing |
-| 020 | Flip | STDLIB | new | `Blend(x, y, 1, -2)`, linear inversion |
+| 020 | Flip | REJECTED | — | Primer's `flip` is single-arg elementwise negation; proposal's 2-arg form has no cited use; `-2` weight is magic |
 | 021 | Bind | CORE | audited | See `CORE-AUDIT.md`. Existing primitive, MAP's "M" |
 | 022 | Permute | CORE | audited | See `CORE-AUDIT.md`. Existing primitive, MAP's "P" |
 | 023 | Thermometer | CORE | audited | See `CORE-AUDIT.md`. Scalar-gradient primitive with canonical layout |

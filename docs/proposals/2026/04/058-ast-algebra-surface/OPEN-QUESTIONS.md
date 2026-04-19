@@ -180,7 +180,7 @@ Everything else in this document is RESOLVED inline (with a pointer to the resol
 
 1. **`s = 1` degeneracy.** `(Amplify x y 1)` ≡ `(Bundle [x y])`. Should Amplify document this, or restrict `s ≠ 1`? Recommendation: document, don't restrict.
 
-2. **Negative `s` overlap with Subtract / Flip.** `(Amplify x y -1)` ≡ `(Subtract x y)`, `(Amplify x y -2)` ≡ `(Flip x y)`. Recommendation: freely allow overlap; stylistic preference picks the most specific name.
+2. **Negative `s` overlap with Subtract / Flip.** `(Amplify x y -1)` ≡ `(Subtract x y)`, `(Amplify x y -2)` (formerly proposed as the stdlib `Flip`, now REJECTED). Recommendation: freely allow overlap; stylistic preference picks the most specific name.
 
 3. **Attenuation variant?** Some applications want "reduce `y`'s contribution" specifically (`0 < s < 1`). Could be a named variant `Attenuate` for clarity. Recommendation: no — avoid further proliferation. `(Amplify x y 0.5)` suffices; if users want a name for attenuation they can define their own stdlib alias.
 
@@ -254,19 +254,10 @@ Everything else in this document is RESOLVED inline (with a pointer to the resol
 
 ---
 
-## 058-020: Flip
+## 058-020: Flip — REJECTED
 
-1. **Naming: `Flip` or alternative?** "Flip" overloads with "negate a vector" in general VSA usage. Alternatives: `Invert`, `Counter`, `Oppose`. Recommendation: keep `Flip` to match holon's existing naming; document clearly.
+**All questions in this section are MOOT.** 058-020 was rejected for three reasons: (1) the primer's `flip` is single-arg elementwise negation, not the proposal's 2-arg Blend idiom — same name, different operation; (2) the `-2` weight is a tradition-matching convention, not an algebraic minimum (any weight `< -1` produces the same thresholded result); (3) no cited production use beyond unit tests. The operation is trivially expressible inline as `(:wat/algebra/Blend x y 1 -2)` when needed. See FOUNDATION-CHANGELOG 2026-04-18 entry and 058-020/PROPOSAL.md REJECTED banner. Designers need not opine.
 
-2. **Rigor of the `-2` weight.** Flip's weight `-2` is the MINIMUM value that flips agreed dimensions. Larger negative weights (`-3`, `-4`) produce the same flipped sign but differ in pre-threshold magnitude. Should Flip's stdlib form offer a strength parameter (`Flip(x, y, strength)`) or fix at `-2`? Recommendation: fix at `-2` (canonical minimum); users wanting stronger inversion use Amplify with their chosen negative weight.
-
-3. **Usage patterns in holon-lab-trading.** Are there domain vocabularies that need Flip specifically? If not, the stdlib name is theoretical — useful for completeness but not load-bearing for current work.
-
-4. **Dependency on 058-002-blend.** If rejected, Flip re-proposes as part of a core Negate variant (reverts to FOUNDATION's original 3-mode plan).
-
-5. **Relationship to Orthogonalize.** Flip is linear inversion; Orthogonalize removes the projected direction. Flip is cheap; Orthogonalize requires a dot product. Documentation should distinguish when to use each — "are you removing y linearly (Flip) or removing y's direction geometrically (Orthogonalize)?"
-
-6. **Is Flip the right completion of the Negate trilogy?** Original Negate had subtract/flip/orthogonalize modes. This proposal completes the trilogy with Flip as the stdlib companion to Subtract and the non-core companion to Orthogonalize. Are designers satisfied with this split, or would they prefer a different decomposition?
 
 ---
 
@@ -412,7 +403,7 @@ Bind, Permute, and Thermometer are affirmed core primitives already present in h
 5. **Signature-verification over expansion — RESOLVED via 058-031.** The hash used for cryptographic identity is on the EXPANDED AST (per FOUNDATION's Model A). Two semantically-identical source files that differ only in macro aliases produce the same expanded AST and the same hash. Source signatures are a separate concern (author identity vs. content identity).
 
 6. **Stdlib aliases as macros — complete list, partial resolution.** 058-031 anticipated ~13-14 stdlib proposals changing from `define` to `defmacro`. Landed state:
-   - **Accepted as macros**: 058-012 Chain, 058-013 Ngram, 058-014 Analogy, 058-015 Amplify, 058-019 Subtract, 058-020 Flip, 058-016 HashMap, 058-026 Vec, 058-027 HashSet, 058-017 Log, 058-018 Circular, 058-009 Sequential (reframed).
+   - **Accepted as macros**: 058-012 Chain, 058-013 Ngram, 058-014 Analogy, 058-015 Amplify, 058-019 Subtract, 058-016 HashMap, 058-026 Vec, 058-027 HashSet, 058-017 Log, 058-018 Circular, 058-009 Sequential (reframed). (058-020 Flip REJECTED.)
    - **REJECTED** (stdlib-as-blueprint test failed; no distinct pattern): 058-004 Difference, 058-008 Linear, 058-010 Concurrent, 058-011 Then, 058-024 Unbind, 058-025 Cleanup.
    - Users may define the rejected forms in their own namespaces as macros if they want the name.
 
@@ -449,7 +440,7 @@ Bind, Permute, and Thermometer are affirmed core primitives already present in h
 - ~~058-015 Q4~~ — Amplify becomes `(:wat/algebra/Blend x y 1 s)`; stdlib macro unblocked.
 - ~~058-018 Q3~~ — Circular becomes `(:wat/algebra/Blend cos-basis sin-basis (cos θ) (sin θ))`; stdlib macro unblocked.
 - ~~058-019 Q4~~ — Subtract becomes `(:wat/algebra/Blend x y 1 -1)`; stdlib macro.
-- ~~058-020 Q4~~ — Flip becomes `(:wat/algebra/Blend x y 1 -2)`; stdlib macro.
+- ~~058-020 Q4~~ — Flip REJECTED; moot.
 - **Status:** Blend is ACCEPTED. All downstream stdlib macros are unblocked. Designer review may still reopen Blend in Round 3; the downstream cascade adapts to whatever final shape designers affirm.
 
 ### Theme: Naming — alias proliferation vs. reader-intent clarity — LARGELY RESOLVED
@@ -457,7 +448,7 @@ Bind, Permute, and Thermometer are affirmed core primitives already present in h
 - ~~058-010 Q1/Q5~~ — Concurrent REJECTED.
 - ~~058-011 Q3~~ — Then REJECTED (reverse form question moot).
 - ~~058-019 Q1/Q2~~ — Subtract is the canonical delta; Difference rejected; "Remove" considered and dropped.
-- 058-020 Q1 — Flip vs Invert/Counter/Oppose — LIVE (doc-only; recommendation: keep Flip to match holon-rs).
+- ~~058-020 Q1~~ — Flip REJECTED; moot.
 - ~~058-024 Q1/Q6~~ — Unbind REJECTED.
 - ~~058-026 Q1~~ — Array stays; renamed Vec per container-rename decision.
 - 058-027 Q1/Q5 — Set as third Bundle-alias; Group/Collection/Multiset naming — LIVE (doc-only).

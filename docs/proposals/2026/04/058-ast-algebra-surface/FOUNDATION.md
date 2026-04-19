@@ -1747,7 +1747,7 @@ Algebra Core     Atom, Bind, Bundle, Permute, Thermometer, Blend,
     ↓            (what produces holon vectors)
     ↓
 Stdlib           Sequential, Chain, Ngram, Analogy,
-                 Amplify, Subtract, Flip, HashMap, Vec, HashSet,
+                 Amplify, Subtract, HashMap, Vec, HashSet,
                  Linear, Log, Circular, ...
                  (named compositions — defined with language core, using algebra core)
 ```
@@ -1917,7 +1917,6 @@ wat/std/
       wat/std/Log.wat             ;; :wat/std/Log            (macro)
       wat/std/Circular.wat        ;; :wat/std/Circular       (macro)
       wat/std/Sequential.wat      ;; :wat/std/Sequential     (macro)
-      wat/std/Flip.wat            ;; :wat/std/Flip           (macro)
       wat/std/LocalCache.wat      ;; :wat/std/LocalCache     (data + functions)
       wat/std/cached-encode.wat   ;; :wat/std/cached-encode  (function)
       ... one file per form.
@@ -2832,9 +2831,9 @@ The implementation choice is outside FOUNDATION's scope. FOUNDATION declares the
 
 **058-025 Cleanup is REJECTED.** The wat substrate has no `Cleanup` primitive — the AST-primary framing dissolves the need for codebook-based recovery. Retrieval is presence measurement (cosine + noise floor); argmax-over-candidates, when an application needs it, is stdlib composition over presence, not a core primitive. See "Presence is Measurement, Not Verdict" in FOUNDATION.
 
-**Blend is ACCEPTED.** Two independent real-valued scalar weights (Option B), negative weights allowed, binary arity. Formalizes scalar-weighted combination, enabling Circular/Amplify/Subtract/Flip as stdlib macros. See 058-002/PROPOSAL.md's ACCEPTED banner for the full reasoning.
+**Blend is ACCEPTED.** Two independent real-valued scalar weights (Option B), negative weights allowed, binary arity. Formalizes scalar-weighted combination, enabling Circular/Amplify/Subtract as stdlib macros. (Flip 058-020 REJECTED separately.) See 058-002/PROPOSAL.md's ACCEPTED banner for the full reasoning.
 
-**Orthogonalize replaces Negate.** The original Negate proposal had three modes; 058 split them: `orthogonalize` became its own CORE (computed coefficient, not a Blend idiom); `subtract` and `flip` became stdlib Blend idioms (058-019, 058-020).
+**Orthogonalize replaces Negate.** The original Negate proposal had three modes; 058 split them: `orthogonalize` became its own CORE (computed coefficient, not a Blend idiom); `subtract` became a stdlib Blend idiom (058-019); `flip` (058-020) REJECTED — see its PROPOSAL.md for rationale.
 
 ### Algebra Stdlib (17 forms)
 
@@ -2845,7 +2844,6 @@ The implementation choice is outside FOUNDATION's scope. FOUNDATION declares the
 (:wat/std/Difference a b)               ; 058-004  — delta, Blend(a, b, 1, -1)
 (:wat/std/Amplify x y s)                ; 058-015  — scale y's emphasis, Blend(x, y, 1, s)
 (:wat/std/Subtract x y)                 ; 058-019  — remove y linearly, Blend(x, y, 1, -1)
-(:wat/std/Flip x y)                     ; 058-020  — invert y's contribution, Blend(x, y, 1, -2)
 (:wat/std/Linear v scale)               ; 058-008  — Blend over two Thermometer anchors
 (:wat/std/Log v min max)                ; 058-017  — same shape, log-normalized
 (:wat/std/Circular v period)            ; 058-018  — same shape, sin/cos weights
@@ -2903,7 +2901,7 @@ Language core is minimal by criterion: just enough to make the algebra stdlib ex
 
 ### Dependency Ordering
 
-- **Blend (058-002) resolves early.** Downstream stdlib (Linear, Log, Circular, Difference, Amplify, Subtract, Flip, Analogy) depend on its resolution.
+- **Blend (058-002) ACCEPTED.** Downstream stdlib that became Blend macros: Circular, Amplify, Subtract. (Linear, Difference, Flip — REJECTED. Log, Analogy — see their own sections.)
 - **Types (058-030) resolves before define/lambda.** The definition forms' signatures require the type grammar.
 - **Define/lambda (058-028, 058-029) resolve before all stdlib.** Stdlib is `(define ...)` forms; without the definition primitive, stdlib is theoretical.
 - **Atom typed literals (058-001) resolves before HashMap and data-structure uses.** Keys as typed atoms require the typed-literal generalization.
