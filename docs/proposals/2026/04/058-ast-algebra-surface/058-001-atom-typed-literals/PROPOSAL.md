@@ -1,9 +1,107 @@
-# 058-001: `Atom` — Typed Literal Generalization
+# 058-001: `Atom<T>` — Parametric Atom as Substrate for Programs-as-Values
 
 **Scope:** algebra
-**Class:** CORE (signature generalization, no new variant)
+**Class:** CORE — **ACCEPTED (parametric)** 2026-04-18
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
+
+---
+
+## ACCEPTED as parametric — 2026-04-18
+
+Atom accepts into core as `:Atom<:T>` — **parametric over any serializable T**. Not just primitives (str, int, float, bool, keyword) — also `:Holon` (any AST node, including composite programs), user-defined struct/enum/newtype, any type the language admits.
+
+### Why parametric and not primitive-only
+
+FOUNDATION's "Programs ARE Holons" principle says every wat program is a holon AST. Without parametric Atom, you cannot **atomize** a program — cannot give it an opaque-identity vector, cannot store it in a library keyed by its own hash, cannot compare it cosine-wise against other programs, cannot Bind it to metadata.
+
+Datamancer 2026-04-18: *"This is part of our substrate... if we can't host programs as atoms we're not doing it honest."*
+
+Correct. Parametric Atom is substrate-level, not feature-level.
+
+### The operation
+
+```scheme
+;; primitives — unchanged
+(:wat/algebra/Atom 42)                      ;; :Atom<:i64>
+(:wat/algebra/Atom "foo")                   ;; :Atom<:String>
+(:wat/algebra/Atom :some/keyword)           ;; :Atom<:Keyword>
+
+;; composite holons — programs, bundles, binds, any AST
+(:wat/algebra/Atom some-bundle)             ;; :Atom<:Holon>
+(:wat/algebra/Atom trained-model-program)   ;; :Atom<:Holon>
+
+;; user-defined types — any struct, enum, newtype
+(:wat/algebra/Atom (my-candle ...))         ;; :Atom<:my/types/Candle>
+(:wat/algebra/Atom (my-wrapper 42))         ;; :Atom<:my/app/Wrapper<:i64>>
+```
+
+The hash for every variant is `hash(type-tag, canonical-EDN(value))` producing a deterministic seeded-random vector in `{-1, 0, +1}^d`. The type-tag makes `Atom<:i64>` and `Atom<:String>` holding the same bytes hash differently. EDN serialization is the universal canonical form (FOUNDATION's cryptographic provenance chain).
+
+### Extraction — polymorphic
+
+```scheme
+(:wat/core/define (:wat/std/atom-value (a :Atom<:T>) -> :T)
+  ;; Returns the inner T directly. Single polymorphic function;
+  ;; type-checker infers T at each call site.
+  ...)
+
+(:wat/std/atom-value (:wat/algebra/Atom 42))           ;; → 42 as :i64
+(:wat/std/atom-value (:wat/algebra/Atom some-bundle))  ;; → some-bundle as :Holon
+(:wat/std/atom-value (:wat/algebra/Atom my-candle))    ;; → the Candle struct
+```
+
+No tagged-union unwrapping, no match. The atom's parametric T carries the type through.
+
+### Two encodings of any composite — both legitimate
+
+For a composite `b = (Bundle [x y z])`:
+
+| Form | Hash input | Vector | Structure recovery |
+|---|---|---|---|
+| `b` directly | structural (walk children) | composed from sub-vectors | `unbind` recovers parts |
+| `(:wat/algebra/Atom b)` | opaque (EDN serialization) | seeded-random, one leaf | not recoverable from vector |
+
+Different use cases:
+- Direct encoding when structure matters (analogy, presence of constituents).
+- Atomized wrapping when identity matters (library keying, opaque naming, program-as-pointer).
+
+### The three Questions from 058's original draft, closed
+
+**Q1 — typed hash categorically sound?** YES.
+
+`hash(type-tag, bytes)` is the canonical tagged-union encoding. Coproduct payload + tag is how every typed-serialization library encodes ADTs (bincode, CBOR, Protobuf oneof). Beckman-compatible: `Atom : (T is Serializable) → :Holon` with hash respecting the coproduct structure. Hickey-compatible: type and value are orthogonal, not braided.
+
+**Q2 — one variant vs separate variants?** ONE (parametric).
+
+Not `AtomStr`/`AtomInt`/`AtomFloat`/... as separate HolonAST variants. One `Atom<T>` variant at the type level; at the Rust level, a type-tagged payload (or trait-object) that carries the canonical EDN form. Keeps the HolonAST enum at 7 variants — the small-enum virtue preserved. Pattern-matching through the `Atom<T>` parametric is handled by type-inference, not by variant-count.
+
+**Q3-Q6** — resolved earlier: no `:Null`, keyword-naming-by-convention, additive backward compat, vector-side type erasure inherent.
+
+### What this unlocks across 058
+
+**For 058 itself:**
+
+- **Engram libraries of programs.** `(:wat/std/HashMap :pattern-1 (:wat/algebra/Atom prog-1) :pattern-2 (:wat/algebra/Atom prog-2))` — a learned population of programs, keyed by name, each with its own identity vector.
+- **Program similarity search.** `(:wat/algebra/cosine (:wat/algebra/Atom query-prog) (:wat/algebra/Atom candidate-prog))` — compare programs on the unit sphere. Identical programs have cosine = 1; different programs cosine ≈ 0.
+- **Program bundling.** `(:wat/algebra/Bundle list-of-atomized-programs)` — superposition of programs. Learn against the bundle.
+- **Program binding.** `(:wat/algebra/Bind (:wat/algebra/Atom prog) (:wat/algebra/Atom outcome))` — associate program with result. Compose to build learning loops.
+- **Program analogy.** Reserved for the future when 058-014 graduates from DEFERRED: `(Analogy (Atom prog-a) (Atom prog-b) (Atom prog-c))` — A:B::C:? across programs.
+
+**For 058-030 and 058-032:**
+
+Parametric Atom requires parametric polymorphism. Accepting 058-001 as parametric commits 058-030 and 058-032 to the larger parametric story (see their updated ACCEPTED banners). The algebra cannot support parametric Atom without the type system that expresses it. Accept the substrate; accept the type system that carries it.
+
+**For applications:**
+
+- **Trading lab:** trained observer state can be atomized, libraries of observer patterns keyed by hash, cross-observer similarity measurement.
+- **DDoS lab:** atomized attack signatures, program-per-attack stored in rule libraries, similarity across attack variants.
+- **MTG lab:** atomized card-decisions, deck-as-atom identity, archetype libraries.
+- **Any future app:** if it generates programs, it atomizes them and stores them. Universal pattern.
+
+---
+
+## Historical content (preserved as audit record)
 
 ## The Candidate
 

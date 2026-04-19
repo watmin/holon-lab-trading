@@ -47,7 +47,7 @@ These three are load-bearing; the rest depend on their resolution:
 
 5. **058-002-blend** — **ACCEPTED.** `(:wat/algebra/Blend a b w1 w2)` enters algebra core with two independent real-valued scalar weights (Option B), negative weights allowed, binary arity. Unblocks Circular/Amplify/Subtract as stdlib macros. (Flip 058-020 REJECTED.) See 058-002/PROPOSAL.md's ACCEPTED banner for the per-question reasoning.
 
-6. **058-001-atom-typed-literals** — generalizes `Atom` to accept any typed literal (string, int, float, bool, keyword). Required before data-structure stdlib (HashMap, Vec) can use typed keys.
+6. **058-001-atom-typed-literals** — **ACCEPTED (parametric).** `(:wat/algebra/Atom x)` accepts any serializable T — primitive, composite `:Holon`, or user-defined type. Substrate-level: enables programs-as-atoms, engram libraries of learned programs, cryptographically-identified program storage.
 
 7. **058-030-types** — the type system for language core. Required before `define` (058-028) and `lambda` (058-029) can have typed signatures.
 

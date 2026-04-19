@@ -584,7 +584,7 @@ New language-core forms (alongside `define` and `lambda`), all compile-time-regi
 
 ## Questions for Designers
 
-1. **Generics scope.** Is `:fn(args)->return` and `:List<T>` (plus `:HashMap<K,V>`, `:Option<T>`, `:Result<T,E>`, `:Pair<T,U>`, `:Union<T,U,V>`, `:Arc<T>`, `:Vec<T>`) sufficient, or do we need bounds (`T: Holon`), higher-kinded types, or existentials? Recommendation: start minimal — the host-inherited parametric constructors plus user parametric types via `struct`/`enum`/`typealias` parametric declarations. Add bounds if stdlib needs emerge.
+1. **Generics scope.** — **RESOLVED 2026-04-18 to YES on parametric polymorphism across the board.** The language ships parametric user types (`struct`/`enum`/`newtype`/`typealias` all accept type parameters), parametric functions (type variables in signatures), and parametric `Atom<T>` as substrate. Reasoning in FOUNDATION-CHANGELOG 2026-04-18 entry "Parametric polymorphism as substrate — programs ARE atoms, which demands it." The "start minimal" recommendation in the original draft is reversed: parametric Atom is load-bearing for the programs-as-holons principle (058-001), and you cannot have parametric Atom without the type system that expresses it. Higher-kinded types and type bounds (`T: Trait`) remain deferred — add when stdlib needs emerge. First-order parametric polymorphism (rank-1) is the commit.
 
 2. **Type inference strength.** Parameter types on `define`/`lambda` are required. Should all intermediate expressions be inferred, or should `let` support optional type annotations? Recommendation: infer intermediates; allow optional `(let (((x :Holon) (Blend a b 1 -1))))` for explicit annotation when helpful.
 

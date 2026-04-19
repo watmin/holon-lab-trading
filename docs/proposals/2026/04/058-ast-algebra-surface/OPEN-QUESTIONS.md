@@ -10,10 +10,6 @@
 
 The substantive decisions that still need designer opinions — everything else in this document is either RESOLVED (marked inline), MOOT (in a REJECTED proposal), or documentation-only.
 
-**058-001 Atom — typed literals.**
-- **Q1** Is the typed hash axis sound — `(type_tag, literal_bytes)` right shape?
-- **Q2** One variant `Atom(AtomLiteral)` or separate `AtomStr`/`AtomInt`/…?
-
 **058-005 Orthogonalize.**
 - **Q1** Orthogonalize as core vs. widened Blend with computed weights?
 - **Q2** Should `Project` also be proposed first-class (the complement)?
@@ -23,19 +19,10 @@ Everything else in this document is RESOLVED inline (with a pointer to the resol
 
 ---
 
-## 058-001: Atom — Typed Literals
+## 058-001: Atom — ACCEPTED (parametric)
 
-1. **Is the typed hash categorically sound?** The hash input is `(type_tag, literal_bytes)`. Different types with identical bytes produce different vectors. Is this the right axis of distinction — type first, then value — or should it be inverted (value first, then type), or collapsed (bytes only, letting the user provide a type-prefixed string if they want distinction)?
+**All questions in this section are RESOLVED.** Atom accepts into core as `:Atom<:T>` — parametric over any serializable T (primitive, composite `:Holon`, user-defined struct/enum/newtype). Substrate-level decision: without parametric Atom, programs cannot be atomized, which breaks FOUNDATION's "Programs ARE Holons" principle. See 058-001/PROPOSAL.md's ACCEPTED banner for the per-question reasoning, and FOUNDATION-CHANGELOG 2026-04-18 entry "Parametric polymorphism as substrate — programs ARE atoms, which demands it."
 
-2. **Should `Atom` remain one variant, or should typed atoms be distinct variants?** Option A: `Atom(AtomLiteral)` — one variant, internally tagged. Option B: `AtomStr(String)`, `AtomInt(i64)`, `AtomFloat(f64)`, etc. — separate variants. Option A is simpler and keeps the ThoughtAST enum small. Option B allows pattern-matching on literal type without destructuring the inner `AtomLiteral`. Which fits the algebra better?
-
-3. **What about `Null` as an atom?** — **RESOLVED.** `:Null` removed from wat; Rust has no null, wat follows. Absence of a value is `:Option<T>::None`; structural absence is simply a form not being present. `Atom` accepts string/int/float/bool/keyword literals — no null. See FOUNDATION-CHANGELOG 2026-04-18 entry "Type grammar locked to Rust-surface form; `:Any` and `:Null` removed."
-
-4. **Keyword naming conventions — no namespace mechanism.** The language does NOT have namespaces as a structural feature. Slashes in keyword names are just characters — `:wat/std/cos-basis` is a single keyword whose name is `wat/std/cos-basis`. FOUNDATION uses the `:wat/std/...` prefix as a stdlib naming discipline to avoid collision with user atoms. Is naming convention alone sufficient, or does the language need a more robust collision-avoidance mechanism? (The type-aware hash ensures `(Atom :foo)` and `(Atom "foo")` differ; same-type collision is the user's responsibility.)
-
-5. **Backward compatibility.** Existing code uses `(Atom "string")` exclusively. The generalization is additive — all existing atoms remain valid. Is there any need to migrate existing string atoms to other types (e.g., atoms that represent integers-as-strings), or is the expectation that existing code continues to work unchanged while new code uses the right type?
-
-6. **Type erasure on the vector side.** The vector is bipolar regardless of the literal's type. If someone has ONLY a vector (no AST), they cannot recover the literal's type from the vector — cleanup against a codebook returns a candidate AST node, from which the literal (with type) can be read. Is this the right model, or should the type be recoverable from the vector somehow (seems impossible with deterministic hashing)?
 
 ---
 

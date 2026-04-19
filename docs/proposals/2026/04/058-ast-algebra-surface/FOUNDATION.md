@@ -311,6 +311,57 @@ Specific program-form AST variants (`Defn`, `If`, `Let`, `App`, etc.) are open q
 
 The FOUNDATION claim here is minimal: **programs CAN be expressed using the existing primitives, and the existing primitives are sufficient to compose arbitrary program shapes.** Specialized variants for ergonomics or evaluation performance are future decisions.
 
+### Programs ARE Atoms — the substrate corollary
+
+If programs ARE holons, then any program — as a single entity — can be **atomized**: wrapped in `Atom<T>` to receive an opaque-identity vector. `Atom` is parametric over any T (primitive, composite holon, user-defined type) under 058-001's acceptance. Atomizing a program means "this program is one named thing; give me a deterministic vector that identifies it by content."
+
+This unlocks the algebra's real power for self-referential reasoning:
+
+```scheme
+;; A program becomes an atomizable value:
+(:wat/algebra/Atom trained-model-program)   ;; :Atom<:Holon>
+
+;; Programs go in libraries keyed by identity:
+(:wat/std/HashMap
+  :run-1 (:wat/algebra/Atom prog-a)
+  :run-2 (:wat/algebra/Atom prog-b))
+
+;; Programs get Bundled — superposition of a program population:
+(:wat/algebra/Bundle (:wat/core/list
+  (:wat/algebra/Atom prog-1)
+  (:wat/algebra/Atom prog-2)
+  (:wat/algebra/Atom prog-3)))
+
+;; Programs get Bound to metadata:
+(:wat/algebra/Bind (:wat/algebra/Atom some-program)
+                   (:wat/algebra/Atom :outcome/success))
+
+;; Programs get compared by identity:
+(:wat/algebra/cosine (:wat/algebra/Atom prog-a)
+                     (:wat/algebra/Atom prog-b))
+;; different programs → cosine ≈ 0
+;; same program → cosine = 1 (deterministic)
+
+;; Extraction recovers the program:
+(:wat/std/atom-value (:wat/algebra/Atom prog-a))  ;; → prog-a, fully reconstituted
+;; Now eval it, walk it, modify it, spawn it.
+```
+
+Two encodings of the same composite — both valid:
+
+- **`prog-a` directly** → structural vector (children composed); structure recoverable via unbind; good for analogy-on-structure, presence-of-subparts.
+- **`(:wat/algebra/Atom prog-a)`** → opaque-identity vector (EDN-hashed); structure not recoverable from vector; good for library keys, program similarity by identity, binding programs to metadata.
+
+Applications choose per use case.
+
+**This is the substrate for:**
+- Engram libraries of learned programs (DDoS attack signatures, trading observer patterns, MTG deck archetypes).
+- Content-addressable program storage (SHA256 of EDN → cache key, identity claim, cryptographic provenance).
+- Population-level learning (Bundle of atomized programs → population vector; measure drift, extract prototypes).
+- Higher-order reasoning (Bind program → outcome; Subtract program-before → program-after; learn transformations across programs).
+
+Without parametric Atom, none of these are expressible. With it, the algebra closes — programs are first-class values, atomizable like any other value, with identities carrying the weight of cryptographic hashes.
+
 ---
 
 <!-- MOVED TO VISION.md:

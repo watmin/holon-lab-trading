@@ -288,9 +288,19 @@ Each macro runs through the type checker at startup. Milliseconds for typical st
 
 All stdlib macro examples in 058-031 use bare `:AST` and must update to `:AST<T>`. Mechanical, one-time. Done as part of this proposal.
 
-**4. Polymorphic macros are out of scope.**
+**4. ~~Polymorphic macros are out of scope.~~ RESOLVED 2026-04-18 — parametric polymorphism ACCEPTED across the board.**
 
-A macro that wants to accept `AST<T>` for any T (the "debug-print works on any type" case) requires parametric polymorphism, which 058-030 does not currently provide for functions either. Such macros don't exist yet; if 058-030 adds polymorphism, macros follow. Not a loss — matches 058-030's existing discipline.
+058-001 Atom accepting as parametric `Atom<T>` required parametric polymorphism at the substrate level. 058-030 Q1 resolved to YES accordingly. Macros follow: a macro that takes `:AST<T>` for any T is legal, and `T` is a type variable bound at the macro's signature scope. The typical use — a macro that operates identically on any typed AST — becomes expressible. Example:
+
+```scheme
+(:wat/core/defmacro (:my/app/identity-macro (expr :AST<:T>) -> :AST<:T>)
+  `,expr)
+
+(:wat/core/defmacro (:my/app/safe-wrap (expr :AST<:T>) -> :AST<:Option<:T>>)
+  `(Some ,expr))
+```
+
+Type inference at macro invocation carries `T` through to the expansion's typed form. Matches the full-parametric story committed in FOUNDATION-CHANGELOG 2026-04-18 entry "Parametric polymorphism as substrate."
 
 ## Comparison
 
