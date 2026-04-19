@@ -580,7 +580,7 @@ Estimated ~500-800 lines of Rust for:
 
 **`struct`, `enum`, `newtype`, `typealias` forms:**
 
-New language-core forms (alongside `define` and `lambda`), all compile-time-registering. Build pipeline extracts them from wat files loaded via `(load-types ...)`, generates Rust code, compiles. See FOUNDATION's "All loading happens at startup" section for the pipeline description.
+New language-core forms (alongside `define` and `lambda`), all compile-time-registering. Build pipeline extracts them from wat files loaded via `(:wat/core/load! ...)`, generates Rust code, compiles. See FOUNDATION's "All loading happens at startup" section for the pipeline description.
 
 ## Questions for Designers
 

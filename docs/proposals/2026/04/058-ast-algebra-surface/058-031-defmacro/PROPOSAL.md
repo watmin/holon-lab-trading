@@ -161,7 +161,7 @@ Every Lisp since the 1960s has had macros. Common Lisp, Scheme, Racket, Clojure,
 
 **3. It is orthogonal to the holon algebra.**
 
-`defmacro` doesn't construct holon vectors; it constructs source ASTs. It operates at the language level, alongside `define`, `lambda`, `struct`, `enum`, `newtype`, `typealias`, `load`, `load-types`. Orthogonal to algebra core.
+`defmacro` doesn't construct holon vectors; it constructs source ASTs. It operates at the language level, alongside `define`, `lambda`, `struct`, `enum`, `newtype`, `typealias`, `load!`. Orthogonal to algebra core.
 
 **4. It is interpretable by the Rust-backed wat-vm.**
 
@@ -181,7 +181,7 @@ Under Model A, startup proceeds:
 8. Freeze symbol table and type environment.
 9. Enter main loop.
 
-**Step 2 is the new insertion.** Macros are registered at build time (same mechanism as type declarations — loaded via `load-macros "path.wat"` or embedded in compiled-in stdlib). The expansion pass walks every source AST and rewrites until fixpoint.
+**Step 2 is the new insertion.** Macros are registered at build time (same mechanism as type declarations — loaded via `(:wat/core/load! ...)` or embedded in compiled-in stdlib). The expansion pass walks every source AST and rewrites until fixpoint.
 
 ## Cryptographic Implications
 
@@ -196,7 +196,7 @@ But the HASH used in the content-addressed symbol table (per FOUNDATION's Model 
 
 This is the correct behavior. Signing guarantees "this file was produced by this author." Hashing the expanded AST identifies holons by their canonical semantic content.
 
-**An attacker cannot craft a malicious macro** that would pass signature verification and produce unexpected behavior. Macros are loaded at build time via the verified `load-macros` (or equivalent) form. Adding a new macro requires signing the file that introduces it. The expansion pass uses only verified macros. There is no path for unverified code to affect expansion.
+**An attacker cannot craft a malicious macro** that would pass signature verification and produce unexpected behavior. Macros are loaded at build time via the verified `(:wat/core/load! ...)` (or equivalent) form. Adding a new macro requires signing the file that introduces it. The expansion pass uses only verified macros. There is no path for unverified code to affect expansion.
 
 ## Type Checking
 
@@ -388,7 +388,7 @@ Classical Lisp macros can accidentally capture variable names. `(defmacro swap (
 
 **4. Complicates the compile-time story slightly.**
 
-Model A already had a careful compile-time vs runtime story (types compile-time, functions runtime, load vs load-types). Adding macros introduces one more compile-time form. Still clean; just one more concept.
+Model A already had a careful compile-time vs runtime story (types compile-time, functions runtime, load!). Adding macros introduces one more compile-time form. Still clean; just one more concept.
 
 **5. Interaction with types.**
 
@@ -401,7 +401,7 @@ If macros can expand to arbitrary forms, the type checker sees a different AST t
 | `define` | Runtime fn | Call time | Body | Function name + signature |
 | `lambda` | Runtime fn (anon) | Call time | Body | Lambda AST |
 | `struct`/`enum`/`newtype`/`typealias` | Compile-time type | Build time | N/A (declarative) | Type name + shape |
-| `load`/`load-types` | Startup | Startup | Reads file, registers | Files covered at startup |
+| `load!` | Startup | Startup | Reads file, registers all toplevel forms | Files covered at startup |
 | `defmacro` | Compile-time macro | Parse time | Expansion body (at parse) | The EXPANDED form (not the macro call) |
 
 `defmacro` is the only form that operates at parse time, producing syntactic transformations.

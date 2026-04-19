@@ -471,40 +471,36 @@ An AST in transmission is an **EDN string** — extensible data notation, a seri
 
 **EDN strings can be signed.** A trusted producer signs the EDN with a private key; any receiver can verify the signature against the known public key. **The AST has a cryptographic provenance.**
 
-**The wat-vm loads all code at startup.** Types (struct/enum/newtype/typealias) enter via `(load-types ...)`; functions (define) enter via `(load ...)`. Both happen before the main event loop starts. Once startup completes, the symbol table is frozen — no further code enters during runtime.
+**The wat-vm loads all code at startup.** A single form — `(:wat/core/load! ...)` — pulls in a file of any mixture of declarations: types (struct/enum/newtype/typealias), functions (define), macros (defmacro), config setters (set-<field>!). Everything happens before the main event loop starts. Once startup completes, the symbol table is frozen — no further code enters during runtime.
 
 This static-load model is a deliberate choice. Rust is a static-first host; implementing an unbounded dynamic Lisp on top would duplicate effort and widen the attack surface for little gain. The use cases the algebra addresses — trading, DDoS defense, MTG, truth engine — all have well-known vocab at startup. Dynamic holon COMPOSITION (building new ASTs at runtime) is supported and cheap. Dynamic code DEFINITION (adding new functions or types at runtime) is not supported, and is not needed.
 
 The trust boundary is therefore **the startup phase, not per-call**. Every code path the wat-vm will ever execute must pass verification before the main loop starts.
 
-### Startup loading: `load` and `load-types`
+### Startup loading: `load!`
 
-Both load forms happen at startup, with identical cryptographic modes:
+One form handles every loadable artifact. The file's contents declare what they are; the loader doesn't care whether you're pulling in types, macros, functions, or a mix — the loader reads, parses, and feeds all toplevel forms into the same startup pipeline. Declarations that register types register at the type phase; declarations that register macros register at the macro phase; declarations that register functions register at the define phase. One verb. Three cryptographic modes, identical across kinds:
 
 ```scheme
 ;; Unverified — trust the contents. Suitable for trusted local development.
-(:wat/core/load-types! "project/market/types.wat")
-(:wat/core/load!       "project/market/indicators.wat")
+(:wat/core/load! "project/market/types.wat")
+(:wat/core/load! "project/market/indicators.wat")
+(:wat/core/load! "project/market/macros.wat")
 
 ;; Hash-pinned — require the file to hash to a specific value.
 ;; Halts startup if the hash does not match.
-(:wat/core/load-types! "project/market/types.wat"        (md5 "abc123..."))
-(:wat/core/load!       "project/market/indicators.wat"   (md5 "def456..."))
+(:wat/core/load! "project/market/types.wat"        (md5 "abc123..."))
+(:wat/core/load! "project/market/indicators.wat"   (md5 "def456..."))
 
 ;; Signature-verified — require a valid signature from the named public key.
 ;; Halts startup if the signature is invalid.
-(:wat/core/load-types! "project/market/types.wat"        (signed <sig> <pub-key>))
-(:wat/core/load!       "project/market/indicators.wat"   (signed <sig> <pub-key>))
+(:wat/core/load! "project/market/types.wat"        (signed <sig> <pub-key>))
+(:wat/core/load! "project/market/indicators.wat"   (signed <sig> <pub-key>))
 ```
 
-The two forms differ only in what the loaded file is allowed to contain:
+A single loaded file may mix kinds freely — type declarations, macro definitions, function definitions, config setters. The startup pipeline sorts them by kind during its phases (config → type → macro-expand → resolve → type-check → freeze). No separate `load!` or `load-macros!` forms exist; one loader is enough because loading is *fetching the file and integrating its forms* — the form's own kind determines what phase registers it.
 
-- `(load-types ...)` files contain ONLY type declarations (`struct`, `enum`, `newtype`, `typealias`). A runtime form in such a file is a startup error.
-- `(load ...)` files contain ONLY function definitions (`define`). A type declaration in such a file is a startup error.
-
-The phase split persists at the FILE level for clarity — but both load operations happen at the same time (startup) and fail the same way (halt the wat-vm before the main loop starts).
-
-**If any load fails verification, the wat-vm refuses to run.** No partial state. No degraded mode. Either every piece of code passed its trust check, or nothing starts. This is exactly the semantic appropriate for a production substrate: you want certainty about what the machine will run.
+**If any `load!` fails verification, the wat-vm refuses to run.** No partial state. No degraded mode. Either every piece of code passed its trust check, or nothing starts. This is exactly the semantic appropriate for a production substrate: you want certainty about what the machine will run.
 
 ### The symbol table after startup
 
@@ -691,14 +687,16 @@ The config pass slots between parse and macro-expand so macros can read committe
 
 Step 2 halts on any of: missing required field, duplicate setter, type mismatch. `:user/main` never runs with a bad config. After step 7, the config is frozen for the life of the process; no runtime setter exists.
 
-### The toplevel shape of a real wat program
+### The toplevel shape of a real wat program — the entry file
+
+The **entry file** (the wat file the wat-vm starts from) has a two-part structure the parser enforces:
 
 ```scheme
-;; ─── Config first — the wat-vm refuses to start without these ───
+;; ─── Part 1: Config setters. Required. Must appear BEFORE any load!. ───
 (:wat/config/set-dims! 10000)
 (:wat/config/set-capacity-mode! :error)
 
-;; ─── Loads — pull in stdlib and project source ───
+;; ─── Part 2: Loads. Pull in stdlib and project source. ───────────────
 (:wat/core/load! "wat/std/Subtract.wat")
 (:wat/core/load! "wat/std/Chain.wat")
 (:wat/core/load! "wat/project/trading/candle.wat")
@@ -706,7 +704,11 @@ Step 2 halts on any of: missing required field, duplicate setter, type mismatch.
 (:wat/core/load! "wat/project/trading/main.wat")
 ```
 
-That is the whole toplevel. Everything else — types, macros, functions, `:user/main` — lives inside the loaded files. The parse pulls them in recursively, the config pass commits the two configs, the remaining startup phases run, and `:user/main` is invoked with the four stdio/signals handles.
+That is the whole entry file. Everything else — types, macros, functions, `:user/main` — lives inside the loaded files. The parser enforces the shape: every `set-*!` must syntactically precede every `load!`; a load before a setter halts parse. The reader sees every deployment choice before any file is fetched.
+
+**Loaded files cannot contain config setters.** Encountering `(:wat/config/set-*!)` inside a loaded file halts parse with "config setter in non-entry file; setters belong in the entry file only." Config is a **root-file responsibility**. Burying a `set-dims!` inside some transitive library would hide a load-bearing choice; the discipline forbids it.
+
+The parser processes the entry file first, runs the config pass, then recursively fetches and parses the loaded files. By the time any loaded file is parsed, `:wat/config` is already frozen — loaded code can read it but never set it.
 
 ### What this eliminates
 
@@ -2161,7 +2163,7 @@ The language core from 058 and this FOUNDATION polish pass:
 
 - `define` — named, typed function registration
 - `lambda` — typed anonymous functions with closure capture (runtime values, not symbol-table entries)
-- `load` — cryptographically-gateable module loading at startup, functions only
+- `load!` — cryptographically-gateable bring-in of a wat file at startup. One form, one verb, pulls in any mixture of declarations the file contains.
 
 **Type declaration forms (materialized at compile time into the Rust-backed wat-vm binary):**
 
@@ -2169,7 +2171,6 @@ The language core from 058 and this FOUNDATION polish pass:
 - `enum` — coproduct with typed variants
 - `newtype` — nominal alias over another type
 - `typealias` — structural alias; alternative name for an existing type shape
-- `load-types` — cryptographically-gateable bring-in of type declarations at startup
 
 **Syntactic transformation form (runs at parse time):**
 
@@ -2179,42 +2180,58 @@ Plus the syntactic feature pervading all of the above:
 
 - **Type annotations** (`:Holon`, `:f64`, `:i32`, `:bool`, `:List<T>`, `:fn(args)->return`, keyword-path user types) — required on `define` and `lambda` signatures; carried on `struct`/`enum`/`newtype` field declarations. `:Holon` is an enum with 9 variants (Atom, Bind, Bundle, Permute, Thermometer, Blend, Orthogonalize, Resonance, ConditionalBind) — functions operating on `:Holon` pattern-match to select variant behavior.
 
-Other host-Lisp forms (`let`, `if`, `cond`, `match`, `begin`, arithmetic, comparison, collection operations, `set!`, etc.) are **substrate-inherited** — wat inherits them from its Lisp host rather than defining them anew. They are language tools, but not novel in wat specifically.
+Other host-Lisp forms (`let`, `if`, `cond`, `match`, `begin`, arithmetic, comparison, collection operations, etc.) are **substrate-inherited** — wat inherits them from its Lisp host rather than defining them anew. They are language tools, but not novel in wat specifically.
 
-Language core is minimal on purpose: just enough to write stdlib, define functions and types, load modules at both phases, and verify trust at the boundary. Anything more is host-inherited or stdlib.
+Language core is minimal on purpose: just enough to write stdlib, define functions and types, load modules, declare macros, and verify trust at the boundary. Anything more is host-inherited or stdlib.
 
 ### All loading happens at startup
 
-The Rust runtime hosting the wat-vm imposes a static-first model: all code (types AND functions AND macros) loads at startup, before the main event loop begins. Nothing new enters the system after startup.
+The Rust runtime hosting the wat-vm imposes a static-first model: all code (types AND functions AND macros AND config setters) loads at startup, before the main event loop begins. Nothing new enters the system after startup.
 
 - `struct`, `enum`, `newtype`, `typealias` are **type declarations**. Four distinct head keywords, four distinct semantics. The build pipeline extracts them from wat files, generates Rust code (`struct`, `enum`, `struct NewType(Inner);`, `type Alias = Expr;` respectively), compiles the binary.
-- `load-types "path/to/file.wat"` is the type loader — reads a file, parses type declarations, feeds them to the build. Verification modes (`(md5 ...)`, `(signed ...)`) run at build/startup.
 - `define`, `lambda` are **function definitions**. They register at startup into the symbol table.
-- `load "path/to/file.wat"` is the function loader — reads a file, parses `define`s, registers them. Same verification modes.
 - `defmacro` declarations are **compile-time macros**. They register during the parse phase. Before any hashing, signing, or type-checking, a macro-expansion pass walks every source AST and substitutes macro invocations with their expansions.
+- `(:wat/config/set-<field>! value)` are **config setters**. They commit runtime constants during the config pass (see "`:wat/config` — Ambient Startup Constants"). **Setters appear ONLY in the entry file, and ONLY before any `load!`.** Loaded files cannot contain config setters — seeing one halts parse with "config setter in non-entry file."
+- `(:wat/core/load! "path")` is **the loader**. One form pulls in a wat file; the file's own declarations determine what phase registers each form. Loaded files may contain any mixture of types, functions, macros, and nested `load!` calls — but NOT config setters. The loader fetches, parses, and feeds toplevel forms into the appropriate phase of the pipeline. Verification modes (`(md5 ...)`, `(signed ...)`) run at build/startup.
+
+### The entry file's discipline
+
+The entry file — the wat file the wat-vm starts from (the one declaring `:user/main`, or the one the user hands to the wat-vm's CLI) — has a two-part shape:
+
+```scheme
+;; ─── Part 1: Config setters. Required. FIRST. ───────────────────
+(:wat/config/set-dims! 10000)
+(:wat/config/set-capacity-mode! :error)
+
+;; ─── Part 2: Loads. Pull in stdlib and project source. ──────────
+(:wat/core/load! "wat/std/Chain.wat")
+(:wat/core/load! "wat/project/trading/main.wat")
+```
+
+Parser enforces the shape: every `(:wat/config/set-*!)` must syntactically precede every `(:wat/core/load!)` in the entry file. A load! before a setter halts parse with "config setter follows load!; setters must come first." This makes the entry file's top a one-glance inventory of the program's committed runtime constants, with the code load chain only afterward — the reader sees EVERY deployment choice before any file is pulled in.
+
+Loaded files never see setters at all. When a loaded file is parsed, encountering `(:wat/config/set-*!)` is a parse error with "config setter in loaded file; setters belong in the entry file only." Config is a **root-file responsibility**, not a responsibility that can be buried inside a load chain.
 
 ### Startup pipeline (ordered)
 
-1. Parse all wat files (source → untyped AST, macro calls intact).
-2. **Macro expansion pass** — for every macro invocation, invoke the macro's body with argument ASTs, substitute the expansion, repeat until fixpoint. After this pass, no alias-macro call sites remain; only canonical forms.
-3. Resolve symbols (function names, type names).
-4. Type-check `define`/`lambda` bodies against the type environment.
-5. Compute hashes of the fully-expanded AST.
-6. Verify cryptographic signatures on expected entries.
-7. Register verified `define`s into the static symbol table.
-8. Freeze symbol table, type environment, and macro registry.
-9. Enter main loop.
+1. Parse the entry file only (produce its toplevel AST).
+2. **Entry file shape check** — every `set-*!` precedes every `load!`. Any `set-*!` inside a `define`/`let`/other scope halts. Order violations halt.
+3. **Config pass** — commit every `(:wat/config/set-<field>! value)` found in the entry file to `:wat/config`; halt on missing-required / duplicate / typed mismatch.
+4. **Recursive load parse** — for each `load!` in the entry file (and recursively in any files it loads), fetch, verify, and parse the referenced file. Any `set-*!` encountered in a loaded file halts with "config setter in non-entry file." Produces one assembled AST (entry file + all recursively loaded files) with macro calls intact.
+5. **Macro expansion pass** — for every macro invocation, invoke the macro's body with argument ASTs, substitute the expansion, repeat until fixpoint. Macros can read `:wat/config` values during expansion. After this pass, no alias-macro call sites remain; only canonical forms.
+6. Resolve symbols (function names, type names).
+7. Type-check `define`/`lambda` bodies against the type environment.
+8. Compute hashes of the fully-expanded AST.
+9. Verify cryptographic signatures on expected entries.
+10. Register verified `define`s into the static symbol table.
+11. Freeze symbol table, type environment, macro registry, and config.
+12. Invoke `:user/main`.
 
 **Hash identity is on the expanded AST.** Two source files that differ only in macro aliases (`Unbind` vs `Bind`, `Subtract` vs `Blend(_, _, 1, -1)`) expand to the same canonical AST and produce the same hash. Source-level clarity is preserved for readers; identity at the algebra level is uniformized.
 
 **Nothing redefines after startup.** A struct is what its source declares. A function is what its source defines. Name collisions are caught at startup and halt the wat-vm; runtime never sees partial state.
 
-**File-level discipline.** To keep the two kinds of content clean on the filesystem, wat files are single-purpose:
-
-- Files loaded via `(load-types ...)` contain ONLY type declarations — no `define`s.
-- Files loaded via `(load ...)` contain ONLY function definitions — no type declarations.
-
-Mixing produces a load-time error. The loader refuses a file whose forms don't match. Intent is visible at the call site; filesystem organization reinforces it.
+**Mixed-kind files are allowed.** A single file may declare types, macros, functions, and config setters freely. No "load-types vs load-functions" split — the loader pulls in the file, and each declaration registers at its appropriate phase. Author-chosen filesystem organization reflects project taste, not language requirement.
 
 **Why static:** the cost of hosting on Rust. Dynamic code loading would require shipping a full Lisp interpreter with unbounded symbol-table growth inside the Rust binary — large, attack-rich, and unnecessary for the use cases the algebra addresses. Static loading keeps the wat-vm small, auditable, and fast to start. Dynamic holon COMPOSITION (building new ASTs at runtime) is always available and never requires code registration. Dynamic code DEFINITION (adding new functions or types at runtime) is not supported — and is not needed.
 
@@ -2455,7 +2472,7 @@ Retrieval is NOT a core form. Presence is measured by `cosine(encode(target), re
 
 ### Language Core (8 forms)
 
-All eight forms are loaded at startup. The wat-vm distinguishes them by what kind of content they carry, not by when they happen — both `load` and `load-types` are startup operations. After startup completes, the symbol table and type universe are fixed; no new forms register during runtime.
+All eight forms are loaded at startup. The wat-vm distinguishes them by what kind of content they carry, not by when they happen — both `load` and `load!` are startup operations. After startup completes, the symbol table and type universe are fixed; no new forms register during runtime.
 
 ```scheme
 ;; ============================================================
@@ -2546,18 +2563,18 @@ All eight forms are loaded at startup. The wat-vm distinguishes them by what kin
 
 ;; --- Compile-time module loading (types only) ---
 
-(:wat/core/load-types! "path/to/types.wat")
+(:wat/core/load! "path/to/types.wat")
 ;; Unverified build-time load. Reads the file, parses type declarations,
 ;; feeds them to the build pipeline for Rust code generation.
 
-(:wat/core/load-types! "path/to/types.wat" (md5 "abc123..."))
+(:wat/core/load! "path/to/types.wat" (md5 "abc123..."))
 ;; Hash-pinned build-time load. Build halts if the file hash does not match.
 
-(:wat/core/load-types! "path/to/types.wat" (signed <signature> <pub-key>))
+(:wat/core/load! "path/to/types.wat" (signed <signature> <pub-key>))
 ;; Signature-verified build-time load. Build halts if the signature is invalid.
 
 ;; Compile-time-loaded files must contain ONLY type declarations.
-;; A runtime form (define/lambda) in a load-types target is a load error.
+;; A runtime form (define/lambda) in a load! target is a load error.
 
 ;; ============================================================
 ;; TYPE ANNOTATIONS — syntactic feature on all signatures.
@@ -2872,7 +2889,7 @@ Compile-time forms (materialized into the Rust-backed wat-vm binary; cannot be r
 :wat/core/enum                 ; FOUNDATION addition — coproduct type
 :wat/core/newtype              ; FOUNDATION addition — nominal alias
 :wat/core/typealias            ; 058-030 + FOUNDATION — structural alias
-:wat/core/load-types!           ; FOUNDATION addition — compile-time module loading (types only)
+:wat/core/load!           ; FOUNDATION addition — compile-time module loading (types only)
 ```
 
 Syntactic feature pervading all of the above:

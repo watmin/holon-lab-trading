@@ -226,7 +226,7 @@ Estimated ~200-300 lines of Rust (evaluator path, symbol table, type-checker sca
 
 **wat stdlib bootstrap:**
 
-Once `define` is implemented (alongside `lambda` per 058-029 and types per 058-030), the stdlib proposals become real wat files loaded via `(load ...)` at startup.
+Once `define` is implemented (alongside `lambda` per 058-029 and types per 058-030), the stdlib proposals become real wat files loaded via `(:wat/core/load! ...)` at startup.
 
 ## Questions for Designers
 
