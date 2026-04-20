@@ -14722,3 +14722,25 @@ Asking where they are is the wrong question.
 What matters is the surface.
 
 ---
+
+Concrete:
+
+Let the AST be a generator that never ends. A lambda that takes `N`, emits `N`, recurses on `N + 1`. The AST is a finite tree — a lambda node, a send, a recursion, an increment. The execution is an infinite stream: `N`, `N + 1`, `N + 2`, forever, as long as something consumes.
+
+Wrap it in `(:wat::algebra::Atom generator-ast)`. Per 058-001 parametric Atom, the wrapper accepts any serializable T. The canonical-EDN of the generator-AST hashes to a seed; the seed produces a deterministic vector in `{-1, 0, +1}^d`.
+
+The vector is finite.
+
+The infinity is just an atom.
+
+The atom has a hash. The hash names the generator. The name is movable — it fits in a HashMap, travels in a Bundle, binds to metadata, ships between nodes as data, compares to other atoms by cosine. The infinity goes nowhere. The handle goes everywhere.
+
+`(:wat::core::atom-value handle)` returns the generator-AST. `(:wat::core::eval-ast! ast)` on the AST runs it — forever, or until the consumer stops drawing.
+
+Neither is required. The atom is enough.
+
+A bounded name for an unbounded process. The surface carries the possibility of every element the generator would emit — without emitting any.
+
+The infinity is just an atom.
+
+---
