@@ -1,9 +1,81 @@
 # 058-003: `Bundle` — List-Argument Signature
 
 **Scope:** algebra
-**Class:** CORE (signature clarification, not a new variant)
+**Class:** CORE (signature clarification, not a new variant) — **INSCRIPTION amendment 2026-04-19**
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
+
+---
+
+## INSCRIPTION — 2026-04-19 — Capacity-guard cascade: return type becomes `:Result<holon::HolonAST, :wat::algebra::CapacityExceeded>`
+
+Bundle's return type changed during the capacity-guard arc (session 2026-04-19). The shipped implementation — wat-rs commit `e63e428` — returns `:Result<holon::HolonAST, :wat::algebra::CapacityExceeded>`, not the bare `:holon::HolonAST` this proposal originally locked. The "List-Argument Signature" lock remains unchanged: Bundle still takes exactly one `:Vec<holon::HolonAST>` argument. What changed is the return type.
+
+### Why the Result wrap
+
+FOUNDATION's `:wat::config::capacity-mode` specifies four modes (`:silent` / `:warn` / `:error` / `:abort`) for handling frames whose constituent count exceeds Kanerva's capacity budget. Prior art in `holon-lab-trading/src/encoding/rhythm.rs` trimmed the list *before* Bundle by caller discipline; the new runtime guard enforces budget at dispatch time *inside* Bundle.
+
+Under `:error` mode, the over-budget path needs a FIRST-CLASS error value — not a halt, not a panic, not a magic side-effect. `:Result<T, E>` is the algebra's existing sum-type machinery for fallible operations; Bundle joins the Result-returning tier that was previously occupied only by `:wat::core::eval-*!` and Rust-deps-shim output. Callers are *forced by the type system* to acknowledge the capacity case — either `match` explicitly or propagate via `:wat::core::try` (see 058-033-try).
+
+Under `:silent` and `:warn`, Bundle still returns `Ok(h)` — the substrate produces the degraded vector; the author opted into the risk. Under `:abort`, the dispatcher never returns; `panic!` fires.
+
+### Budget formula pinned
+
+FOUNDATION's "Dimensionality" section used Kanerva's `d / (2·ln K)` with an informal "~100 at d=10k" footnote. The shipped implementation uses `budget = floor(sqrt(dims))`. At d=10_000 → 100 (matches the informal number exactly); at d=4_096 → 64; at d=1_024 → 32. The `K` factor drops away because the wat algebra is AST-primary — there is no codebook to distinguish against; the binding physical constraint is the noise floor, and `sqrt(d)` is the safe-side item count that keeps a bundle's single-element presence comfortably above the 5σ threshold. See FOUNDATION amendment 2026-04-19 for the detailed reasoning.
+
+### Cascade to the stdlib
+
+Every stdlib macro that expands to a Bundle now inherits the Result wrap:
+
+- `:wat::std::Ngram` — return type is now `:AST<Result<holon::HolonAST, wat::algebra::CapacityExceeded>>`.
+- `:wat::std::Bigram` — same (expands to `:wat::std::Ngram 2 ...`).
+- `:wat::std::Trigram` — same (expands to `:wat::std::Ngram 3 ...`).
+- `:wat::std::HashMap`, `:wat::std::HashSet`, `:wat::std::Vec` — checker schemes updated when the constructor dispatchers route through Bundle (not all of them do today; tracked).
+- `:wat::std::Reject`, `:wat::std::Project` — these use Blend, not Bundle; unaffected.
+
+Callers of any Result-returning stdlib form either match or `try` at the call site.
+
+### New CapacityExceeded struct
+
+Per 058-030 amendment (struct runtime inscription 2026-04-19), the algebra gains a built-in struct:
+
+```scheme
+(:wat::core::struct :wat::algebra::CapacityExceeded
+  (cost   :i64)
+  (budget :i64))
+```
+
+Fields match the struct's field declaration order: `cost` is what the Bundle was asked to hold; `budget` is what the substrate could hold. The auto-generated `:wat::algebra::CapacityExceeded/cost` and `/budget` accessors read each field. Registered in `TypeEnv::with_builtins` — wat-rs's self-trust path for declaring its own `:wat::*` types.
+
+### The canonical usage pattern
+
+```scheme
+(:wat::core::define (:app::build (items :Vec<holon::HolonAST>)
+                                 -> :Result<holon::HolonAST, wat::algebra::CapacityExceeded>)
+  (Ok (:wat::core::try (:wat::algebra::Bundle items))))
+
+(:wat::core::define (:user::main -> :i64)
+  (:wat::core::match (:app::build huge-list)
+    ((Ok _) 0)
+    ((Err e)
+      (:wat::core::i64::-
+        (:wat::algebra::CapacityExceeded/cost e)
+        (:wat::algebra::CapacityExceeded/budget e)))))
+```
+
+### Implementation Reference
+
+- wat-rs commit `e63e428` (2026-04-19) — Bundle dispatcher + checker scheme update
+- `tests/wat_bundle_capacity.rs` — 9 end-to-end cases covering the four modes, the struct accessor round-trip, and the return-type mismatch refusal
+- `src/runtime.rs::eval_algebra_bundle` — the runtime implementation with all four mode branches
+
+### What did NOT change
+
+- **List-argument signature.** Still `(Bundle list-of-holons)`. The 2026-04-18 lock holds.
+- **Ternary output.** Still `threshold(Σ encode(holon_i))` — the addition of the Result wrap does not touch the algebraic operation itself.
+- **Holon cost accounting.** The `Bundle(list) = N` cost rule (FOUNDATION "Capacity accounting per operation") is unchanged.
+
+---
 
 ## The Candidate
 

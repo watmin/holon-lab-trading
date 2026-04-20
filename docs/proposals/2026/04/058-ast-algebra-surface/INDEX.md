@@ -61,6 +61,7 @@ With types decided, language core slots in:
 9. **058-029-lambda** — typed anonymous functions (runtime values, not symbol-table entries).
 9a. **058-031-defmacro** — compile-time syntactic expansion with Racket-style sets-of-scopes hygiene. Resolves Beckman's finding #4 (alias hash collision) by rewriting stdlib aliases to their canonical form at parse time before hashing.
 9b. **058-032-typed-macros** — follow-up to 058-031 that adds `:AST<T>` and macro-authoring-time type checking. Opt-in; sharpens error locality.
+9c. **058-033-try** — **INSCRIPTION (2026-04-19).** Error-propagation form. `(:wat::core::try <result-expr>)` unwraps `Ok v` to `v` or short-circuits the enclosing Result-returning function/lambda with `(Err e)`. Not try/catch — no handler block; each function declares its own Result return type and either `try`s (propagate) or `match`es (handle). The forcing function that makes Result-typed Bundle (058-003 inscription) and future Result-returning forms ergonomic. First member of the new **INSCRIPTION** status class.
 
 ### Phase 4 — Algebra core primitives (affirmations — 15 min)
 

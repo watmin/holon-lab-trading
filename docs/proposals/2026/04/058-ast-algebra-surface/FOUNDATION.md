@@ -170,9 +170,11 @@ A consequence of the foundational principle (and of MAP VSA's compositional stru
 
 ### Per-frame capacity
 
-At dimension d = 10,000, Kanerva's capacity bound gives approximately `d / (2 · ln(K))` items reliably bundled into a single vector, where K is the size of the codebook being distinguished. Practically: **~100 items per vector** can be bundled and retrieved via unbind without noise becoming catastrophic.
+**The budget is `floor(sqrt(dims))`** — inscribed 2026-04-19 (see FOUNDATION-CHANGELOG and `058-003-bundle-list-signature/PROPOSAL.md`'s INSCRIPTION section). At `d = 10,000` → `budget = 100`; at `d = 4,096` → `64`; at `d = 1,024` → `32`. This is the capacity enforced by `:wat::algebra::Bundle` under the committed `:wat::config::capacity-mode`.
 
-This is the **per-frame bound** — ~100 bindings before cosine-recovery noise degrades retrieval quality.
+**Why `sqrt(d)` and not Kanerva's `d / (2 · ln K)`.** Classical VSA derives capacity from the SNR of UNBINDING against a finite codebook of size K. The wat algebra is AST-primary: there is no codebook to distinguish against — retrieval is AST walking, and only similarity operations consume the vector budget. The binding physical constraint is the noise floor (`5 / sqrt(dims)` for 5σ confidence); `sqrt(d)` is the item count that keeps a bundle's single-element presence comfortably above the noise floor. Empirical match: `sqrt(10000) = 100`, which is what Kanerva's formula informally yielded with `K ~ few hundred` — same number, but derived from what the substrate actually guards.
+
+Prior-art confirmation: `holon-lab-trading/src/encoding/rhythm.rs:58` has shipped `budget = sqrt(10000) = 100` in production since before the 058 batch; the trading lab's rhythm trims to that cap before handing to Bundle. wat-rs's Bundle now enforces the same bound inside the dispatcher and surfaces overflow through the `:Result<_, :wat::algebra::CapacityExceeded>` return type under `:error` mode.
 
 ### Depth is free
 
@@ -2489,6 +2491,19 @@ This section freezes the full algebra in its target shape (post-058). Core forms
 (:wat::algebra::Bundle list-of-holons)
 ;; list → element-wise sum + threshold
 ;; commutative, takes an explicit list (not variadic)
+;;
+;; Signature: :Vec<holon::HolonAST> -> :Result<holon::HolonAST,
+;;                                              :wat::algebra::CapacityExceeded>
+;; (per 058-003 INSCRIPTION 2026-04-19 — capacity-guard cascade)
+;;
+;; Under every committed :capacity-mode the return type is Result:
+;; - :silent — always Ok(h); no check; substrate produces degraded vec
+;; - :warn   — always Ok(h); stderr diagnostic when cost > budget
+;; - :error  — Ok(h) under budget; Err(CapacityExceeded{cost, budget}) over
+;; - :abort  — Ok(h) under budget; panic! over
+;;
+;; budget = floor(sqrt(dims))  per FOUNDATION "Per-frame capacity"
+;; Callers match explicitly or propagate via :wat::core::try (058-033).
 
 (:wat::algebra::Permute child k)
 ;; circular shift of dimensions by integer k
@@ -2712,7 +2727,7 @@ Retrieval is NOT a core form. Presence is measured by `cosine(encode(target), re
 
 (Note: `Cleanup` as a VSA operation is NOT part of the wat algebra. The AST-primary framing eliminates the need for codebook-based recovery — see "Presence is Measurement, Not Verdict." Argmax-over-candidates, when an application needs it, is a stdlib fold over presence measurements on (AST, vector) pairs. Not a primitive.)
 
-### Language Core (8 forms)
+### Language Core (9 forms)
 
 All eight forms are loaded at startup. The wat-vm distinguishes them by what kind of content they carry, not by when they happen — both `load` and `load!` are startup operations. After startup completes, the symbol table and type universe are fixed; no new forms register during runtime.
 
@@ -2735,6 +2750,23 @@ All eight forms are loaded at startup. The wat-vm distinguishes them by what kin
 ;; Same signature shape as define, without the name.
 ;; Produces a :fn(...)->... value — a runtime value, NOT a symbol-table entry.
 ;; Can be created, passed, invoked during runtime; goes away when scope ends.
+
+;; --- Error propagation ---
+;;
+;; (per 058-033 INSCRIPTION 2026-04-19 — the forcing function that
+;; makes Result-returning forms like :wat::algebra::Bundle ergonomic)
+
+(:wat::core::try <result-expr>)
+;; Unwrap Ok v → v, or short-circuit the enclosing Result-returning
+;; function / lambda with (Err e). Strict E equality: the arg's Err
+;; type must match the enclosing function's declared Err type; no
+;; auto-conversion.
+;;
+;; NOT try/catch. No handler block. Each function in a Result chain
+;; either `try`s (propagate) or `match`es (handle). The error never
+;; silently disappears.
+;;
+;; Scopes to the innermost fn/lambda (matches Rust's ?-operator).
 
 ;; --- Function module loading (startup phase) ---
 
@@ -2783,6 +2815,31 @@ All eight forms are loaded at startup. The wat-vm distinguishes them by what kin
 ;;     (low    :f64)
 ;;     (close  :f64)
 ;;     (volume :f64))
+;;
+;; Auto-generated functions per struct declaration (per 058-030
+;; INSCRIPTION 2026-04-19):
+;;   :my::namespace::MyType/new  — positional constructor,
+;;                                  :fn(T1, T2, ...) -> :MyType
+;;   :my::namespace::MyType/<f>  — one accessor per field <f>,
+;;                                  :fn(:MyType) -> <field-type>
+;;
+;; Canonical construction style names positional values via let at
+;; the call site so the order is self-documenting:
+;;
+;;   (let ((open 1.0) (high 2.0) (low 0.5) (close 1.5) (volume 100.0))
+;;     (:project::market::Candle/new open high low close volume))
+;;
+;; Canonical extraction style mirrors construction:
+;;
+;;   (:wat::core::let*
+;;     (((o :f64)  (:project::market::Candle/open  c))
+;;      ((cl :f64) (:project::market::Candle/close c)))
+;;     (:wat::core::f64::- cl o))
+;;
+;; :my::namespace::MyType (the type path itself) appears ONLY in type
+;; annotations — it is not callable. Only /new constructs; only /<f>
+;; accesses. The :: vs / convention: :: navigates namespaces; / attaches
+;; methods to the thing at the end of a path.
 
 (:wat::core::enum :my::namespace::MyVariant
   :simple-variant-1
@@ -3177,7 +3234,7 @@ The implementation choice is outside FOUNDATION's scope. FOUNDATION declares the
 
 Plus lowercase helpers: `get` (unified structural retrieval across HashMap / Vec / HashSet, returns `:Option<holon::HolonAST>`) and `atom-value` (direct field access on an Atom AST node). These are stdlib but not UpperCase — they're accessors, not AST constructors. `nth` is retired — `(get vec i)` replaces it.
 
-### Language Core (8 forms)
+### Language Core (9 forms)
 
 **Proposals that argue LANGUAGE CORE status:**
 

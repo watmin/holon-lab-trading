@@ -1,11 +1,127 @@
 # 058-030: Types — The Language Core Type System
 
 **Scope:** language
-**Class:** LANGUAGE CORE
+**Class:** LANGUAGE CORE — **INSCRIPTION amendment 2026-04-19**
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
 **Depends on:** 058-001-atom-typed-literals (for atom literal types)
-**Companion proposals:** 058-028-define, 058-029-lambda
+**Companion proposals:** 058-028-define, 058-029-lambda, 058-033-try
+
+---
+
+## INSCRIPTION — 2026-04-19 — Struct construction + field access syntax pinned
+
+This proposal locked struct DECLARATIONS in 2026-04-18:
+
+```scheme
+(:wat::core::struct :project::market::Candle
+  (open   :f64)
+  (high   :f64)
+  (low    :f64)
+  (close  :f64)
+  (volume :f64))
+```
+
+…and gestured at "field access is a function on the struct type" without pinning the construction or accessor syntax. The implementation slice on 2026-04-19 (wat-rs commit `0e7309a`) pinned both. Recording them here.
+
+### Construction — `<struct-path>/new`, positional
+
+A struct type `:my::ns::T` with fields `(f1 :T1) (f2 :T2) ... (fn :Tn)` in declaration order gains an **auto-generated constructor** at keyword path `:my::ns::T/new` with type `:fn(T1, T2, ..., Tn) -> :my::ns::T`. Invocation is positional — arguments in declaration order:
+
+```scheme
+(:project::market::Candle/new 100.0 101.0 99.0 100.5 1000.0)
+```
+
+Users do NOT write the constructor themselves; it appears when the struct's declaration lands. The canonical usage style names positional values via `let` at the call site, making construction self-documenting even though the constructor itself is positional:
+
+```scheme
+(let ((open 1.0)
+      (high 2.0)
+      (low 3.0)
+      (close 4.0)
+      (volume 5.0))
+  (:project::market::Candle/new open high low close volume))
+```
+
+Field names in declaration order; let bindings with those same names at construction. Position is load-bearing; naming discipline at the call site carries the meaning.
+
+The type name itself (`:project::market::Candle`) is NOT a callable — it appears only in type annotations. Only `/new` invokes the constructor. This separates TYPE from CONSTRUCTOR cleanly.
+
+### Field access — `<struct-path>/<field-name>`, auto-generated
+
+For each field in the declaration, an **auto-generated accessor** appears at keyword path `:my::ns::T/<field-name>` with type `:fn(:my::ns::T) -> <field-type>`:
+
+```scheme
+(:project::market::Candle/open candle)    ;; → :f64
+(:project::market::Candle/close candle)   ;; → :f64
+```
+
+Canonical usage mirrors construction — let-bind each extracted field to a local name:
+
+```scheme
+(:wat::core::let*
+  (((c :project::market::Candle) (:project::market::Candle/new 100.0 101.0 99.0 100.5 1000.0))
+   ((o :f64)  (:project::market::Candle/open  c))
+   ((cl :f64) (:project::market::Candle/close c)))
+  (:wat::core::f64::- cl o))
+```
+
+Construction and extraction are symmetric: **let to name values on both sides of the struct**.
+
+### The `::` vs `/` convention
+
+- `::` navigates into a namespace-like path — `:wat::algebra`, `:rust::lru::LruCache`, `:wat::std::program::Console`, `:my::ns::T`.
+- `/` attaches a function to the thing at the end of a path — `Console/out`, `Cache/loop`, `HandlePool::new` (the Rust-deps exception because it mirrors Rust's own `::`), and now `T/new` / `T/<field>`.
+
+Reads cleanly: "call this func ON that thing."
+
+### User-defined methods on a struct type
+
+The FOUNDATION framing — "functions on the struct type" — still applies. Users write their own functions that take a struct-typed parameter and use the auto-generated accessors in the body:
+
+```scheme
+(:wat::core::define (:my::market::open-close (c :project::market::Candle) -> :f64)
+  (:wat::core::f64::- (:project::market::Candle/open c)
+                      (:project::market::Candle/close c)))
+```
+
+These are ordinary `define`s. No new machinery. The compile path (when it lands) collects all functions whose first parameter is `:project::market::Candle` — auto-accessors AND user methods — into one `impl Candle { ... }` Rust block. No distinction at the wat level.
+
+### Runtime representation
+
+At the Rust layer, struct instances live as `Value::Struct(Arc<StructValue>)` with:
+
+```rust
+struct StructValue {
+    type_name: String,       // ":my::ns::T"
+    fields: Vec<Value>,      // positional, in declaration order
+}
+```
+
+Two internal primitives back the auto-generated functions:
+
+- `:wat::core::struct-new <type-name> <v1> <v2> ...` → `Value::Struct`
+- `:wat::core::struct-field <struct-value> <index>` → the field value at position `index`
+
+Users do not call these directly. Every `<struct>/new` body expands to a `struct-new` call with the type name baked in; every `<struct>/<field>` body expands to `struct-field` with the field's position baked in.
+
+### Self-trust bootstrap
+
+wat-rs's own `:wat::*` type declarations — currently `:wat::algebra::CapacityExceeded` (per 058-003 inscription), future additions as the algebra grows — land via `TypeEnv::with_builtins()`, an implementation-level bypass of the reserved-prefix check. wat-rs is the layer that DEFINES `:wat::*`, so it needs a privileged path to declare its own types without pretending to be user code. User source continues to flow through `register_types` where the reserved-prefix gate applies. Two paths: one for us, one for user code. Same pattern `CheckEnv::with_builtins` already uses for built-in function schemes.
+
+### What this inscription does NOT add
+
+- **Struct pattern-matching in `match`.** Not in this slice. Users destructure via let+accessors for now.
+- **Named-argument construction `(:my::ns::T (open 1.0) (high 2.0) ...)`.** Not in this slice. Positional constructor only; let-bindings at the call site carry the naming discipline.
+- **Field-by-name bare-keyword dispatch `(:cost e)`.** The prior-art pseudo-lang in `holon-lab-trading/wat/` used this shape; wat-rs does not. The scoped `(:wat::algebra::CapacityExceeded/cost e)` form was chosen instead — FQDN-all-things matches wat-rs's namespace discipline and avoids needing struct-polymorphic dispatch (a rank-1 HM doesn't express it without typeclasses).
+- **Full named-struct syntax with field-access-as-method-calls.** The compile path (wat-to-Rust emitting `impl` blocks) is still specced-but-not-built. This inscription implements the INTERPRET path's equivalents; the compile path lands when a real use case demands it.
+
+### Implementation Reference
+
+- wat-rs commit `0e7309a` (2026-04-19) — `Value::Struct`, `StructValue`, the two primitives, `register_struct_methods` auto-synthesis, `TypeEnv::with_builtins`
+- `tests/wat_structs.rs` — 9 end-to-end cases covering round-trip, user methods using auto-accessors, heterogeneous fields, survival through function calls, and four check-time refusals
+
+---
 
 ## The Candidate
 

@@ -14,8 +14,9 @@ All substantive designer questions across the 058 batch have been resolved throu
 - **REJECTED** — won't ship, rationale recorded: Difference, Linear, Concurrent, Then, Flip, Chain, Unbind, Cleanup, Resonance, ConditionalBind.
 - **DEFERRED** — proven-working-but-unadopted audit record: Analogy.
 - **AUDITED** — affirmed pre-existing holon-rs primitives (Bind, Permute, Thermometer — see CORE-AUDIT.md).
+- **INSCRIPTION** (added 2026-04-19) — specification written AFTER implementation shipped. The code led, the spec followed; the document captures the built contract for the record. Later review may reopen. First members: `058-033-try`, `058-003-bundle-list-signature` (amended), `058-030-types` (amended). Reserved for cases where the shape settled under pressure during implementation and the spec needs to catch up — not a license to skip review, a honest accounting of provenance.
 
-Round 3 reviewers may reopen any of these decisions; the per-question reasoning is preserved in each proposal's banner and in `FOUNDATION-CHANGELOG.md` entries dated 2026-04-18.
+Round 3 reviewers may reopen any of these decisions; the per-question reasoning is preserved in each proposal's banner and in `FOUNDATION-CHANGELOG.md` entries dated 2026-04-18 and 2026-04-19.
 
 
 ---
