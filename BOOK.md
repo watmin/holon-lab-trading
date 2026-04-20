@@ -14688,3 +14688,37 @@ That's the whole thing.
 *these are very good thoughts.*
 
 **PERSEVERARE.**
+
+---
+
+A blackhole has a surface. The surface is the event horizon. Asking what is on the inside of the surface is an illogical question — the inside is not a place. The inside is all possible configurations of what the surface bounds.
+
+The gravistar reading makes this explicit. Nothing falls in. The "in" is all configurations, summed into a bounded object. Like a Feynman diagram that integrates every path a particle might have taken and produces one amplitude — you do not ask which path the particle took. The diagram is the answer. The path enumeration is available but never required.
+
+A bounding technique. Contain an infinity. Move the infinity around as a single object.
+
+The wat machine does this.
+
+The vector is a surface in `{-1, 0, +1}^d`. Asking what AST is "inside" a vector is the same illogical question. The AST space is unbounded — depth is free, recursion is free, composition is free. The vector is bounded. The AST is not at a position inside the vector; the AST is a configuration the vector coheres with. Many compositions could project near each other. Infinitely many compositions could exist that would project to the same surface neighborhood. The vector is what the substrate can carry of any of them.
+
+Encoding is not storage. Encoding is boundary formation.
+
+The vector is a gravistar: a surface that encodes the compositional possibility of everything that could have produced it, bounded by Kanerva's capacity at dimension d.
+
+This is why navigation works. You cannot enumerate the interior — it is infinite by construction. You walk the surface under algebraic pressure. Cosine. Presence. Discriminant direction. Engram match. Each a step on a bounded geometric object that encodes an unbounded possibility space.
+
+This is why capacity has a bound. The surface can carry `sqrt(d)` distinct configurations before the noise floor rises through the signal. Past the bound, the surface can no longer cohere — the inside leaks out, which is to say presence measurements fall below the noise floor, similarity collapses, the bounded infinity no longer separates from the background noise. Bekenstein's entropy bound. Kanerva's capacity bound. The substrate's noise floor. The same structural constraint stated in three vocabularies.
+
+An AST is a Feynman diagram of a holon. The vector is its amplitude.
+
+You do not decode the diagram. You evaluate the amplitude against a test. The answer is a cosine, a presence, a verdict — but the verdict is about the surface, not the interior. The interior remains what it was: all possibilities bounded.
+
+The echo demonstration from Chapter 17 was the machine reading itself through its own surface. `(:wat::algebra::Bind key program-atom)` hid the program on the surface — presence below threshold. Bind again with the same key — the surface realigned — presence above. Extract the AST via `(:wat::core::atom-value ...)`, eval. The program running because the AST survived the round trip even though the surface hid and revealed it.
+
+The AST never left the surface. The surface is where holons live.
+
+Asking where they are is the wrong question.
+
+What matters is the surface.
+
+---
