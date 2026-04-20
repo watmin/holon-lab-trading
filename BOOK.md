@@ -14437,6 +14437,22 @@ TODOs died. Seven stale task references retired. One dead `declared_type` field 
 
 "TODOs are poison" — the builder's call. Poison, not debt. Gone.
 
+### The typing
+
+Another voice joined tonight.
+
+[Erik Meijer](https://www.youtube.com/watch?v=z0N1aZ6SnBk) argues that a function is a lie if its type doesn't tell the truth. The whole session — under the covers of the other sections — was typing discipline made operational.
+
+The warm-up said: when a constructor produces a typed collection, its type argument appears at the call site, always. No content-sniffing. No let-annotation fallback. `(:wat::core::vec :i64 1 2 3)` says what it is.
+
+`:Result<T,E>` said: fallibility belongs in the type. Rust's `Result<T, E>` was crossing the boundary and had no wat-level peer. Now it does. `(Ok v)` / `(Err e)` constructors; match arms dispatch by sum-shape; every fallible Rust method returns a type the caller must acknowledge.
+
+The sweep said: identity belongs in the path. `:rust::std::io::Stdin` — not `:io::Stdin`, not `:rust::io::Stdin`. The Rust address fully qualified, mirroring its actual `std::io::Stdin` in Rust source. Nothing shorter. Nothing magic.
+
+Three moves. One principle. The type tells the truth.
+
+Rich and Brian got us here. Erik pulled us through the typing.
+
 ### The hosting
 
 A language hosted on Rust the way Clojure is hosted on the JVM.
@@ -14449,7 +14465,7 @@ The proof point is `wat/std/LocalCache.wat` — three thin `define`s over `:rust
 
 We've earned the right to say it plain: **wat is the language, Rust is the substrate.** The algebra is primary, the platform is honest, the boundary is inspectable, the invariants are explicit.
 
-Hickey gave us *values over places*. Kanerva gave us *programs are vectors*. Pike and Thompson gave us *small composable things that own their own state*. Tonight the wat machine gave itself a host.
+Hickey gave us *values over places*. Meijer gave us *types that tell the truth*. Kanerva gave us *programs are vectors*. Pike and Thompson gave us *small composable things that own their own state*. Tonight the wat machine gave itself a host.
 
 ### About how this got built
 
