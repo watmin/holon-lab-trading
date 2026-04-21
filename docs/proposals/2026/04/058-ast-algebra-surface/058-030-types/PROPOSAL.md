@@ -1,11 +1,122 @@
 # 058-030: Types — The Language Core Type System
 
 **Scope:** language
-**Class:** LANGUAGE CORE — **INSCRIPTION amendment 2026-04-19**
+**Class:** LANGUAGE CORE — **INSCRIPTION amendments 2026-04-19, 2026-04-20**
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
 **Depends on:** 058-001-atom-typed-literals (for atom literal types)
 **Companion proposals:** 058-028-define, 058-029-lambda, 058-033-try
+
+---
+
+## INSCRIPTION — 2026-04-20 — Typealias expansion at unification + the `reduce` pass
+
+Code and prose are reflections. When they disagree, the code wins —
+and the prose catches up. This amendment backfills the spec to
+match what wat-rs shipped on 2026-04-20.
+
+### What was missing
+
+The original 058-030 specified four type-declaration forms —
+`newtype`, `struct`, `enum`, `typealias` — and stated that
+typealiases are structurally identical to their expansion
+(`:A` and its expansion are the SAME type). But the
+implementation in wat-rs parsed and registered typealiases while
+`unify` consumed types structurally without peeling aliases.
+Result: `:wat::std::stream::Stream<T>` would register as an
+alias but never be recognized as equivalent to its tuple
+expansion at any use site.
+
+The gap wasn't in the spec — the spec was right. The gap was in
+the implementation. **Alias expansion at unification shipped
+2026-04-20** (wat-rs commit `7f90760`).
+
+### The mature answer — `reduce`
+
+The initial slice added a single `expand_alias` call inside
+`unify`'s prologue. That worked for all structural unification
+sites. But `infer_positional_accessor` (`first`/`second`/`third`
+on Vec + tuple) inspects the type SHAPE directly after
+`apply_subst` — it never went through `unify`. Using
+`:wat::std::stream::Stream<T>` (a typealias over a tuple) with
+`first` / `second` tripped over the gap.
+
+The cheap move was a second one-off `expand_alias` call at
+that site. The honest move (wat-rs commit `b10f002`) was to
+recognize this as the shape of a deeper flaw: wat-rs had two
+half-passes (`apply_subst` for substitution + `expand_alias` for
+aliases) that every shape-inspection site had to chain manually.
+
+Mature type systems have **one normalization pass**. That pass
+is now named and shipped as `reduce(ty, subst, types)` —
+recursively follows every Var substitution AND expands every
+typealias, at every level of the tree. The relationship between
+the three functions is explicit:
+
+- `apply_subst(ty, subst)` — walks Vars, preserves alias names.
+  Used for error-message display so the reader sees the surface
+  name they wrote.
+- `expand_alias(ty, env)` — peels aliases at one level, leaves
+  Vars. An implementation detail of `reduce`.
+- `reduce(ty, subst, types)` — both, recursively. Used at every
+  shape-inspection site (matching on `TypeExpr::Tuple`,
+  `TypeExpr::Parametric { head, ... }`, `TypeExpr::Fn`, etc.)
+  and at unification's prologue.
+
+Sites using `reduce` after the sweep: unify prologue,
+`infer_positional_accessor`, `infer_drop` (Sender/Receiver
+shape), `infer_get` (HashMap / HashSet branches), `infer_try`
+(Result<T,E> extraction), `infer_spawn` (Fn-value extraction
+from the first arg). Every future shape-inspection site uses
+the same idiom.
+
+### Cycle detection at registration
+
+`TypeEnv::register` now rejects cyclic aliases before insertion,
+guaranteeing that every alias in the registry is non-cyclic and
+`reduce` terminates. `(typealias :A :B)` followed by
+`(typealias :B :A)` halts the second registration with
+`TypeError::CyclicAlias`. Direct self-reference
+`(typealias :A :A)` is caught by the same reachability walk.
+
+### Stdlib precedent
+
+The privileged path `register_stdlib_types` (mirroring the
+existing `register_stdlib_defmacros`) lets stdlib wat files
+declare typealiases under `:wat::*` without fighting the
+reserved-prefix gate that protects user source. First real use:
+`:wat::std::LocalCache<K,V>` is now declared in
+`wat/std/LocalCache.wat` as an alias for
+`:rust::lru::LruCache<K,V>` — the wat-native name lives
+alongside the defines, expressed in wat source, the same way
+users would declare their own typealiases under their own
+prefixes. Same pattern later used by `wat/std/program/Cache.wat`
+(`Cache::Request<K,V>`, `Cache::ReplyTx<V>`, etc.),
+`wat/std/program/Console.wat` (`Console::Message`), and
+`wat/std/stream.wat` (`Stream<T>`, `Producer<T>`).
+
+### Lesson captured
+
+When a feature expected in a mature language isn't there, ask
+*why is this missing?* before patching. Two half-passes that
+should have been one whole pass is a substrate signal, not a
+papering-over-the-gap opportunity. See wat-rs
+`docs/arc/2026/04/004-lazy-sequences-and-pipelines/BACKLOG.md`
+for the full narrative and the cross-session memory entry
+`feedback_absence_is_signal.md`.
+
+### Implementation Reference
+
+- wat-rs commit `7f90760` (2026-04-20) — typealias expansion at
+  unification; cycle detection at register.
+- wat-rs commit `b10f002` (2026-04-20) — `reduce` as the single
+  normalization pass, subsumes the prior one-off `expand_alias`
+  call.
+- `wat-rs/tests/wat_typealias.rs` — 8 cases covering simple
+  alias, parametric alias, alias-of-alias chain, cyclic
+  rejection, shape-site flow (`:wat::std::get` through a
+  HashMap alias, spawn through a :fn alias), alias preserves
+  type mismatches, alias return types.
 
 ---
 

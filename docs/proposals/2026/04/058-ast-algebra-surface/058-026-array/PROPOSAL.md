@@ -7,12 +7,74 @@
 > **Also:** `nth` is retired. Use `get` — `(get my-vec i)` with an integer index returns `:Option<holon::HolonAST>`.
 
 **Scope:** algebra
-**Class:** STDLIB (runtime constructor building a HashMap with integer keys)
+**Class:** STDLIB (runtime constructor building a HashMap with integer keys) — **INSCRIPTION amendment 2026-04-20**
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
 **Depends on:** 058-016-map (now HashMap), 058-021-bind, 058-003-bundle-list-signature
 **Companion proposals:** 058-027-set (now HashSet)
 **Supersedes:** earlier framing of Array as "Sequential alias" — dropped; see Reclassification Note
+
+---
+
+## INSCRIPTION — 2026-04-20 — `:wat::core::conj` immutable Vec append
+
+Code and prose are reflections. This amendment records the
+append primitive that wat-rs shipped on 2026-04-20.
+
+### The form
+
+```scheme
+(:wat::core::conj vec item) -> :Vec<T>
+```
+
+**Scheme:** `∀T. Vec<T> × T -> Vec<T>`. Returns a NEW Vec with
+`item` appended to `vec`'s elements. The input `vec` is
+unchanged — wat has no mutation.
+
+### Why "conj" (Clojure's name)
+
+Clojure uses `conj` for "add to a collection where it most
+naturally goes" (to the front for a list, to the end for a
+vec). wat's `Vec` is unambiguously append-to-end, and `conj`
+is the name a Lisp author reaches for by reflex. `push`
+carried the wrong connotation (mutation). `append` suggests
+two-collections-in, one-out. `conj` is the honest one-item-add.
+
+### Forcing function
+
+`:wat::std::stream::chunks` (arc 004's canonical stateful-stage
+pattern — the N:1 batcher with end-of-stream flush) threads a
+`Vec<T>` accumulator through its tail-recursive worker. Each
+incoming item extends the buffer; once the buffer reaches
+`size`, it emits downstream and starts a fresh accumulator. No
+mutation: the recursion carries the new Vec as its parameter.
+Without `conj`, the accumulator pattern required manual
+workarounds (reverse + cons + reverse, or a custom helper per
+stage). `conj` is the primitive.
+
+### Scope-and-tier
+
+- **`:wat::core::*`** — not `:wat::std::list::*`. Rationale:
+  Vec is a BUILT-IN type (058-026) and append is an elementary
+  operation on it, same tier as `first` / `second` / `rest` /
+  `empty?` / `length` / `take` / `drop` / `reverse`. These are
+  the Lisp-list-reflexes the language ships. A future
+  `:wat::std::list::*` namespace may ship higher-level
+  compositions (`pairwise-map`, `window`, `group-by`); those are
+  stdlib. Elementary operations on `:Vec<T>` stay in
+  `:wat::core::*`.
+
+### Implementation Reference
+
+- wat-rs runtime: `eval_conj` in `src/runtime.rs` (shipped
+  alongside stream slice C, commit `16ddc7b`).
+- wat-rs check: scheme registered in `register_builtins` next
+  to `:wat::core::rest`.
+- Test coverage: indirect via `tests/wat_stream.rs` — every
+  stream test that uses `chunks` or `collect` exercises `conj`
+  via the internal accumulator.
+
+---
 
 ---
 

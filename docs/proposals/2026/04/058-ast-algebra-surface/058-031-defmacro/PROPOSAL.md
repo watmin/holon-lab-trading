@@ -1,11 +1,91 @@
 # 058-031: `defmacro` — Compile-Time Syntactic Expansion
 
 **Scope:** language
-**Class:** LANGUAGE CORE
+**Class:** LANGUAGE CORE — **INSCRIPTION amendment 2026-04-20**
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
 **Depends on:** 058-030-types
 **Companion proposals:** 058-028-define (contrast), multiple stdlib aliases now reframed as macros
+
+---
+
+## INSCRIPTION — 2026-04-20 — Variadic `&` rest-param support
+
+Code and prose are reflections. When they disagree, the code
+wins — and the prose catches up. This amendment backfills the
+spec to match what wat-rs shipped on 2026-04-20.
+
+### The shape
+
+The original 058-031 specified fixed-arity macros only. wat-rs
+(commit `c9612be`) added variadic rest-param support. Syntax at
+declaration:
+
+```scheme
+(:wat::core::defmacro
+  (:my::ns::macro-name
+    (p1 :AST<T1>)
+    (p2 :AST<T2>)
+    & (rest :AST<Vec<R>>)
+    -> :AST<Ret>)
+  `(...template using ,@rest to splice...))
+```
+
+The `&` bare-symbol marker separates fixed params from the
+rest-binder. The rest-binder is a typed binder like the others;
+its type annotation is reader-clarity (macros are parse-time and
+the expander discards parameter types today).
+
+### Semantics
+
+- **Fixed-arity macros** (no `&`): strict arity check as before.
+  `args.len() == params.len()` or `ArityMismatch`.
+- **Variadic macros**: `args.len() >= params.len()`. The first
+  N args bind positionally to the fixed params. The REMAINING
+  args are wrapped in `WatAST::List(...)` and bound to the
+  rest-name. The template's `,@rest-name` unquote-splicing drops
+  the list elements into the surrounding form — existing
+  machinery, no template-walker changes needed.
+
+### What it enables
+
+Any macro that needs to operate on N-of-something at parse
+time — a variadic sum-constructor, a list-of-stages packager,
+a block-of-setup-forms wrapper. Every 058 stdlib macro today is
+fixed-arity (Subtract/Amplify/Log/Circular/etc.); variadic is
+additive for user-defined macros.
+
+### What it does NOT enable
+
+**Pipeline composer as sketched in arc 004's design was
+REJECTED.** The target `(pipeline src (map :f) (chunks 50) sink)`
+needs to rewrite each stage form by prepending the upstream —
+that's AST destructuring beyond quasiquote's substitution model,
+not just variadic arity. Variadic alone is insufficient. See
+`wat-rs/docs/arc/2026/04/004-lazy-sequences-and-pipelines/BACKLOG.md`
+for the full walk of why the one-liner wasn't achievable, and
+why `let*` is already the pipeline. The deeper lesson: before
+adding a new "ergonomic" form, ask what it ELIMINATES. If those
+things carried information, the verbose form is the honest form
+(captured in memory entry `feedback_verbose_is_honest.md`).
+
+### Malformed signatures refused at registration
+
+- Double `&` marker → `MalformedDefmacro`.
+- `&` marker without a following binder →
+  `MalformedDefmacro`.
+- Multiple rest-binders after one `&` → `MalformedDefmacro`.
+
+### Implementation Reference
+
+- wat-rs commit `c9612be` (2026-04-20) — `MacroDef.rest_param`,
+  parser recognizes `&` marker, `expand_macro_call` splits args
+  into fixed + rest.
+- `wat-rs/tests/wat_variadic_defmacro.rs` — 6 cases covering
+  canonical splice, zero-rest empty splice, mixed fixed+rest,
+  arity-too-few error, double-marker refusal, no-binder refusal.
+
+---
 
 ## The Candidate
 
