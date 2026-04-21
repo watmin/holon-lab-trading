@@ -1,9 +1,32 @@
 # 058-005: `Reject` + `Project` — Gram-Schmidt stdlib Duo
 
 **Scope:** algebra
-**Class:** STDLIB macros — **ACCEPTED (reframed + renamed 2026-04-18)**
+**Class:** STDLIB macros — **ACCEPTED (reframed + renamed 2026-04-18) + INSCRIPTION 2026-04-21**
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
+
+---
+
+## INSCRIPTION — 2026-04-21 — Shipped
+
+Both macros landed in wat-rs. Production-cited use cases held: DDoS sidecar's `reject(packet, baseline_subspace)` core detection mechanism (Challenge 010, F1=1.000); engram matching's `project(packet, baseline_components)` subspace reconstruction.
+
+- **Reject:** [`wat-rs/wat/std/Reject.wat`](https://github.com/watmin/wat-rs/blob/main/wat/std/Reject.wat)
+  - `(:wat::std::Reject (x :AST<holon::HolonAST>) (y :AST<holon::HolonAST>) -> :AST<holon::HolonAST>)`
+  - Expands to `Blend(x, y, 1.0, -(dot(x,y)/dot(y,y)))` — the projection-removal shape. Negation spelled as binary `(:wat::core::f64::- 0.0 ratio)` per the 2026-04-19 typed-arith split.
+- **Project:** [`wat-rs/wat/std/Project.wat`](https://github.com/watmin/wat-rs/blob/main/wat/std/Project.wat)
+  - `(:wat::std::Project (x :AST<holon::HolonAST>) (y :AST<holon::HolonAST>) -> :AST<holon::HolonAST>)`
+  - Expands to `` `(:wat::std::Subtract ,x (:wat::std::Reject ,x ,y)) `` — the complementary shape. One name per operation; Project is Subtract-of-Reject.
+- **Tests:** [`wat-rs/wat-tests/std/Reject.wat`](https://github.com/watmin/wat-rs/blob/main/wat-tests/std/Reject.wat) — two deftests proving Reject strips y-direction (presence(y, Reject(x,y)) = false) and Project preserves it (presence(y, Project(x,y)) = true). The Gram-Schmidt invariant verified at the noise-floor discriminator.
+
+### Algebra core shrank 7 → 6
+
+As a consequence of this reframe, the algebra core shipped at **six** primitives (Bind, Bundle, Blend, Permute, Atom, Thermometer), not seven. Orthogonalize-as-core was replaced by the stdlib Reject/Project duo over Blend + dot. Smaller core, richer stdlib.
+
+### What this inscription does NOT add
+
+- **Multi-vector Gram-Schmidt.** Only pairwise. Orthogonalizing `x` against a set `{y1, y2, ...}` requires repeated application — either a stdlib macro (`gram-schmidt`) or userland composition. Neither shipped; deferred until a caller surfaces.
+- **A primitive `dot` at stdlib level.** `:wat::algebra::dot` ships at the algebra measurement tier alongside `cosine`; Reject/Project call it internally. No re-export.
 
 ---
 

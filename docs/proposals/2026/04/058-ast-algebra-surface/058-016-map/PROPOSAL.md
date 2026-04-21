@@ -1,5 +1,25 @@
 # 058-016: `HashMap` — Stdlib Dictionary Constructor
 
+**Class:** STDLIB — **ACCEPTED + INSCRIPTION 2026-04-21**
+
+---
+
+## INSCRIPTION — 2026-04-21 — Cross-reference
+
+Landed in wat-rs. The 2026-04-19 shipped-shape amendment below documents the flat-args form (`(HashMap k1 v1 k2 v2 ...)`) that actually ships; this cross-reference points at the Rust implementation.
+
+- **Primitive dispatch:** [`wat-rs/src/runtime.rs`](https://github.com/watmin/wat-rs) — `:wat::std::HashMap` constructor arm + `infer_hashmap_constructor` in check.rs
+- **Type:** `:HashMap<K,V>` registered via `TypeEnv::with_builtins()`; runtime backing `Value::wat__std__HashMap(Arc<HashMap<…>>)`
+- **Companion accessors:** `:wat::std::get` (returns `:Option<V>`), `:wat::std::contains?` (returns `:bool`) both dispatch in runtime.rs
+- **Tests:** indirect — trading-lab vocabulary modules exercise HashMap throughout. No dedicated `wat-tests/` file yet.
+
+### What this inscription does NOT add
+
+- **Composite-holon keys.** Keys stay primitive-scoped (`:i64`, `:f64`, `:bool`, `:String`, keyword) in the currently-shipped runtime; heterogeneous types are stored with type-tagged canonical strings so they never collide. Composite-key support graduates when a caller demands it.
+- **`remove` / `insert` / `iter`.** Immutable construction + lookup only. No mutation primitives — wat has no mutation. Functional update (build-new-HashMap-with-change) can be added as stdlib over the constructor if a caller surfaces one.
+
+---
+
 > **STATUS: SUPERSEDES the original `Map` proposal** (2026-04-18 Rust-surface naming sweep).
 >
 > The form previously called `Map` is now named `HashMap` — matching Rust's `std::collections::HashMap` directly. The wat UpperCase constructor, the type annotation `:HashMap<K,V>`, and the runtime backing all share one name. This is consistent with the Rust-primitive type decision (`:f64` not `:Scalar`, `:bool` not `:Bool`) — one name per concept across algebra, type annotation, and runtime.

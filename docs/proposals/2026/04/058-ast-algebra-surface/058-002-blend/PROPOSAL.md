@@ -1,9 +1,38 @@
 # 058-002: `Blend` — Scalar-Weighted Binary Combination
 
 **Scope:** algebra
-**Class:** CORE — **ACCEPTED**
+**Class:** CORE — **ACCEPTED + INSCRIPTION 2026-04-21**
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
+
+---
+
+## INSCRIPTION — 2026-04-21 — Shipped
+
+Blend entered the algebra core as specified by the 2026-04-18 ACCEPTED decision. Two independent f64 scalar weights, binary arity, negative weights allowed, returns `holon::HolonAST`.
+
+- **Core primitive:** `:wat::algebra::Blend (a :holon::HolonAST) (b :holon::HolonAST) (w1 :f64) (w2 :f64) -> :holon::HolonAST`
+- **Dispatch:** [`wat-rs/src/runtime.rs`](https://github.com/watmin/wat-rs) — `:wat::algebra::Blend` arm in `eval_dispatch`; backed by `holon::HolonAST::blend`
+- **Type-scheme:** registered in `check.rs` under the algebra-core group
+- **Lowering:** `wat-rs/src/lower.rs` — UpperCall → HolonAST::Blend
+
+### Downstream — six stdlib forms ride on Blend
+
+All six shipped as defmacros expanding to Blend with fixed or caller-supplied weights:
+
+| Stdlib form | Expansion |
+|---|---|
+| `:wat::std::Subtract x y` | `Blend(x, y, 1.0, -1.0)` |
+| `:wat::std::Amplify x y s` | `Blend(x, y, 1.0, s)` |
+| `:wat::std::Circular v p` | `Blend(cos-basis, sin-basis, cos θ, sin θ)` |
+| `:wat::std::Reject x y` | `Blend(x, y, 1.0, -dot(x,y)/dot(y,y))` |
+| `:wat::std::Project x y` | `Subtract(x, Reject(x, y))` (transitively Blend) |
+| `:wat::std::Log v min max` | via Thermometer; log-transform then gradient |
+
+### What this inscription does NOT add
+
+- **No `Blend` with more than two operands.** Binary stays canonical. `Bundle` handles n-ary superposition; Blend handles the weighted pair.
+- **Weights must be `:f64`.** The proposal allowed "real-valued"; the shipped signature commits to f64. Users with integer weights write `1.0`, `-1.0` — not `1`, `-1` — per the 2026-04-19 typed-arith discipline.
 
 ---
 

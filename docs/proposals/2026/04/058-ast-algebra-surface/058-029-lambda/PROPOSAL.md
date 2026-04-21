@@ -1,11 +1,56 @@
 # 058-029: `lambda` — Typed Anonymous Functions
 
 **Scope:** language
-**Class:** LANGUAGE CORE
+**Class:** LANGUAGE CORE — **ACCEPTED + INSCRIPTION 2026-04-21**
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
 **Depends on:** 058-030-types (for the type annotation grammar)
 **Companion proposals:** 058-028-define
+
+---
+
+## INSCRIPTION — 2026-04-21 — Shipped
+
+Landed in wat-rs as the anonymous-function expression form.
+
+- **Dispatch:** [`wat-rs/src/runtime.rs`](https://github.com/watmin/wat-rs) — `eval_lambda` handler
+- **Value:** `Value::wat__core__lambda(Arc<Function>)` — same representation as `define`-registered functions (058-028)
+- **Type check:** lambdas flow through the same type-scheme path as defines; their ret type is inferred from the body when not annotated; their params are typed
+
+### Shipped shape
+
+```
+(:wat::core::lambda ((p1 :T1) (p2 :T2) ... -> :Ret) body)
+```
+
+- Anonymous — no name slot
+- Typed params (positional `(name :Type)` pairs)
+- Return type after `->`
+- Single body expression
+- Closures over the lexical environment at point of construction
+
+### Canonical use — stream stdlib combinators
+
+058-034's stream combinators take lambdas as per-item transforms:
+
+```
+(:wat::std::stream::map stream
+  (:wat::core::lambda ((x :i64) -> :i64) (:wat::core::i64::* x 2)))
+```
+
+The arc 004 pipeline work forced lambda into a first-class runtime citizen — combinators accept `:fn(T)->U`-typed args, and only lambdas satisfy that contract without registering a named define.
+
+### TCO for lambda self-tail-calls
+
+Arc 003 stage 2 covered lambda self/mutual-tail-calls. A lambda's body that tail-calls a named define is already covered by stage 1 (the trampoline fires at every `apply_function` boundary); lambda-tail-calling-itself was the follow-up that closed the loop.
+
+### What this inscription does NOT add
+
+- **Multi-body lambdas.** One body expression. Sequencing via `let*` with `_` bindings.
+- **Variadic params (`& rest`).** 058-030's amendment added `&`-suffix rest-params for defmacros; lambdas stay strictly positional. Variadic lambda graduates when a caller surfaces.
+- **Pattern-destructuring params.** `((x :i64) (y :i64) -> ...)` only — not `((x y) : (i64, i64) -> ...)` tuple-destructuring. User code unwraps via `let*` + `:wat::core::first` / `:wat::core::second` / `:wat::core::third`.
+
+---
 
 ## The Candidate
 

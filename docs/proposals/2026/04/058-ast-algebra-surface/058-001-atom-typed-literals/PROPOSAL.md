@@ -1,9 +1,31 @@
 # 058-001: `Atom<T>` — Parametric Atom as Substrate for Programs-as-Values
 
 **Scope:** algebra
-**Class:** CORE — **ACCEPTED (parametric)** 2026-04-18
+**Class:** CORE — **ACCEPTED (parametric) 2026-04-18 + INSCRIPTION 2026-04-21**
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
+
+---
+
+## INSCRIPTION — 2026-04-21 — Shipped
+
+Landed in wat-rs as parametric `Atom<T>` with the primitive-plus-composite type universe.
+
+- **Core primitive:** `:wat::algebra::Atom<T>` at dispatch in [`wat-rs/src/runtime.rs`](https://github.com/watmin/wat-rs)
+- **Value universe:** `Value::i64`, `Value::f64`, `Value::bool`, `Value::String`, `Value::u8`, `Value::wat__core__keyword`, `Value::Option`, `Value::Result`, `Value::Vec`, `Value::Tuple`, `Value::Struct`, plus `Value::wat__WatAST` for programs-as-atoms
+- **Type registration:** every atom type ships via `holon::AtomTypeRegistry::with_builtins()` (in `holon-rs`) + wat-rs's `register_builtin_types` for composites
+- **Lowering:** [`wat-rs/src/lower.rs`](https://github.com/watmin/wat-rs) — UpperCall `Atom` → `HolonAST::atom_*` depending on inferred T
+
+### Programs-as-atoms operational
+
+The proposal's load-bearing promise was `Atom<holon::HolonAST>` — atoms carrying full AST fragments, not just primitive literals. Shipped: `:wat::core::quote` produces `Value::wat__WatAST(Arc<WatAST>)`, which the Atom constructor accepts. Programs are atoms; atoms are holons; the substrate round-trips.
+
+The arc 007 slice 2c round-trip test proved this at the self-hosted-testing level: a subprocess's wat source is captured as a string, `eval-edn!`'d back into the outer runtime, and the returned value is a wat-held atom. See [`wat-rs/tests/wat_hermetic_round_trip.rs`](https://github.com/watmin/wat-rs/blob/main/tests/wat_hermetic_round_trip.rs).
+
+### What this inscription does NOT add
+
+- **No `:Any` escape hatch.** The type universe stays closed per 058-030's ban. Heterogeneous storage in wat uses `Vec<Tuple>`-of-discriminators or a named `enum`; Rust-side storage uses `std::any::Any` under `ThreadOwnedCell` or similar, never exposed at the wat surface.
+- **Atom hash-by-value only for primitives.** Currently-shipped runtime hashes primitive atoms by type-tagged canonical strings. Composite-atom hashing (`Atom<holon::HolonAST>`) goes through `canonical_edn_wat` + SHA-256. Both paths ship; future amendments may unify the hashing story.
 
 ---
 

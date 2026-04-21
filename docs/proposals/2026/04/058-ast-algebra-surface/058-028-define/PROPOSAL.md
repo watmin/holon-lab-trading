@@ -1,11 +1,52 @@
 # 058-028: `define` — Typed Function Definition
 
 **Scope:** language
-**Class:** LANGUAGE CORE
+**Class:** LANGUAGE CORE — **ACCEPTED + INSCRIPTION 2026-04-21**
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
 **Depends on:** 058-030-types (for the type annotation grammar)
 **Companion proposals:** 058-029-lambda
+
+---
+
+## INSCRIPTION — 2026-04-21 — Shipped
+
+Landed in wat-rs as the top-level function registration form.
+
+- **Dispatch:** [`wat-rs/src/runtime.rs`](https://github.com/watmin/wat-rs) — `register_defines` walks top-level forms, extracts every `(:wat::core::define ...)` into the `SymbolTable`
+- **Parse:** `parse_define_form` in runtime.rs extracts signature (path, params, param types, return type) + body
+- **Type check:** each `define` gets a `TypeScheme` registered in `CheckEnv`; signatures with `<T,U,...>` type-param suffixes produce polymorphic schemes
+- **Runtime:** `Value::wat__core__lambda(Arc<Function>)` — same representation as lambda values (058-029), just registered by path in the SymbolTable
+
+### Shipped shape
+
+```
+(:wat::core::define (:my::ns::name<T,U> (p1 :T) (p2 :U) -> :Ret) body)
+```
+
+- `<T,U>` suffix on the path declares type parameters; those names are treated as type variables in the parameter/return positions
+- Params are positional; `(name :Type)` pairs
+- Return type follows `->`
+- Body is a single expression (`let*`, `if`, `match`, call, literal — any expression form)
+
+### The four invariants enforced
+
+1. **Reserved-prefix gate.** `:wat::*` is refused for user defines — only `:wat::*` type declarations via `TypeEnv::with_builtins()` and stdlib defines via `register_stdlib_defines` bypass the check. User code must use their own prefix.
+2. **Duplicate-define refusal.** A second `(:wat::core::define :my::ns::foo ...)` halts with `RuntimeError::DuplicateDefine`. Startup is commit-once per path.
+3. **No shadow of core forms.** A parameter name that collides with a `:wat::core::*` builtin (`let*`, `match`, `=`, etc.) halts with `ParamShadowsBuiltin`.
+4. **Expression-position rejection.** A `define` found inside an expression (not at top level) halts with `DefineInExpressionPosition`. Define is a registration form; lambda is the expression form.
+
+### TCO for self-tail-calls
+
+Arc 003's TCO trampoline catches self-recursive tail calls at every `define`-registered function boundary. Long-running driver loops (Console/loop, Cache/loop-step, pipeline stages) rely on this for constant-stack tail recursion.
+
+### What this inscription does NOT add
+
+- **Multiple bodies.** A `define` has exactly one body expression. Sequencing uses `:wat::core::let*` with `_`-bound intermediate results.
+- **Forward references.** `define` order matters: a function can reference only already-registered defines. Mutual recursion works across defines (both get registered before resolution); the type checker pass-2 links them.
+- **Redefinition / live reload.** Explicitly out — commit-once. A future live-reload arc would need a different primitive (`:wat::core::redefine!`) with explicit versioning.
+
+---
 
 ## The Candidate
 

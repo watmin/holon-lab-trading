@@ -1,9 +1,39 @@
 # 058-013: `Ngram` — n-Wise Adjacency + Bigram / Trigram Shortcuts
 
 **Scope:** algebra
-**Class:** STDLIB — **ACCEPTED** (reframed 2026-04-18)
+**Class:** STDLIB — **ACCEPTED (reframed 2026-04-18) + INSCRIPTION 2026-04-21**
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
+
+---
+
+## INSCRIPTION — 2026-04-21 — Shipped
+
+All three forms landed.
+
+- **Ngram:** [`wat-rs/wat/std/Ngram.wat`](https://github.com/watmin/wat-rs/blob/main/wat/std/Ngram.wat)
+  - `(:wat::std::Ngram (n :AST<i64>) (xs :AST<List<holon::HolonAST>>) -> :AST<Result<holon::HolonAST, wat::algebra::CapacityExceeded>>)`
+  - Slides a size-n window across `xs`, encodes each window with `:wat::std::Sequential` (bind-chain from 058-009), bundles every window's compound into one composite holon via `:wat::algebra::Bundle`.
+- **Bigram:** [`wat-rs/wat/std/Bigram.wat`](https://github.com/watmin/wat-rs/blob/main/wat/std/Bigram.wat) — one-line shortcut: `` `(:wat::std::Ngram 2 ,xs) ``
+- **Trigram:** [`wat-rs/wat/std/Trigram.wat`](https://github.com/watmin/wat-rs/blob/main/wat/std/Trigram.wat) — one-line shortcut: `` `(:wat::std::Ngram 3 ,xs) ``
+- **Tests:** [`wat-rs/wat-tests/std/Trigram.wat`](https://github.com/watmin/wat-rs/blob/main/wat-tests/std/Trigram.wat) — two deftests covering the full chain (Ngram → Sequential → Permute + Bind). Participant window is present in the Trigram; unrelated atom is not.
+
+### Result return type — inherited from Bundle
+
+All three stdlib forms return `:AST<Result<holon::HolonAST, wat::algebra::CapacityExceeded>>` — the 2026-04-19 Bundle-Result slice forced every stdlib form that expands to Bundle to inherit its Result wrap. Callers either `match` explicitly or propagate with `:wat::core::try` (058-033). In the typical case where the input is well under capacity budget, the `Err` arm is unreachable; the type system still demands acknowledgment.
+
+### Edge cases pinned
+
+- `n <= 0` produces an empty bundle (zero vector).
+- `n > xs.len()` produces an empty bundle (no window fits).
+- Both paths return `Ok` with the zero-holon; no error.
+
+Documented in `wat-rs/wat/std/Ngram.wat` inline.
+
+### What this inscription does NOT add
+
+- **`Pentagram` / `Hexagram` / etc.** Users define `(:my::app::Pentagram xs) = (:wat::std::Ngram 5 ,xs)` in their own namespace. The stdlib commits to Bigram + Trigram because those are the trading lab's proven shapes; higher-n graduates when a caller cites use.
+- **Sliding-window-with-stride.** `Ngram` uses unit stride. Strided windowing (every-k-th n-gram) is userland composition via `:wat::core::take` / `:wat::core::drop` + Ngram.
 
 ---
 

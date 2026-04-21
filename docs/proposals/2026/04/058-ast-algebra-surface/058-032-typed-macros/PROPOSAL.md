@@ -1,11 +1,61 @@
 # 058-032: Typed Macros — Every Macro Parameter Is `:AST<T>`
 
 **Scope:** language
-**Class:** LANGUAGE CORE
+**Class:** LANGUAGE CORE — **ACCEPTED + INSCRIPTION 2026-04-21**
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
 **Depends on:** 058-030-types, 058-031-defmacro
 **Completes:** 058-031-defmacro (the type story)
+
+---
+
+## INSCRIPTION — 2026-04-21 — Shipped
+
+Typed macro parameters landed. Every `defmacro` parameter must carry an `:AST<T>` annotation where `T` is a concrete type from 058-030's universe; the placeholder `:AST` alone is refused.
+
+- **Parse + check:** [`wat-rs/src/macros.rs`](https://github.com/watmin/wat-rs) — `parse_defmacro_signature` validates every param type is `:AST<T>` shape; the `T` is recorded on the `MacroDef` for expansion-time checking
+- **Runtime:** at macro expansion, the binding between `,x` in the template and its call-site AST fragment carries the declared T; the type checker infers the expanded form's type against those bindings
+
+### Shipped stdlib examples
+
+Every form in `wat/std/*.wat` (Subtract, Amplify, Log, Circular, Reject, Project, Ngram, Bigram, Trigram) uses `:AST<T>` annotations. Two representative shapes:
+
+```
+(:wat::core::defmacro
+  (:wat::std::Subtract
+    (x :AST<holon::HolonAST>)    ; x must be an expression whose type is holon::HolonAST
+    (y :AST<holon::HolonAST>)
+    -> :AST<holon::HolonAST>)    ; the expansion's type is holon::HolonAST
+  `(:wat::algebra::Blend ,x ,y 1.0 -1.0))
+
+(:wat::core::defmacro
+  (:wat::std::Amplify
+    (x :AST<holon::HolonAST>)
+    (y :AST<holon::HolonAST>)
+    (s :AST<f64>)                ; s must be an expression whose type is f64
+    -> :AST<holon::HolonAST>)
+  `(:wat::algebra::Blend ,x ,y 1.0 ,s))
+```
+
+### `:AST<List<T>>` works
+
+Ngram's signature `(xs :AST<List<holon::HolonAST>>)` demonstrates nested type parameters. The check-time validator recursively verifies the `T` position; the runtime binding carries a `WatAST::List` whose elements are each typed `holon::HolonAST`.
+
+### `:AST<Result<T,E>>` works
+
+Bigram's and Trigram's return types `:AST<Result<holon::HolonAST, wat::algebra::CapacityExceeded>>` demonstrate two-param generics in the return position. The 2026-04-19 Bundle-Result slice's inherited `:Result` wrap flows cleanly through the typed-macro machinery.
+
+### Macro-author-time type checking
+
+The proposal's key promise — catch macro template errors at macro-DEFINITION time, not at expansion — holds. If a macro body's expansion references an unquoted binding in a position whose required type doesn't match the binding's declared `T`, the parser raises a `MacroError` pointing at the macro definition itself, not the call site. Tests in `wat-rs/tests/wat_macros.rs` cover the refusal paths.
+
+### What this inscription does NOT add
+
+- **Bare `:AST` (unparameterized) in macro signatures.** Refused. Every parameter MUST declare `T`. 058-031 had `:AST` as a placeholder; this proposal completed that placeholder by removing it.
+- **Macro-time higher-kinded types.** `:AST<Vec<T>>` where `T` is a macro-level type parameter works; arbitrary kind-polymorphism beyond rank-1 does not ship. Consistent with 058-030's rank-1 discipline.
+- **Implicit type coercion.** `:AST<i64>` in a param slot does not accept an expression of type `:f64` — the binding's type must match exactly (or unify under the checker's rank-1 rules).
+
+---
 
 ## The Candidate
 

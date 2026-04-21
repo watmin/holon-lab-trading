@@ -1,11 +1,32 @@
 # 058-019: `Subtract` — Stdlib Idiom for Linear Component Removal
 
 **Scope:** algebra
-**Class:** STDLIB
+**Class:** STDLIB — **ACCEPTED + INSCRIPTION 2026-04-21**
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
 **Depends on:** 058-002-blend
 **Companion proposals:** 058-015-amplify, 058-020-flip. (058-004-difference is REJECTED; Subtract is the canonical delta macro.)
+
+---
+
+## INSCRIPTION — 2026-04-21 — Shipped
+
+Landed in wat-rs as a defmacro over Blend, exactly as specified.
+
+- **Source:** [`wat-rs/wat/std/Subtract.wat`](https://github.com/watmin/wat-rs/blob/main/wat/std/Subtract.wat) (3 lines of form)
+- **Tests:** [`wat-rs/wat-tests/std/Subtract.wat`](https://github.com/watmin/wat-rs/blob/main/wat-tests/std/Subtract.wat) — two deftests covering both branches of the noise-floor discriminator (self-presence above, unrelated-presence below)
+- **Shape:** `(:wat::core::defmacro (:wat::std::Subtract (x :AST<holon::HolonAST>) (y :AST<holon::HolonAST>) -> :AST<holon::HolonAST>) \`(:wat::algebra::Blend ,x ,y 1.0 -1.0))`
+
+### Divergences from the original spec
+
+Weights shipped as `1.0 -1.0` (f64) rather than the proposal's literal `1 -1` (i64). Blend's signature takes f64 scalar weights; the macro adapts at the source level.
+
+### What this inscription does NOT add
+
+- **Any new primitive.** Pure stdlib macro; expands to Blend.
+- **A runtime discriminator branch of its own.** Subtract's semantics are Blend's semantics with fixed weights.
+
+---
 
 ## The Candidate
 

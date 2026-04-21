@@ -1,9 +1,29 @@
 # 058-018: `Circular` — Reframe as Stdlib over Blend
 
 **Scope:** algebra
-**Class:** STDLIB — **ACCEPTED**
+**Class:** STDLIB — **ACCEPTED + INSCRIPTION 2026-04-21**
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
+
+---
+
+## INSCRIPTION — 2026-04-21 — Shipped
+
+Landed in wat-rs as a defmacro over Blend with two reserved basis atoms (`cos-basis`, `sin-basis`) and `(cos θ, sin θ)` weights.
+
+- **Source:** [`wat-rs/wat/std/Circular.wat`](https://github.com/watmin/wat-rs/blob/main/wat/std/Circular.wat)
+- **Tests:** [`wat-rs/wat-tests/std/Circular.wat`](https://github.com/watmin/wat-rs/blob/main/wat-tests/std/Circular.wat) — two deftests proving adjacent hours are near (Circular 0 24 vs Circular 23 24) and antipodal hours are far (Circular 0 24 vs Circular 12 24), both measured against the noise-floor discriminator.
+- **Shape:** `(:wat::std::Circular (value :AST<f64>) (period :AST<f64>) -> :AST<holon::HolonAST>)` → a let* that computes θ then blends `(Atom :cos-basis)` and `(Atom :sin-basis)` with `(cos θ, sin θ)` weights.
+
+### Divergences from the original spec
+
+Three small surface adjustments from the proposal's body sketch, all driven by the 2026-04-19 typed-arith split:
+
+1. **Binary typed arithmetic.** The proposal wrote `(* 2 pi (/ v p))` (three-arg multiply). wat-rs arith is binary and typed post-2026-04-19: users commit to int or float at the call site. The expansion uses `(:wat::core::f64::*)` and `(:wat::core::f64::/)` pairwise.
+2. **`pi` as nullary call.** The proposal referenced `pi` bare. It's a nullary primitive — called as `(:wat::std::math::pi)`.
+3. **Explicit `:f64` in let\* bindings.** Binding types aren't inferred for stdlib forms; each let\* binding carries its declared type.
+
+Same math, enforcement-correct wat. Documented inline in the stdlib file as "Deviations from the proposal's body shape" for future readers.
 
 ---
 

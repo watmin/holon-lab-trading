@@ -1,9 +1,27 @@
 # 058-017: `Log` — Reframe as Stdlib over Blend
 
 **Scope:** algebra
-**Class:** STDLIB — **ACCEPTED**
+**Class:** STDLIB — **ACCEPTED + INSCRIPTION 2026-04-21**
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
+
+---
+
+## INSCRIPTION — 2026-04-21 — Shipped
+
+Landed in wat-rs as a defmacro over Thermometer with log-transformed inputs.
+
+- **Source:** [`wat-rs/wat/std/Log.wat`](https://github.com/watmin/wat-rs/blob/main/wat/std/Log.wat)
+- **Shape:** `(:wat::std::Log (value :AST<f64>) (min :AST<f64>) (max :AST<f64>) -> :AST<holon::HolonAST>)` → `` `(:wat::algebra::Thermometer (:wat::std::math::ln ,value) (:wat::std::math::ln ,min) (:wat::std::math::ln ,max)) ``
+- **Tests:** indirect — trading-lab vocabulary modules (rhythms, excursions) exercise Log throughout. No dedicated `wat-tests/std/Log.wat` yet.
+
+### Divergences from the original spec
+
+The original framing was "reframe Log over Blend." The landed form is **over Thermometer** (the 3-arity primitive per the 2026-04-18 Thermometer-signature update), which subsumes the Blend path: log the inputs, then linear-gradient-encode. Semantically equivalent to the proposal's intent; structurally Thermometer-based. Authors write `(Log v min max)` without touching Blend directly.
+
+### What this inscription does NOT add
+
+- **No dedicated test file.** Ship a `wat-tests/std/Log.wat` when a concrete caller surfaces an edge case worth pinning.
 
 ---
 

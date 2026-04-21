@@ -1,5 +1,25 @@
 # 058-027: `HashSet` — Stdlib Unordered-Collection Constructor
 
+**Class:** STDLIB — **ACCEPTED + INSCRIPTION 2026-04-21**
+
+---
+
+## INSCRIPTION — 2026-04-21 — Cross-reference
+
+Landed in wat-rs. The 2026-04-19 shipped-shape amendment below documents the flat-args form (`(HashSet x1 x2 x3 ...)`) that actually ships; this cross-reference points at the Rust implementation.
+
+- **Primitive dispatch:** [`wat-rs/src/runtime.rs`](https://github.com/watmin/wat-rs) — `:wat::std::HashSet` constructor arm + `infer_hashset_constructor` in check.rs
+- **Type:** `:HashSet<T>` registered via `TypeEnv::with_builtins()`; runtime backing `Value::wat__std__HashSet(Arc<HashSet<…>>)`
+- **Companion accessors:** `:wat::std::get` (returns `:Option<T>`), `:wat::std::member?` (returns `:bool`)
+- **Tests:** indirect — no dedicated `wat-tests/` file yet.
+
+### What this inscription does NOT add
+
+- **Composite-holon elements.** Elements stay primitive-scoped; composite-element support graduates when a caller demands it.
+- **Set operations.** Union / intersection / difference are not in the shipped surface. User code composes them via `foldl` + `member?` as needed; if demand surfaces, they'd ship as stdlib macros.
+
+---
+
 > **STATUS: SUPERSEDES the original `Set` proposal** (2026-04-18 Rust-surface naming sweep).
 >
 > The form previously called `Set` is now named `HashSet` — matching Rust's `std::collections::HashSet` directly. The wat UpperCase constructor, the type annotation `:HashSet<T>`, and the runtime backing all share one name.

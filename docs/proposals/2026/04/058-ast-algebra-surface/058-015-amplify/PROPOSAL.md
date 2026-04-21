@@ -1,11 +1,27 @@
 # 058-015: `Amplify` — Stdlib Idiom for Scaled Component Emphasis
 
 **Scope:** algebra
-**Class:** STDLIB
+**Class:** STDLIB — **ACCEPTED + INSCRIPTION 2026-04-21**
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
 **Depends on:** 058-002-blend
 **Companion proposals:** 058-019-subtract, 058-020-flip
+
+---
+
+## INSCRIPTION — 2026-04-21 — Shipped
+
+Landed in wat-rs as a three-arg defmacro over Blend.
+
+- **Source:** [`wat-rs/wat/std/Amplify.wat`](https://github.com/watmin/wat-rs/blob/main/wat/std/Amplify.wat)
+- **Shape:** `(:wat::std::Amplify (x :AST<holon::HolonAST>) (y :AST<holon::HolonAST>) (s :AST<f64>) -> :AST<holon::HolonAST>)` → `` `(:wat::algebra::Blend ,x ,y 1.0 ,s) ``
+- **Tests:** indirect — exercised via Subtract + Reject/Project (all Blend-over-stdlib forms share the Blend primitive's coverage). No dedicated `wat-tests/std/Amplify.wat` yet; add when a concrete caller demands it.
+
+### What this inscription does NOT add
+
+- **No dedicated test file** — Amplify's semantics reduce to Blend's, already covered by `wat-tests/std/Subtract.wat`'s presence-vs-noise-floor discriminator pattern.
+
+---
 
 ## The Candidate
 

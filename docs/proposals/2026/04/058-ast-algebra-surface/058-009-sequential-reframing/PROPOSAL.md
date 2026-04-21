@@ -1,9 +1,43 @@
 # 058-009: `Sequential` — Reframed to Bind-Chain Positional Compound
 
 **Scope:** algebra
-**Class:** STDLIB — **ACCEPTED** (reframed 2026-04-18)
+**Class:** STDLIB — **ACCEPTED (reframed 2026-04-18) + INSCRIPTION 2026-04-21**
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
+
+---
+
+## INSCRIPTION — 2026-04-21 — Shipped
+
+Landed in wat-rs as the reframed bind-chain.
+
+- **Source:** [`wat-rs/wat/std/Sequential.wat`](https://github.com/watmin/wat-rs/blob/main/wat/std/Sequential.wat)
+- **Tests:** [`wat-rs/wat-tests/std/Sequential.wat`](https://github.com/watmin/wat-rs/blob/main/wat-tests/std/Sequential.wat) — two deftests: self-identity (the sequence is present in itself) and order-sensitivity (`[a,b,c]` and `[a,c,b]` are orthogonal at the noise-floor discriminator).
+- **Shape:** `(:wat::std::Sequential (xs :AST<List<holon::HolonAST>>) -> :AST<holon::HolonAST>)`
+
+### Expansion shape
+
+```
+(Sequential [a])       = a
+(Sequential [a b])     = Bind(a, Permute(b, 1))
+(Sequential [a b c])   = Bind(Bind(a, Permute(b, 1)), Permute(c, 2))
+(Sequential [a b c d]) = Bind(Bind(Bind(a, Permute(b, 1)), Permute(c, 2)), Permute(d, 3))
+```
+
+Position attached by Permute at non-zero indices; item 0 stays un-permuted. Nested Bind composition creates a compound with strict identity — order-sensitive.
+
+### Implementation detail — `map-with-index` + `foldl`
+
+The landed expansion uses `:wat::core::map-with-index` to pair each item with its position, then `:wat::core::foldl` over the tail starting from head. No new primitives; both combinators exist in `:wat::core::*`.
+
+### Why the reframe held
+
+The proposal's original bundle-sum form (`Bundle([Permute(item_i, i) for i in 0..n])`) produced vectors that preserved rough set-membership but lost strict ordering — two sequences with the same items in different order had cosines well above the noise floor. The bind-chain form is strict: two orderings yield orthogonal compound vectors. The trading lab's `rhythm.rs` trigram production pattern (shipping in holon-lab-trading) has always used bind-chain; this proposal's acceptance aligned the spec with what production had already proven.
+
+### What this inscription does NOT add
+
+- **A pure-Bundle variant.** The bundle-sum form is retired; callers who want set-membership encoding use `:wat::std::HashSet` or `Bundle` directly.
+- **Custom permutation kernels.** Position is `Permute(item, index)` — the algebra's standard cyclic-shift Permute. No `Sequential-with-custom-permute` variant.
 
 ---
 
