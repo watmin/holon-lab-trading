@@ -1,8 +1,53 @@
 # Wat → Rust — The Compile Path
 
+> **STATUS: RETIRED 2026-04-21.** The conceptual sketch below is preserved
+> as historical record — the seed of an idea that looked load-bearing in
+> Chapter 10's FOUNDATION landing. It isn't anymore.
+>
+> **Why retired.** The INTERPRET path (wat source → wat-vm → evaluated)
+> shipped and proved out across arcs 001–010 in wat-rs. Rust-interop — the
+> one concrete need that motivated the compile path — was paved differently
+> and better: the `#[wat_dispatch]` proc-macro (arc 002, `wat-macros/` crate)
+> plus the `:rust::*` sibling namespace (BOOK Chapter 18 — *The Host*) let
+> wat reach into Rust crates directly. Wat is a hosted language on Rust the
+> way Clojure is hosted on the JVM. The boundary is `:rust::<crate>::<Type>`
+> at the source level and annotated `impl` blocks at the Rust side. No
+> source-to-source compiler needed for the capability this doc was
+> originally chasing.
+>
+> **What the compile path would still hypothetically add.** Native binary
+> emission with no interpreter overhead. That's genuine — the wat-vm is
+> still an interpreter with lookup tables, pattern matching on variants,
+> and boxed values. A compile path could emit a tighter binary. But:
+>
+> - **No caller has cited the need.** Stdlib-as-blueprint discipline
+>   (wat-rs `docs/CONVENTIONS.md`): substrate ships when a real consumer
+>   demands it. This one has none.
+> - **The INTERPRET path's performance profile is sufficient** for every
+>   workload that's been tried — DDoS line-rate packet inspection, the
+>   trading lab's 100k-candle benchmarks, arc 007's self-hosted testing
+>   loop. Arc 001's L1/L2 caching, arc 003's TCO trampoline, arc 004's
+>   bounded-queue streams, the zero-Mutex concurrency architecture — each
+>   closed a specific performance concern.
+> - **If a caller does surface**, the wat-vm's established pipeline (parse
+>   → resolve → check → freeze → interpret) has the structure a source-to-
+>   source compiler would reuse. The sketch below stays honest about the
+>   shape, so that work is recoverable.
+>
+> **What to read instead.**
+> - For Rust-interop: `RUST-INTERPRETATION.md` on the INTERPRET path +
+>   wat-rs's `docs/arc/2026/04/002-rust-interop-macro/` for `:rust::*` +
+>   `#[wat_dispatch]` as they actually shipped.
+> - For performance discipline: wat-rs's `docs/ZERO-MUTEX.md`.
+>
+> The sketch below remains unchanged from its 2026-04 original for anyone
+> who wants the framing.
+>
+> ---
+
 **Purpose:** conceptual sketch. A Rust program (the wat-to-rust compiler) consumes wat source and emits Rust source. Rustc compiles that Rust to a binary. The resulting binary is a wat program running at native speed with no interpreter overhead.
 
-**Status:** seed document. Here to get the idea on disk. Iterate.
+**Status:** ~~seed document. Here to get the idea on disk. Iterate.~~ RETIRED (see banner above).
 
 **Relation to other docs:**
 - `FOUNDATION.md` — the algebra and kernel being implemented.
