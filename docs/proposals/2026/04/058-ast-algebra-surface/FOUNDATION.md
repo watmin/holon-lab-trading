@@ -976,11 +976,19 @@ The kernel primitives are exposed to wat programs as lowercase keyword-path func
 ;; → :(crossbeam_channel::Sender<LearnSignal>, crossbeam_channel::Receiver<LearnSignal>)
 ;; Fire-and-forget — buffer grows until the consumer drains.
 
-(:wat::kernel::send sender value)         ;; → :()     blocks if bounded + full
-(:wat::kernel::recv receiver)              ;; → :Option<T>     :None when disconnected
-(:wat::kernel::try-recv receiver)          ;; → :Option<T>     :None if empty OR disconnected
-(:wat::kernel::drop handle)                ;; → :()     close a sender/receiver end
-                                          ;;          downstream sees :None on next recv
+(:wat::kernel::send sender value)          ;; → :Option<()>   (Some ()) on sent; :None on disconnect
+(:wat::kernel::recv receiver)              ;; → :Option<T>    :None when disconnected
+(:wat::kernel::try-recv receiver)          ;; → :Option<T>    :None if empty OR disconnected
+(:wat::kernel::drop handle)                ;; → :()           close a sender/receiver end
+                                          ;;                 downstream sees :None on next recv
+
+;; `send` and `recv` are symmetric on disconnect — both report it
+;; through the same :Option shape. Producers match on send to exit
+;; cleanly when the consumer has dropped. Stages that don't need
+;; disconnect awareness write `((_ :Option<()>) (send tx v))` and
+;; ignore the result. (Earlier drafts raised `ChannelDisconnected`
+;; on send; symmetrized with recv's :None shape 2026-04-20. See
+;; FOUNDATION-CHANGELOG and `058-034-stream-stdlib`.)
 
 ;; Senders and receivers are SINGLE-OWNER — not cloneable. A sender belongs
 ;; to exactly one producer; a receiver to exactly one consumer. This is the
@@ -1293,7 +1301,7 @@ These eight patterns were expensive to learn. The wat-vm substrate makes them ex
 
 A spawnable program, stdlib or userland, wat or Rust:
 
-1. **Is a function** named by keyword path in the static symbol table.
+1. **Is a function** — either registered under a keyword path in the static symbol table (`define`-registered) or a runtime lambda value whose closure holds its captures. `:wat::kernel::spawn`'s first argument may be either: a keyword-path literal that resolves via `sym.functions`, OR any expression evaluating to a `:wat::core::lambda` value. Both produce the same `Arc<Function>` at the spawn site; the trampoline inside `apply_function` handles both (closed_env as parent for lambdas, fresh root for defines).
 2. **Takes its handles as parameters** — queue senders, queue receivers, other program handles, plain values. No ambient state, no ambient capabilities.
 3. **Returns its final state as its return value** — `:wat::kernel::join` collects it.
 4. **Observes the drop cascade** — drains and returns when its input receivers disconnect; does not hold references that prevent shutdown.
@@ -1301,6 +1309,10 @@ A spawnable program, stdlib or userland, wat or Rust:
 6. **Uses `:wat::kernel::HandlePool` for client handles** — if it exposes client handles, it wraps them in a pool and finishes the pool at wiring time.
 
 A Rust function conforming to these six rules is indistinguishable from a wat-authored program at spawn time. The wat-vm loads it at startup, registers it under its keyword path, and `:wat::kernel::spawn` dispatches the same way. See `WAT-TO-RUST.md` for the compile-path mechanics.
+
+**Lambda-valued spawns unlock caller-provided-function combinators.** Arc 004's stream stdlib (`058-034`) spawns caller-supplied lambdas directly — `spawn-producer` accepts a `:fn(Sender<T>)->()` value, `map` / `filter` / `chunks` each spawn their user-provided function inside a generic worker. Before the 2026-04-20 relaxation, every such combinator needed a generic-worker-takes-lambda-as-arg workaround to route the function across the spawn boundary. Now spawn takes the lambda directly. See `FOUNDATION-CHANGELOG` 2026-04-20 entry.
+
+**Driver loops run in constant Rust stack.** Every spawnable program that follows the tail-recursive shape — `Console/loop`, `Cache/loop-step`, the stream stdlib's workers, any future `gen_server`-shaped driver — uses `:wat::core::match`'s tail position on the `recv → Some/None` branch to either do work and recurse or exit. The wat-vm's evaluator implements tail-call optimization (arc 003, 2026-04-20) so these loops consume one Rust stack frame regardless of how many messages they process. A Console handling 10 million messages occupies the same stack as one handling ten. Rust itself has no TCO; the wat interpreter provides it, because the programs it hosts need it. Same mandate Scheme R7RS and Erlang BEAM carry.
 
 #### Two stdlib programs, and only two
 
@@ -2152,6 +2164,22 @@ wat/std/program/
                                     ;;   LRU memoization with telemetry
                                     ;;   hooks; the hot path of any holon
                                     ;;   program that encodes ASTs
+      wat/std/stream.wat           ;; :wat::std::stream::*
+                                    ;;   CSP pipeline stdlib — Stream<T>
+                                    ;;   typealias + spawn-producer / map /
+                                    ;;   filter / chunks / for-each /
+                                    ;;   collect / fold (see 058-034).
+                                    ;;   Each intermediate combinator
+                                    ;;   spawns ONE worker over a
+                                    ;;   bounded(1) queue; terminals drive
+                                    ;;   the pipeline and join the handle.
+                                    ;;   Composition via explicit let* —
+                                    ;;   the typed-binding chain IS the
+                                    ;;   pipeline. No one-liner composer;
+                                    ;;   let* is already the honest form
+                                    ;;   (see 058-034 REJECTED section
+                                    ;;   for the "verbose is honest"
+                                    ;;   reasoning).
 
       No more. Database, telemetry pipelines, rate-gates, signal
       converters, domain-specific observers/brokers/treasuries — all
@@ -2235,14 +2263,15 @@ This makes the discipline enforceable in practice: conflicts fail loudly and ear
 
 The project reserves four prefixes, and they are **protected at startup** — users cannot define anything at these paths. Attempting `(:wat::core::define (:wat::kernel::my-func ...) ...)` or `(:wat::core::defmacro (:wat::std::MyAlias ...) ...)` halts the wat-vm with a startup error.
 
-- `:wat::core::...` — language core primitives (`:wat::core::define`, `:wat::core::lambda`, `:wat::core::let`, `:wat::core::let*`, `:wat::core::if`, `:wat::core::match`, `:wat::core::cond`, `:wat::core::defmacro`, `:wat::core::load!`, `:wat::core::vec`, `:wat::core::list`, `:wat::core::tuple`, `:wat::core::quote`, `:wat::core::atom-value`, `:wat::core::eval-ast!`, `:wat::core::eval-edn!`, `:wat::core::eval-digest!`, `:wat::core::eval-signed!`, `:wat::core::first`, `:wat::core::second`, `:wat::core::third`, `:wat::core::rest`, `:wat::core::map`, `:wat::core::foldl`, `:wat::core::range`, `:wat::core::take`, `:wat::core::drop`, `:wat::core::length`, `:wat::core::empty?`, `:wat::core::reverse`, `:wat::core::i64::+`, `:wat::core::i64::-`, `:wat::core::i64::*`, `:wat::core::i64::/`, `:wat::core::f64::+`, `:wat::core::f64::-`, `:wat::core::f64::*`, `:wat::core::f64::/`, `:wat::core::>`, `:wat::core::=`, …)
-- `:wat::kernel::...` — wat-vm kernel primitives (`:wat::kernel::make-bounded-queue`, `:wat::kernel::make-unbounded-queue`, `:wat::kernel::spawn`, `:wat::kernel::send`, `:wat::kernel::recv`, `:wat::kernel::try-recv`, `:wat::kernel::select`, `:wat::kernel::drop`, `:wat::kernel::join`, `:wat::kernel::HandlePool`, `:wat::kernel::stopped?`)
+- `:wat::core::...` — language core primitives (`:wat::core::define`, `:wat::core::lambda`, `:wat::core::let`, `:wat::core::let*`, `:wat::core::if`, `:wat::core::match`, `:wat::core::cond`, `:wat::core::defmacro`, `:wat::core::try`, `:wat::core::load!`, `:wat::core::vec`, `:wat::core::list`, `:wat::core::tuple`, `:wat::core::conj`, `:wat::core::quote`, `:wat::core::atom-value`, `:wat::core::eval-ast!`, `:wat::core::eval-edn!`, `:wat::core::eval-digest!`, `:wat::core::eval-signed!`, `:wat::core::first`, `:wat::core::second`, `:wat::core::third`, `:wat::core::rest`, `:wat::core::map`, `:wat::core::foldl`, `:wat::core::range`, `:wat::core::take`, `:wat::core::drop`, `:wat::core::length`, `:wat::core::empty?`, `:wat::core::reverse`, `:wat::core::struct`, `:wat::core::enum`, `:wat::core::newtype`, `:wat::core::typealias`, `:wat::core::i64::+`, `:wat::core::i64::-`, `:wat::core::i64::*`, `:wat::core::i64::/`, `:wat::core::f64::+`, `:wat::core::f64::-`, `:wat::core::f64::*`, `:wat::core::f64::/`, `:wat::core::>`, `:wat::core::=`, …)
+- `:wat::kernel::...` — wat-vm kernel primitives (`:wat::kernel::make-bounded-queue`, `:wat::kernel::make-unbounded-queue`, `:wat::kernel::spawn`, `:wat::kernel::send`, `:wat::kernel::recv`, `:wat::kernel::try-recv`, `:wat::kernel::select`, `:wat::kernel::drop`, `:wat::kernel::join`, `:wat::kernel::HandlePool`, `:wat::kernel::stopped?`). **`spawn`** accepts a keyword-path literal OR a lambda-valued expression as its first argument; **`send`** is Option-returning (`:Option<()>`), symmetric with `recv`'s `:Option<T>` on disconnect.
 - `:wat::config::...` — ambient startup constants: setters (`set-dims!`, `set-capacity-mode!`, `set-global-seed!`, `set-noise-floor!`), accessors (`dims`, `capacity-mode`, `global-seed`, `noise-floor`), and the `:wat::config::CapacityMode` enum. Required-at-startup or defaulted values the program author commits at most once; see "`:wat::config` — Ambient Startup Constants."
 - `:wat::algebra::...` — algebra core primitives (`:wat::algebra::Atom`, `:wat::algebra::Bind`, `:wat::algebra::Bundle`, `:wat::algebra::Blend`, `:wat::algebra::cosine`, `:wat::algebra::dot`, `:wat::algebra::presence?`, …)
 - `:wat::io::...` — I/O primitives for the real OS streams handed to `:user::main` (`:wat::io::write` for `:rust::std::io::Stdout` / `:rust::std::io::Stderr`, `:wat::io::read-line` for `:rust::std::io::Stdin`). No channel indirection; calls go straight to the OS stream via std's internal locking.
 - `:wat::std::...` — project stdlib (`:wat::std::Subtract`, `:wat::std::HashMap`, `:wat::std::HashSet`, `:wat::std::Chain`, `:wat::std::LocalCache`, `:wat::std::program::Console`, `:wat::std::program::Cache`, circular basis atoms, …). The wat-level smart constructors and spawnable programs live here; they may wrap Rust types (HashMap produces a `:rust::std::collections::HashMap<K,V>`) but their call surface is wat-native.
   - `:wat::std::list::...` — generic list combinators that compose core primitives (`:wat::std::list::pairwise-map`, `:wat::std::list::n-wise-map`, `:wat::std::list::map-with-index`, `:wat::std::list::window`, `:wat::std::list::zip`, `:wat::std::list::take-while`, …). Each is a short composition of Rust iterator methods; each is called from stdlib-macro-emitted ASTs and from user code.
   - `:wat::std::math::...` — math primitives used inside stdlib macros (`:wat::std::math::cos`, `:wat::std::math::sin`, `:wat::std::math::pi`, `:wat::std::math::log`, `:wat::std::math::ln`).
+  - `:wat::std::stream::...` — CSP pipeline combinators (`:wat::std::stream::Stream<T>` typealias, `:wat::std::stream::Producer<T>` typealias, `:wat::std::stream::spawn-producer`, `map`, `filter`, `chunks`, `for-each`, `collect`, `fold`). Each intermediate combinator spawns one worker over a bounded(1) queue; terminals drive the pipeline and join the handle. Composition via explicit `let*` chain — the typed-binding chain IS the pipeline (see `058-034-stream-stdlib`).
 - `:rust::...` — imported Rust-crate types, surfaced through the `#[wat_dispatch]` macro with fully-qualified Rust paths (`:rust::std::io::Stdin`, `:rust::std::collections::HashMap<K,V>`, `:rust::crossbeam_channel::Sender<T>`, `:rust::lru::LruCache<K,V>`). Every `:rust::*` reference in a wat program requires a `(:wat::core::use! :rust::<Type>)` declaration — per-program explicit opt-in, set-insert semantics so multiple declarations collapse. `:wat::...` and `:rust::...` coexist as sibling namespaces; the wat-stdlib often wraps `:rust::*` types (LocalCache wraps lru::LruCache, Console uses std::io handles) but presents wat-native contracts at its surface.
 
 User code uses its own distinctive prefixes — `:alice::...`, `:project::market::...`, `:my-app::...`. The `:wat::...` and `:rust::...` prefixes are the only ones the language forbids users from claiming at define/defmacro/type sites. (Users reference `:rust::...` types freely via `(:wat::core::use! ...)`; they just can't REGISTER new symbols under that prefix — that job belongs to shim authors on the Rust side.)
@@ -2865,6 +2894,22 @@ All eight forms are loaded at startup. The wat-vm distinguishes them by what kin
 ;;   (:wat::core::typealias :alice::types::Amount :f64)
 ;;   (:wat::core::typealias :alice::market::CandleSeries :Vec<Candle>)
 ;;   (:wat::core::typealias :alice::trading::Scores :rust::std::collections::HashMap<Atom,f64>)
+;;
+;; The type checker's `reduce` pass (shipped 2026-04-20) walks
+;; aliases at EVERY position in the type tree: at unify, at
+;; shape-inspection (`first`/`second`/`third`, `get` on HashMap/
+;; HashSet, `drop`/`spawn`'s arg extraction, `try`'s Result
+;; extraction). An alias and its expansion are interchangeable
+;; everywhere. Error messages preserve the surface alias name
+;; the user wrote (via `apply_subst`, NOT `reduce`), so the
+;; reader sees `:alice::trading::Scores` in mismatches rather
+;; than its HashMap<Atom,f64> expansion. Parametric aliases
+;; substitute their type params during expansion:
+;; `:my::Pair<i64,String>` expands to `:(i64,String)` with
+;; K↦i64, V↦String. Cyclic aliases are refused at
+;; registration (two aliases that point at each other halt
+;; startup). See 058-030 2026-04-20 INSCRIPTION for the reduce
+;; pass details.
 ;;
 ;; Note: :Option<T> is an enum (coproduct), not a typealias.
 ;;   (:wat::core::enum :wat::std::Option<T>
