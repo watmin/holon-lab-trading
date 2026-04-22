@@ -1341,7 +1341,7 @@ The remaining stdlib programs (Console, Cache) pass the bar because every multi-
 ### Implications for prior sections
 
 - **"The Algebra Is Immutable"** — the startup pipeline (parse, macro-expand, resolve, type-check, hash, verify, register, freeze, main-loop) runs on the kernel: the binary IS the main thread, which spawns the program graph into existence after the freeze. `eval` lives in a program; it is not a kernel primitive.
-- **"Caching Is Memoization"** — caching is userland; the stdlib ships `wat/std/LocalCache.wat`, `wat/std/program/Cache.wat`, and `wat/std/cached-encode.wat`; applications choose to use them, to build their own, or to forgo caching entirely. The kernel is unaware of caching semantics; it just delivers queue messages.
+- **"Caching Is Memoization"** — caching is userland; LRU caching ships via the external `wat-lru` sibling crate (`crates/wat-lru/wat/lru.wat` for `:user::wat::std::lru::LocalCache`; `crates/wat-lru/wat/service.wat` for `:user::wat::std::lru::CacheService`), composed into consumer binaries via `wat::main! { ..., deps: [wat_lru] }`. `wat/std/cached-encode.wat` (AST-caching wrapper) stays baked because it's cache-flavor-agnostic. Applications choose to use wat-lru, to build their own cache crate, or to forgo caching entirely. The kernel is unaware of caching semantics; it just delivers queue messages. (Arc 013 — externalization 2026-04-21.)
 - **Q7 (redef-mode syntax, deferred)** — now strictly a userland concern. The kernel does not know about names; the application's load-and-register programs handle redefinition policy however they choose.
 
 The kernel is small on purpose. The algebra does the heavy thinking; the kernel just passes messages.

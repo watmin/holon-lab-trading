@@ -85,14 +85,18 @@ The privileged path `register_stdlib_types` (mirroring the
 existing `register_stdlib_defmacros`) lets stdlib wat files
 declare typealiases under `:wat::*` without fighting the
 reserved-prefix gate that protects user source. First real use:
-`:wat::std::LocalCache<K,V>` is now declared in
-`wat/std/LocalCache.wat` as an alias for
-`:rust::lru::LruCache<K,V>` — the wat-native name lives
-alongside the defines, expressed in wat source, the same way
-users would declare their own typealiases under their own
-prefixes. Same pattern later used by `wat/std/program/Cache.wat`
-(`Cache::Request<K,V>`, `Cache::ReplyTx<V>`, etc.),
-`wat/std/program/Console.wat` (`Console::Message`), and
+`:wat::std::LocalCache<K,V>` was declared in `wat/std/LocalCache.wat`
+as an alias for `:rust::lru::LruCache<K,V>` — the wat-native name
+lived alongside the defines, expressed in wat source, the same
+way users would declare their own typealiases under their own
+prefixes. (Arc 013 externalized that crate 2026-04-21:
+LocalCache now lives at `:user::wat::std::lru::LocalCache<K,V>`
+in `crates/wat-lru/wat/lru.wat` as an external wat crate. The
+typealias pattern is preserved — community crates inherit the
+same substrate.) Same pattern later used by
+`crates/wat-lru/wat/service.wat` (`CacheService::Request<K,V>`,
+`CacheService::ReplyTx<V>`, etc.),
+`wat/std/service/Console.wat` (`Console::Message`), and
 `wat/std/stream.wat` (`Stream<T>`, `Producer<T>`).
 
 ### Lesson captured
