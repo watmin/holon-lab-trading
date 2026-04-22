@@ -256,22 +256,105 @@ Stdlib Forms): each combinator ships when a real caller
 demands it. The first slice of `:wat::std::stream::*` ships the
 load-bearing set; deferred-until-demanded:
 
-- `chunks-by` — key-function-based batching.
-- `window` — sliding fixed-size window.
+- ~~`chunks-by`~~ **shipped 2026-04-21** (arc 006 slice 5) as
+  library code on with-state. See INSCRIPTION AMENDMENT below.
+- ~~`window`~~ **shipped 2026-04-21** (arc 006 slice 5) as
+  library code on with-state. See INSCRIPTION AMENDMENT below.
 - `time-window` — time-based window (needs a clock primitive
   we don't have yet).
-- `inspect` — 1:1 side-effect pass-through.
-- `flat-map` — 1:N expand.
-- `first` — take first N, drop rest.
-- `from-iterator` / `from-fn` / `from-receiver` — alternate
-  source constructors; `spawn-producer` covers the typical
-  case.
+- ~~`inspect`~~ **shipped 2026-04-20** (arc 006 slice 1).
+- ~~`flat-map`~~ **shipped 2026-04-20** (arc 006 slice 1).
+- ~~`first`~~ — **reframed** as `take(stream, n) -> Stream<T>`
+  (stage, not terminal); shipped 2026-04-20 (arc 006 slice 2).
+- ~~`from-receiver`~~ **shipped 2026-04-20** (arc 006 slice 3);
+  `from-iterator` / `from-fn` still substrate-blocked.
 - Level 2 iterator surfacing
   (`:rust::std::iter::Iterator<T>` via `#[wat_dispatch]`).
   Cross-thread channel flavor (Level 1) covers the main app
   need; in-process lazy chains haven't been demanded.
 
 Each ships when a real caller with a citation demands it.
+
+---
+
+## INSCRIPTION AMENDMENT — 2026-04-21 (arc 006 closes)
+
+Seven combinators have shipped since the original proposal.
+Three were trivial pattern-completions (inspect, flat-map, take).
+One was a reframe (take-as-stage instead of first-as-terminal —
+arc 006 slice 2 surfaced the absence-is-signal rule the BACKLOG
+now documents: a terminal that early-terminates against an
+infinite producer is the language telling you the shape is
+wrong; make it a stage). One was a source constructor
+(from-receiver). **The two substantive additions** were
+`with-state` (the Mealy-machine substrate primitive) and its
+two library-code specializations `chunks-by` / `window`:
+
+### `:wat::std::stream::with-state<T,U,Acc>` — the stateful-stage substrate
+
+```scheme
+(with-state stream init step flush) -> Stream<U>
+  step  : (Acc, T) -> (Acc, Vec<U>)
+  flush : (Acc)    -> Vec<U>
+```
+
+A Mealy machine as a stream stage. The worker threads `Acc`; each
+upstream item passes through `step` which returns (new-state,
+items-to-emit); at EOS, `flush` is called on the final state and
+its emissions are drained downstream.
+
+Every stateful combinator (chunks, chunks-by, window, dedupe-
+adjacent, sessionize, throttle, running-stats) reduces to a
+specific `(init, step, flush)` triple. `chunks` was rewritten
+on top as the surface-reduction proof — same semantics, state
+transitions now live in caller lambdas rather than an in-worker
+branch. 22 existing stream tests passed unchanged.
+
+Convergence with prior art — Elixir's `Stream.transform/3`,
+Rust's scan-with-emit, Haskell's `mapAccumL`, Mealy 1955. Same
+triple across seventy years of sequential-machine design.
+
+### `:wat::std::stream::chunks-by<T,K>(stream, key-fn)` — Clojure `partition-by` shape
+
+Groups consecutive items sharing the same key into one `Vec<T>`;
+emits on key-change; flushes the final run at EOS. Decomposes
+via `init = (None, [])`, step that accumulates on key-match and
+emits on key-change, flush that emits any non-empty buffer.
+
+K-equality uses polymorphic `:wat::core::=` (structural over
+primitives and composite values).
+
+### `:wat::std::stream::window<T>(stream, size)` — sliding step-1
+
+Emits every full-size window as items arrive. At EOS, flushes the
+partial buffer IFF the stream was shorter than `size` — the
+Ruby-example discipline ("don't silently drop data at EOS") the
+book named in Chapter 20. Decomposes via `init = []`, step that
+appends + trims-to-size + emits, flush that emits a partial only
+when no full window ever fired.
+
+Step >1 and other sliding behaviors earn their own named
+combinators when real callers demand; the `window` primitive
+ships one honest default.
+
+Implementation note: window's step is a three-way dispatch on
+`len(new-buf)` against `size` (over / equal / under), which was
+the first stdlib consumer of `:wat::core::cond` (058-036).
+
+### Shipped artifacts
+
+- `wat/std/stream.wat` grew ~180 lines across slices 4-5.
+- 7 new wat-level tests in `wat-tests/std/stream.wat` (31 → 38
+  test total across the wat-tests corpus).
+- wat-rs commit refs: slice 4 landed alongside arc 009; slice 5
+  in a subsequent commit.
+
+### Arc 006 status
+
+**Closed.** Remaining items — time-window, from-iterator,
+Level 2 iterator — are substrate-blocked on primitives that
+don't exist yet (clock, iterator-trait surface) and earn their
+own arcs when callers demand.
 
 ---
 

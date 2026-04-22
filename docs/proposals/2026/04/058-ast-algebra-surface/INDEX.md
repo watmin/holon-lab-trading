@@ -251,7 +251,7 @@ Shows which proposals must resolve before which others. Arrows flow from prerequ
 | 031 | defmacro | LANG CORE | new | Compile-time syntactic expansion + Racket-style hygiene |
 | 032 | typed-macros | LANG CORE | new | `:AST<T>` + macro-authoring-time type checking (extends 031) |
 | 033 | try | LANG CORE | INSCRIPTION | Error-propagation form `(try result-expr)` — short-circuits enclosing Result-returning fn |
-| 034 | stream-stdlib | STDLIB | INSCRIPTION | CSP pipeline combinators (`spawn-producer`, `map`, `filter`, `chunks`, `for-each`, `collect`, `fold`) over kernel primitives |
+| 034 | stream-stdlib | STDLIB | INSCRIPTION | CSP pipeline combinators over kernel primitives. Original slice: `spawn-producer`, `map`, `filter`, `chunks`, `for-each`, `collect`, `fold`. Amended (2026-04-21) with arc 006 additions: `inspect`, `flat-map`, `take`, `from-receiver`, `with-state`, `chunks-by`, `window` |
 | 035 | fork-substrate | KERNEL + STDLIB | INSCRIPTION | `:wat::kernel::pipe` / `fork-with-forms` / `wait-child` + hermetic moved to wat stdlib on top |
 | 036 | cond | LANG CORE | INSCRIPTION | Typed multi-way branch `(cond -> :T ((test) body) ... (:else body))` — factors nested-`if` ceremony |
 
