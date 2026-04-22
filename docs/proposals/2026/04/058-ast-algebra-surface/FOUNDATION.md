@@ -1540,9 +1540,9 @@ The algebra doesn't care whether an application memoizes or not. Pure recomputat
 
 Because memoization is a common pattern — and applications want it in two different shapes — the stdlib ships three things:
 
-**1. A local cache — `wat/std/LocalCache.wat`.** An in-program cache. A program holds it as owned state — a local HashMap or LRU — and `get` / `put` are direct data access. No pipe, no thread, no queue round-trip. Fastest memoization possible. Used by a program that memoizes for itself: hot inner loops, per-thread working sets, anything that benefits from nanosecond access without cross-program coordination. Because LocalCache is a data structure + functions (not a program in the spawn-and-lifecycle sense), it lives in `wat/std/` alongside macros and other stdlib functions.
+**1. A local cache — `:user::wat::std::lru::LocalCache`** (shipped by the external `wat-lru` crate at `crates/wat-lru/wat/LocalCache.wat`; arc 013 externalization 2026-04-21). An in-program cache. A program holds it as owned state — a local HashMap or LRU — and `get` / `put` are direct data access. No pipe, no thread, no queue round-trip. Fastest memoization possible. Used by a program that memoizes for itself: hot inner loops, per-thread working sets, anything that benefits from nanosecond access without cross-program coordination. Because LocalCache is a data structure + functions (not a program in the spawn-and-lifecycle sense), it lives alongside macros and other stdlib functions in its crate's `wat/` directory.
 
-**2. A cache program — `wat/std/program/Cache.wat`.** An entire wat-vm program whose state is a cache. Other programs talk to it via queues (get/put messages). One writer (the cache program's thread); N readers (the programs sending get requests). Used when multiple programs need to share a memoized result — the program becomes the synchronization point, the queues are the protocol. Because this is a spawnable program (lifecycle, owned state behind a queue boundary), it lives in `wat/std/program/` — the honest path for things that RUN, as distinguished from things that COMPILE into AST.
+**2. A cache service — `:user::wat::std::lru::CacheService`** (also shipped by `wat-lru` at `crates/wat-lru/wat/CacheService.wat`). An entire wat-vm program whose state is a cache. Other programs talk to it via queues (get/put messages). One writer (the cache program's thread); N readers (the programs sending get requests). Used when multiple programs need to share a memoized result — the program becomes the synchronization point, the queues are the protocol. Because this is a spawnable program (lifecycle, owned state behind a queue boundary), it uses the "program" suffix convention — the honest path for things that RUN, as distinguished from things that COMPILE into AST.
 
 Both are programmable. The caller supplies:
 
@@ -2138,7 +2138,8 @@ wat/std/
       wat/std/Log.wat             ;; :wat::std::Log            (macro)
       wat/std/Circular.wat        ;; :wat::std::Circular       (macro)
       wat/std/Sequential.wat      ;; :wat::std::Sequential     (macro)
-      wat/std/LocalCache.wat      ;; :wat::std::LocalCache     (data + functions)
+      (LocalCache + Cache moved to external crate wat-lru arc 013 —
+       :user::wat::std::lru::LocalCache, :user::wat::std::lru::CacheService)
       wat/std/cached-encode.wat   ;; :wat::std::cached-encode  (function)
       ... one file per form.
 
