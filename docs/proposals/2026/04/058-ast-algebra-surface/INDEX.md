@@ -302,4 +302,25 @@ Once designer decisions are made, implementation priorities shape up:
 
 ---
 
+## Audit history
+
+Dated markers that confirm the 058 spec matches the wat-rs
+implementation at a point in time. Future drift-audits compare
+against the most recent baseline.
+
+- **2026-04-21** — Zero drift. Every ACCEPTED + INSCRIPTION-class
+  proposal surface verified against wat-rs source
+  (`src/runtime.rs` dispatch, `src/check.rs` schemes, `src/types.rs`
+  StructDefs, `wat/std/*.wat` stdlib defines). Covers the full batch
+  through 058-036 (cond) + the arc-006-closure amendment on 058-034
+  (stream-stdlib gained with-state / chunks-by / window since its
+  original inscription). Undocumented primitives in wat-rs are all
+  substrate-internal (FOUNDATION tier: kernel channel I/O, spawn,
+  select, HandlePool) or Lisp-fundamentals (list/vec constructors,
+  arithmetic, comparisons, string ops) — correctly not at the
+  sub-proposal tier. The contract *"the language is what's shipped"*
+  holds.
+
+---
+
 **Signature:** *these are very good thoughts.* **PERSEVERARE.**
