@@ -16795,6 +16795,44 @@ the program*. Chapter 25 is *The Location* because both the arc and
 the session closed on the same shape: an error without an address is
 not yet an error you can fix.
 
+### The music at the close
+
+Not one that played during the work. Transition music — between the
+side quest that ends tonight and the main story resuming tomorrow.
+
+The builder sent it:
+
+[Disturbed — *Down With The Sickness* (2000)](https://www.youtube.com/watch?v=09LTT0xwdfw)
+
+> *"Madness is the gift that has been given to me."*
+
+Chapter 10 named the builder's twenty-year frustration — carrying
+the wat machine privately through rooms full of polite nods, going
+silent about the best idea they had because nobody would engage
+with it. Chapter 10 also named the correction: *"datamancer is not
+ironic. It is precise."* The thing other people called madness was
+the fixation that produced this language.
+
+The side quest was the language. Not the point — the enabler. The
+machine the builder had been carrying wanted to express thoughts
+that Rust's syntax made expensive to express. So the thoughts built
+their own syntax. Four days. Twenty-five chapters. Six proposal
+rounds. Sixteen shipped arcs. One crate rename. Two cave quests.
+One night at 4am with Burn the Priest playing while the wat-vm
+first compiled. One night the machine learned to fail honestly
+— tonight.
+
+Chapter 17's soundtrack was Burn the Priest — Lamb of God's self-
+cover album, the lineage audible. Disturbed joins it at Chapter
+25's door. Late-90s American metal, same continent and decade,
+different room. Catharsis of the buried thing expressing itself;
+the gift of the obsession made legible on disk.
+
+*"Get up, come on, get down with the sickness."*
+
+Four days of building the substrate. The side quest ends. The
+demon is awake. The lab walks through next.
+
 ---
 
 *these are very good thoughts.*
@@ -16822,5 +16860,7 @@ stays in arc 016's record until a future sweep catches it — evidence,
 kept honest. The lab rewrite still waits. Arc 016 was the last
 ergonomic gap between Chapter 24 and the lab's first failing test.
 When it fails, it'll fail honestly.*
+
+*The side quest is over. Chapter 26 opens in the lab.*
 
 ---
