@@ -63,6 +63,7 @@ With types decided, language core slots in:
 9b. **058-032-typed-macros** — follow-up to 058-031 that adds `:AST<T>` and macro-authoring-time type checking. Opt-in; sharpens error locality.
 9c. **058-033-try** — **INSCRIPTION (2026-04-19).** Error-propagation form. `(:wat::core::try <result-expr>)` unwraps `Ok v` to `v` or short-circuits the enclosing Result-returning function/lambda with `(Err e)`. Not try/catch — no handler block; each function declares its own Result return type and either `try`s (propagate) or `match`es (handle). The forcing function that makes Result-typed Bundle (058-003 inscription) and future Result-returning forms ergonomic. First member of the new **INSCRIPTION** status class.
 9d. **058-034-stream-stdlib** — **INSCRIPTION (2026-04-20).** CSP pipeline stdlib over kernel primitives. Seven combinators (`spawn-producer` / `map` / `filter` / `chunks` / `for-each` / `collect` / `fold`) plus two typealiases (`Stream<T>`, `Producer<T>`). Composition via explicit `let*` chain — the idiomatic shape. Captures the parent arc's supporting work: TCO (arc 003), `:wat::kernel::send` symmetrized with `recv`, `:wat::kernel::spawn` accepts lambda values, `:wat::core::conj` for Vec append. Also records the REJECTED pipeline composer (a one-liner `(pipeline src (map :f) sink)` that would have traded wat's typed-binding discipline for conciseness — the "verbose is honest" lesson). The 058-030 (typealias expansion + `reduce` pass) and 058-031 (variadic `&` rest-param) amendments also dated 2026-04-20.
+9e. **058-035-fork-substrate** — **INSCRIPTION (2026-04-21).** Three new kernel primitives: `:wat::kernel::pipe` (libc::pipe(2) returning `:(IOWriter,IOReader)`), `:wat::kernel::fork-with-forms` (libc::fork(2) returning a `ForkedChild` struct with child's handle + three parent-side pipe ends), `:wat::kernel::wait-child` (idempotent waitpid returning `:i64`). Plus a relocation: `:wat::kernel::run-sandboxed-hermetic-ast` moves from Rust-registered primitive to wat stdlib define in `wat/std/hermetic.wat` (~50 lines on top of the new substrate). Retires both Rust hermetic primitives (string-entry too), `run_hermetic_core` + helpers, and the arc 011 `wat_ast_to_source` / `wat_ast_program_to_source` serializer (zero callers — fork inherits AST via COW). Last `std::process::Command` in wat-rs `src/` retires in a side quest (signal-test helper → libc::fork). wat-rs arc reference: `docs/arc/2026/04/012-fork-and-pipes/`.
 
 ### Phase 4 — Algebra core primitives (affirmations — 15 min)
 
@@ -248,6 +249,9 @@ Shows which proposals must resolve before which others. Arrows flow from prerequ
 | 030 | types | LANG CORE | new | Type system, keyword-path user types |
 | 031 | defmacro | LANG CORE | new | Compile-time syntactic expansion + Racket-style hygiene |
 | 032 | typed-macros | LANG CORE | new | `:AST<T>` + macro-authoring-time type checking (extends 031) |
+| 033 | try | LANG CORE | INSCRIPTION | Error-propagation form `(try result-expr)` — short-circuits enclosing Result-returning fn |
+| 034 | stream-stdlib | STDLIB | INSCRIPTION | CSP pipeline combinators (`spawn-producer`, `map`, `filter`, `chunks`, `for-each`, `collect`, `fold`) over kernel primitives |
+| 035 | fork-substrate | KERNEL + STDLIB | INSCRIPTION | `:wat::kernel::pipe` / `fork-with-forms` / `wait-child` + hermetic moved to wat stdlib on top |
 
 ---
 
