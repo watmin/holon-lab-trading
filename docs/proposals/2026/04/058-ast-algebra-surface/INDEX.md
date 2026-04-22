@@ -321,6 +321,22 @@ against the most recent baseline.
   sub-proposal tier. The contract *"the language is what's shipped"*
   holds.
 
+- **2026-04-21 (later)** — Arc 014 landed eight scalar conversion
+  primitives under `:wat::core::<source>::to-<target>` —
+  `i64::to-string`, `i64::to-f64`, `f64::to-string`, `f64::to-i64`,
+  `string::to-i64`, `string::to-f64`, `bool::to-string`,
+  `string::to-bool`. Infallible conversions return the target type;
+  fallible conversions (parse failures, out-of-range, NaN/±∞) return
+  `:Option<T>`. No implicit coercion at arithmetic / comparison
+  sites; every conversion is explicit at the call site. These fall
+  under the Lisp-fundamentals shelf named in the zero-drift note
+  above — arithmetic's sibling tier — and are enumerated in the
+  FOUNDATION reserved-prefix list alongside `:wat::core::i64::+`
+  / `f64::+`. No separate 058-NNN sub-proposal; the precedent set
+  in the prior note governs. Arc cut mid arc-013 slice 4b as a
+  cave-quest when LRU externalization integration tests needed to
+  render an `i64` cache value for stdout assertion.
+
 ---
 
 **Signature:** *these are very good thoughts.* **PERSEVERARE.**
