@@ -26,6 +26,9 @@
 (:wat::core::load! :wat::load::file-path "encoding/scaled_linear.wat")
 (:wat::core::load! :wat::load::file-path "encoding/rhythm.wat")
 
+;; Phase 2 — vocab (lab arc 001 opens: shared/time)
+(:wat::core::load! :wat::load::file-path "vocab/shared/time.wat")
+
 (:wat::core::define (:user::main
                      (stdin  :wat::io::IOReader)
                      (stdout :wat::io::IOWriter)

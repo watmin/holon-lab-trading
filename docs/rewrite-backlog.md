@@ -75,9 +75,19 @@ All source files: `archived/pre-wat-native/src/types/`.
 
 Roughly 11 submodules under `archived/pre-wat-native/src/vocab/{market,exit,broker,shared}/`. Each is pure `encode_*_facts` functions that take a `Candle` and produce `ThoughtAST` fragments.
 
-First slice candidate: `vocab/market/standard.rs` (SMA20/50/200, simplest, ~80L).
+**Status: 2.1 shipped; rest foggy, open per-module.**
 
-Full list deferred until Phase 1 completes and the module shape is fixed. **Status: foggy.**
+**2.1 — Shipped 2026-04-23** (lab arc 001, `docs/arc/2026/04/001-vocab-opening/`). `:trading::vocab::shared::time::*` — port of `vocab/shared/time.rs` (113L). Two defines (`encode-time-facts` + `time-facts`), two file-private helpers (`circ`, `named-bind`). Rounding rationale captured: per-site `(f64::round val 0)` is cache-key quantization (proposals 057 + 033); for time, integer quantization is the honest granularity. **Design refinement surfaced:** vocab functions take the specific Candle sub-struct (here `:trading::types::Candle::Time`), not the full Candle. Matches `candle.wat`'s own header comment. Pattern established for all subsequent vocab modules. First lab-repo arc — adopted the wat-rs arc discipline (DESIGN + BACKLOG + INSCRIPTION). Six outstanding tests green on first pass, 19 → 25 lab wat tests.
+
+**Remaining vocab modules (each its own lab arc as it lands):**
+
+- `vocab/market/standard.rs` (166L) — window-based, struct (StandardThought), HashMap<ScaleTracker> threading, Log + scaled-linear emission. Heaviest of the candidates.
+- `vocab/market/oscillators.rs` (84L) — per-candle, no struct needed, mixed Log + scaled-linear. Good candidate for arc 002.
+- `vocab/market/momentum.rs`, `flow.rs`, `persistence.rs`, `regime.rs`, `divergence.rs`, `ichimoku.rs`, `keltner.rs`, `stochastic.rs`, `fibonacci.rs`, `price_action.rs`, `timeframe.rs` — the remaining 11 market modules.
+- `vocab/exit/phase.rs` (348L), `regime.rs`, `time.rs`, `trade_atoms.rs` — the exit observer's vocabulary.
+- `vocab/broker/portfolio.rs` (45L) — may depend on types not yet ported.
+
+Second-arc choice for the next slice probably sits between `oscillators.rs` (simpler, per-candle shape) and `standard.rs` (window-based, the archetype for the heavier market modules). Decision at that arc's DESIGN.
 
 ### Phase 3 — Encoding (AST schema)
 
