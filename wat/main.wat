@@ -22,6 +22,7 @@
 
 ;; Phase 3 — encoding helpers
 (:wat::core::load! :wat::load::file-path "encoding/round.wat")
+(:wat::core::load! :wat::load::file-path "encoding/scale_tracker.wat")
 
 (:wat::core::define (:user::main
                      (stdin  :wat::io::IOReader)
