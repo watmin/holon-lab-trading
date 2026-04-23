@@ -16,6 +16,12 @@
 ;; quantization, not signal precision. Per 033: quantization tightens
 ;; the cache without narrowing the algebra's view.
 ;;
+;; Self-load dependency (arc 027 slice 4): this vocab reads
+;; :trading::types::Candle::Time. `../../types/candle.wat` resolves
+;; against this file's directory. Dedup is a no-op on repeat loads.
+
+(:wat::load-file! "../../types/candle.wat")
+;;
 ;; Exports two defines:
 ;;
 ;;   encode-time-facts : 5 leaf binds (one per circular component)

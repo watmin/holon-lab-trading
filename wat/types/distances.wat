@@ -11,6 +11,10 @@
 ;; ships with domain/simulation or treasury in Phase 5 where its
 ;; callers live.
 
+;; Self-load dependency (arc 027 slice 4): Levels carries a Price
+;; newtype. Canonical-path dedup makes a second load a no-op.
+(:wat::load-file! "./newtypes.wat")
+
 (:wat::core::struct :trading::types::Distances
   (trail :f64)
   (stop  :f64))

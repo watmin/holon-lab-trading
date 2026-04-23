@@ -24,6 +24,15 @@
 ;; Rate-of-change fields (roc_N + range_pos_N) form their own
 ;; Candle::RateOfChange since they read from multiple vocab files.
 
+;; Self-load dependencies (arc 027 slice 4): candle references
+;; :trading::types::Ohlcv and the PhaseLabel / PhaseDirection /
+;; PhaseRecord types from pivot. `./` relative paths resolve against
+;; this file's directory regardless of caller's scope. Canonical-
+;; path dedup (arc 027 slice 1) makes a second load of either file
+;; a no-op.
+(:wat::load-file! "./ohlcv.wat")
+(:wat::load-file! "./pivot.wat")
+
 ;; ─── Indicator family sub-structs ──────────────────────────────────────
 
 ;; Moving averages + Ichimoku cloud.
