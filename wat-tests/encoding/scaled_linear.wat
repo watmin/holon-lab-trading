@@ -227,13 +227,12 @@
            ((expected :wat::holon::HolonAST)
             (:wat::holon::Bind
               (:wat::holon::Atom "rsi")
-              (:wat::holon::Thermometer rounded neg-scale scale)))
-           ((error :f64)
-            (:wat::core::f64::- 1.0 (:wat::holon::cosine fact expected))))
-          ;; VSA-native equivalence: error (1 - cosine) below the
-          ;; noise-floor means the algebra considers these the same.
+              (:wat::holon::Thermometer rounded neg-scale scale))))
+          ;; VSA-native equivalence via coincident? (arc 023): true
+          ;; iff (1 - cosine) < noise-floor — the algebra considers
+          ;; these the same holon within its own tolerance.
           (:wat::test::assert-eq
-            (:wat::core::< error (:wat::config::noise-floor))
+            (:wat::holon::coincident? fact expected)
             true))))
     (:wat::core::vec :String)
     (Some "wat/encoding")))

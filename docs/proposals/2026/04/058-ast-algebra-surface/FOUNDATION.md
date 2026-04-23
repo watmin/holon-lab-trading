@@ -2577,24 +2577,36 @@ This section freezes the full algebra in its target shape (post-058). Core forms
 ;; weights can be any real numbers (including negative)
 ```
 
-### Algebra Measurements — scalar-returning primitives (not HolonAST variants)
+### Algebra Measurements — scalar + boolean primitives (not HolonAST variants)
 
-Orthogonal to the six HolonAST-producing core forms, the algebra exposes scalar-returning measurements as a separate tier. These operate on Holons but return `:f64`, not a new Holon:
+Orthogonal to the six HolonAST-producing core forms, the algebra exposes a measurement tier that reads holons and returns scalars or booleans. Four measurements ship:
 
 ```scheme
 (:wat::holon::cosine a b)     ;; :wat::holon::HolonAST :wat::holon::HolonAST -> :f64
 ;; Cosine similarity. Returns dot(a, b) / (norm(a) * norm(b)).
-;; Used for presence measurement against the substrate noise floor (5/sqrt(d)).
+;; The raw scalar. Callers can compare against any threshold they choose.
 
 (:wat::holon::dot a b)        ;; :wat::holon::HolonAST :wat::holon::HolonAST -> :f64
 ;; Dot product. Elementwise multiply, sum reduction.
 ;; Used by stdlib's Reject/Project for computed Gram-Schmidt coefficients;
-;; available to applications for any scalar measurement on vector pairs.
+;; available to applications for any un-normalized scalar measurement.
+
+(:wat::holon::presence? target reference)    ;; HolonAST HolonAST -> :bool
+;; cosine(target, reference) > noise-floor.  "Is there detectable signal?"
+;; Signal-detection direction — fires when a's structure is above the
+;; random-chance baseline in b.
+
+(:wat::holon::coincident? a b)               ;; HolonAST HolonAST -> :bool
+;; (1 - cosine(a, b)) < noise-floor.  "Are these the same holon?"
+;; Equivalence direction — fires when two holons are close enough the
+;; substrate cannot distinguish them. Arc 023.
 ```
 
-Both implement as Rust primitives in holon-rs. The cosine was already computed wherever presence measurement runs; dot is the un-normalized sibling, exposed explicitly as its own primitive for stdlib macros that need the raw coefficient (Reject, Project, any future Gram-Schmidt composition).
+Same noise-floor (`5/sqrt(d)` for 5σ confidence), two dual boolean predicates: presence? for signal detection, coincident? for structural equivalence. Same bound, two directions, one substrate.
 
-Retrieval is NOT a core form. Presence is measured by `cosine(encode(target), reference)` against the substrate's noise floor — see "Presence is Measurement, Not Verdict" above. Classical Cleanup is historical: the vector-primary tradition's answer to "which named thing is this?" The wat substrate inverts that question because the AST is always available. Argmax-over-codebook, when an application needs it, is a stdlib composition over presence measurement, not a primitive.
+Both boolean predicates live here rather than as stdlib macros because they require encoding access (EncodingCtx) the wat-level language doesn't expose — they're substrate operations.
+
+Retrieval is NOT a core form. Presence is measured by the predicates above or by direct cosine against the noise floor — see "Presence is Measurement, Not Verdict" above. Classical Cleanup is historical: the vector-primary tradition's answer to "which named thing is this?" The wat substrate inverts that question because the AST is always available. Argmax-over-codebook, when an application needs it, is a stdlib composition over the measurements, not a primitive.
 
 ### Algebra Stdlib (18 forms)
 
