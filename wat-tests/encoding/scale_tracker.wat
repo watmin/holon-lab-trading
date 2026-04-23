@@ -23,7 +23,7 @@
     (:wat::test::program
       (:wat::config::set-dims! 1024)
       (:wat::config::set-capacity-mode! :error)
-      (:wat::core::load! :wat::load::file-path "scale_tracker.wat")
+      (:wat::core::load-file! "scale_tracker.wat")
       (:wat::core::define
         (:user::main
           (stdin  :wat::io::IOReader)
@@ -46,7 +46,7 @@
     (:wat::test::program
       (:wat::config::set-dims! 1024)
       (:wat::config::set-capacity-mode! :error)
-      (:wat::core::load! :wat::load::file-path "scale_tracker.wat")
+      (:wat::core::load-file! "scale_tracker.wat")
       (:wat::core::define
         (:user::main
           (stdin  :wat::io::IOReader)
@@ -71,7 +71,7 @@
     (:wat::test::program
       (:wat::config::set-dims! 1024)
       (:wat::config::set-capacity-mode! :error)
-      (:wat::core::load! :wat::load::file-path "scale_tracker.wat")
+      (:wat::core::load-file! "scale_tracker.wat")
       (:wat::core::define
         (:user::main
           (stdin  :wat::io::IOReader)
@@ -100,7 +100,7 @@
     (:wat::test::program
       (:wat::config::set-dims! 1024)
       (:wat::config::set-capacity-mode! :error)
-      (:wat::core::load! :wat::load::file-path "scale_tracker.wat")
+      (:wat::core::load-file! "scale_tracker.wat")
       (:wat::core::define
         (:user::main
           (stdin  :wat::io::IOReader)
@@ -131,7 +131,7 @@
     (:wat::test::program
       (:wat::config::set-dims! 1024)
       (:wat::config::set-capacity-mode! :error)
-      (:wat::core::load! :wat::load::file-path "scale_tracker.wat")
+      (:wat::core::load-file! "scale_tracker.wat")
       (:wat::core::define
         (:user::main
           (stdin  :wat::io::IOReader)
@@ -161,7 +161,7 @@
     (:wat::test::program
       (:wat::config::set-dims! 1024)
       (:wat::config::set-capacity-mode! :error)
-      (:wat::core::load! :wat::load::file-path "scale_tracker.wat")
+      (:wat::core::load-file! "scale_tracker.wat")
       ;; Tail-recursive helper: feed value `v` into tracker `t` exactly
       ;; `n` times. Values-up — no mutation. TCO (arc 003) keeps the
       ;; Rust stack constant regardless of n.
