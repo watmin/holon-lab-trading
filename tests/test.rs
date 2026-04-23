@@ -2,7 +2,7 @@
 //! defaults: `path: "wat-tests"`, `loader: "wat-tests"` (ScopedLoader
 //! rooted at `<crate>/wat-tests`). Every `.wat` file under
 //! `wat-tests/` with top-level `(:wat::config::set-*!)` forms is a
-//! test entry; library files loaded via `(:wat::core::load-file!)` are
+//! test entry; library files loaded via `(:wat::load-file!)` are
 //! silently skipped.
 //!
 //! `deps: []` for now — grows as sibling wat crates ship. The real

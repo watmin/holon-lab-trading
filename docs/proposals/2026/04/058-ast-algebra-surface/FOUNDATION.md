@@ -550,8 +550,8 @@ An AST in transmission is an **EDN string** — extensible data notation, a seri
 
 Signatures live **per-form**, inside the source that invokes verification:
 
-- **Loaded source**: `(:wat::core::signed-load! :wat::load::<iface> "path" :wat::verify::signed-<algo> :wat::verify::<iface> "sig" :wat::verify::<iface> "pubkey")`. Gates a single loaded file by signing the SHA-256 of its parsed AST.
-- **Runtime eval**: `(:wat::core::eval-signed! :wat::eval::<iface> <locator> :wat::verify::signed-<algo> :wat::verify::<iface> "sig" :wat::verify::<iface> "pubkey")`. Gates an AST retrieved at runtime by signing the SHA-256 of its canonical EDN — same cryptographic target, same algorithm surface, per-call granularity.
+- **Loaded source**: `(:wat::signed-load! :wat::load::<iface> "path" :wat::verify::signed-<algo> :wat::verify::<iface> "sig" :wat::verify::<iface> "pubkey")`. Gates a single loaded file by signing the SHA-256 of its parsed AST.
+- **Runtime eval**: `(:wat::eval-signed! :wat::eval::<iface> <locator> :wat::verify::signed-<algo> :wat::verify::<iface> "sig" :wat::verify::<iface> "pubkey")`. Gates an AST retrieved at runtime by signing the SHA-256 of its canonical EDN — same cryptographic target, same algorithm surface, per-call granularity.
 
 A program may invoke any number of `signed-load!` and `eval-signed!` forms, each with its own key and signature. The verification discipline is per-form because a program is a collection of forms with independent provenance needs — one loaded file from a trusted producer, another from a different producer, a runtime eval of an upstream message signed by the originator. One CLI-level signature cannot cover that structure; signatures belong where the fetch happens, at the form the wat author wrote to do the fetching.
 
@@ -584,7 +584,7 @@ One form handles every loadable artifact. The file's contents declare what they 
 ;; Digest-verified — file bytes must hash to the declared digest.
 ;; The digest payload itself uses a :wat::verify::<iface> (inline string
 ;; or sidecar file).
-(:wat::core::digest-load!
+(:wat::digest-load!
   :wat::load::file-path "project/market/indicators.wat"
   :wat::verify::digest-sha256
   :wat::verify::string "abc123...")
@@ -593,7 +593,7 @@ One form handles every loadable artifact. The file's contents declare what they 
 ;; algorithm with the declared pub-key. Sig and pub-key each declare
 ;; their own :wat::verify::<iface>, so a sidecar-file deployment works
 ;; without in-band trickery.
-(:wat::core::signed-load!
+(:wat::signed-load!
   :wat::load::file-path "project/market/types.wat"
   :wat::verify::signed-ed25519
   :wat::verify::file-path "project/market/types.wat.sig"
@@ -2278,7 +2278,7 @@ This makes the discipline enforceable in practice: conflicts fail loudly and ear
 
 The project reserves four prefixes, and they are **protected at startup** — users cannot define anything at these paths. Attempting `(:wat::core::define (:wat::kernel::my-func ...) ...)` or `(:wat::core::defmacro (:wat::std::MyAlias ...) ...)` halts the wat-vm with a startup error.
 
-- `:wat::core::...` — language core primitives (`:wat::core::define`, `:wat::core::lambda`, `:wat::core::let`, `:wat::core::let*`, `:wat::core::if`, `:wat::core::match`, `:wat::core::cond`, `:wat::core::defmacro`, `:wat::core::try`, `:wat::core::load!`, `:wat::core::vec`, `:wat::core::list`, `:wat::core::tuple`, `:wat::core::conj`, `:wat::core::quote`, `:wat::core::atom-value`, `:wat::core::eval-ast!`, `:wat::core::eval-edn!`, `:wat::core::eval-digest!`, `:wat::core::eval-signed!`, `:wat::core::first`, `:wat::core::second`, `:wat::core::third`, `:wat::core::rest`, `:wat::core::map`, `:wat::core::foldl`, `:wat::core::range`, `:wat::core::take`, `:wat::core::drop`, `:wat::core::length`, `:wat::core::empty?`, `:wat::core::reverse`, `:wat::core::struct`, `:wat::core::enum`, `:wat::core::newtype`, `:wat::core::typealias`, `:wat::core::i64::+`, `:wat::core::i64::-`, `:wat::core::i64::*`, `:wat::core::i64::/`, `:wat::core::f64::+`, `:wat::core::f64::-`, `:wat::core::f64::*`, `:wat::core::f64::/`, `:wat::core::i64::to-string`, `:wat::core::i64::to-f64`, `:wat::core::f64::to-string`, `:wat::core::f64::to-i64`, `:wat::core::string::to-i64`, `:wat::core::string::to-f64`, `:wat::core::bool::to-string`, `:wat::core::string::to-bool`, `:wat::core::>`, `:wat::core::=`, …)
+- `:wat::core::...` — language core primitives (`:wat::core::define`, `:wat::core::lambda`, `:wat::core::let`, `:wat::core::let*`, `:wat::core::if`, `:wat::core::match`, `:wat::core::cond`, `:wat::core::defmacro`, `:wat::core::try`, `:wat::core::load!`, `:wat::core::vec`, `:wat::core::list`, `:wat::core::tuple`, `:wat::core::conj`, `:wat::core::quote`, `:wat::core::atom-value`, `:wat::eval-ast!`, `:wat::eval-edn!`, `:wat::eval-digest!`, `:wat::eval-signed!`, `:wat::core::first`, `:wat::core::second`, `:wat::core::third`, `:wat::core::rest`, `:wat::core::map`, `:wat::core::foldl`, `:wat::core::range`, `:wat::core::take`, `:wat::core::drop`, `:wat::core::length`, `:wat::core::empty?`, `:wat::core::reverse`, `:wat::core::struct`, `:wat::core::enum`, `:wat::core::newtype`, `:wat::core::typealias`, `:wat::core::i64::+`, `:wat::core::i64::-`, `:wat::core::i64::*`, `:wat::core::i64::/`, `:wat::core::f64::+`, `:wat::core::f64::-`, `:wat::core::f64::*`, `:wat::core::f64::/`, `:wat::core::i64::to-string`, `:wat::core::i64::to-f64`, `:wat::core::f64::to-string`, `:wat::core::f64::to-i64`, `:wat::core::string::to-i64`, `:wat::core::string::to-f64`, `:wat::core::bool::to-string`, `:wat::core::string::to-bool`, `:wat::core::>`, `:wat::core::=`, …)
 - `:wat::kernel::...` — wat-vm kernel primitives (`:wat::kernel::make-bounded-queue`, `:wat::kernel::make-unbounded-queue`, `:wat::kernel::spawn`, `:wat::kernel::send`, `:wat::kernel::recv`, `:wat::kernel::try-recv`, `:wat::kernel::select`, `:wat::kernel::drop`, `:wat::kernel::join`, `:wat::kernel::HandlePool`, `:wat::kernel::stopped?`). **`spawn`** accepts a keyword-path literal OR a lambda-valued expression as its first argument; **`send`** is Option-returning (`:Option<()>`), symmetric with `recv`'s `:Option<T>` on disconnect.
 - `:wat::config::...` — ambient startup constants: setters (`set-dims!`, `set-capacity-mode!`, `set-global-seed!`, `set-noise-floor!`), accessors (`dims`, `capacity-mode`, `global-seed`, `noise-floor`), and the `:wat::config::CapacityMode` enum. Required-at-startup or defaulted values the program author commits at most once; see "`:wat::config` — Ambient Startup Constants."
 - `:wat::holon::...` — algebra core primitives (`:wat::holon::Atom`, `:wat::holon::Bind`, `:wat::holon::Bundle`, `:wat::holon::Blend`, `:wat::holon::cosine`, `:wat::holon::dot`, `:wat::holon::presence?`, …)
@@ -2459,7 +2459,7 @@ The Rust runtime hosting the wat-vm imposes a static-first model: all code (type
 - `define`, `lambda` are **function definitions**. They register at startup into the symbol table.
 - `defmacro` declarations are **compile-time macros**. They register during the parse phase. Before any hashing, signing, or type-checking, a macro-expansion pass walks every source AST and substitutes macro invocations with their expansions.
 - `(:wat::config::set-<field>! value)` are **config setters**. They commit runtime constants during the config pass (see "`:wat::config` — Ambient Startup Constants"). **Setters appear ONLY in the entry file, and ONLY before any `load!`.** Loaded files cannot contain config setters — seeing one halts parse with "config setter in non-entry file."
-- `(:wat::core::load! :wat::load::<iface> "path")` is **the unverified loader**. Two sibling forms add verification: `(:wat::core::digest-load! ... :wat::verify::digest-<algo> ...)` gates by hash of raw bytes; `(:wat::core::signed-load! ... :wat::verify::signed-<algo> ...)` gates by Ed25519 signature of the canonical-EDN hash. All three share the `:wat::load::*` source-interface vocabulary (`:wat::load::string`, `:wat::load::file-path`; http/s3/git reserved for future). Loaded files may contain any mixture of types, functions, macros, and nested load forms — but NOT config setters. Verification runs at build/startup and halts the pipeline on failure.
+- `(:wat::core::load! :wat::load::<iface> "path")` is **the unverified loader**. Two sibling forms add verification: `(:wat::digest-load! ... :wat::verify::digest-<algo> ...)` gates by hash of raw bytes; `(:wat::signed-load! ... :wat::verify::signed-<algo> ...)` gates by Ed25519 signature of the canonical-EDN hash. All three share the `:wat::load::*` source-interface vocabulary (`:wat::load::string`, `:wat::load::file-path`; http/s3/git reserved for future). Loaded files may contain any mixture of types, functions, macros, and nested load forms — but NOT config setters. Verification runs at build/startup and halts the pipeline on failure.
 
 ### The entry file's discipline
 
@@ -2860,14 +2860,14 @@ All eight forms are loaded at startup. The wat-vm distinguishes them by what kin
 ;; Unverified startup load — reads the file, parses defines, registers.
 ;; Trust the contents; accept whatever's on disk.
 
-(:wat::core::digest-load!
+(:wat::digest-load!
   :wat::load::file-path "path/to/file.wat"
   :wat::verify::digest-sha256
   :wat::verify::string "abc123...")
 ;; Digest-verified startup load — requires file content to hash to the
 ;; given value. Halts wat-vm startup if mismatched.
 
-(:wat::core::signed-load!
+(:wat::signed-load!
   :wat::load::file-path "path/to/file.wat"
   :wat::verify::signed-ed25519
   :wat::verify::string "<b64-sig>"
@@ -2979,13 +2979,13 @@ All eight forms are loaded at startup. The wat-vm distinguishes them by what kin
 ;; Unverified build-time load. Reads the file, parses type declarations,
 ;; feeds them to the build pipeline for Rust code generation.
 
-(:wat::core::digest-load!
+(:wat::digest-load!
   :wat::load::file-path "path/to/types.wat"
   :wat::verify::digest-sha256
   :wat::verify::string "abc123...")
 ;; Digest-verified build-time load. Build halts if the file hash does not match.
 
-(:wat::core::signed-load!
+(:wat::signed-load!
   :wat::load::file-path "path/to/types.wat"
   :wat::verify::signed-ed25519
   :wat::verify::string "<b64-sig>"

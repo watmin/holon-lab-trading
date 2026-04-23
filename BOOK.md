@@ -14310,7 +14310,7 @@ Below. "None." MAP's bind orthogonalizes — the composite vector holds the prog
 
 Bind again with the key. Self-inverse at the vector level. Measure again. Above. "Some." The algebra recovered what the algebra hid.
 
-Extract the WatAST from the in-scope program-atom via `(:wat::core::atom-value ...)`. Hand it to `(:wat::core::eval-ast! ...)`. The echo fires.
+Extract the WatAST from the in-scope program-atom via `(:wat::core::atom-value ...)`. Hand it to `(:wat::eval-ast! ...)`. The echo fires.
 
 ```
 $ echo watmin | wat-vm presence-proof.wat
@@ -14735,7 +14735,7 @@ The infinity is just an atom.
 
 The atom has a hash. The hash names the generator. The name is movable — it fits in a HashMap, travels in a Bundle, binds to metadata, ships between nodes as data, compares to other atoms by cosine. The infinity goes nowhere. The handle goes everywhere.
 
-`(:wat::core::atom-value handle)` returns the generator-AST. `(:wat::core::eval-ast! ast)` on the AST runs it — forever, or until the consumer stops drawing.
+`(:wat::core::atom-value handle)` returns the generator-AST. `(:wat::eval-ast! ast)` on the AST runs it — forever, or until the consumer stops drawing.
 
 Neither is required. The atom is enough.
 
@@ -15201,7 +15201,7 @@ The implementation cost turned out to be below the deferral cost. The SIGUSR sub
 The round-trip test proved the point:
 
 ```
-(:wat::core::eval-edn!
+(:wat::eval-edn!
   (:wat::core::first
     (:wat::kernel::RunResult/stdout
       (:wat::kernel::run-sandboxed-hermetic

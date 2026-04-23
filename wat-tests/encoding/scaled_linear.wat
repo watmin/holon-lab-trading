@@ -18,9 +18,9 @@
     (:wat::test::program
       (:wat::config::set-dims! 1024)
       (:wat::config::set-capacity-mode! :error)
-      (:wat::core::load-file! "round.wat")
-      (:wat::core::load-file! "scale_tracker.wat")
-      (:wat::core::load-file! "scaled_linear.wat")
+      (:wat::load-file! "round.wat")
+      (:wat::load-file! "scale_tracker.wat")
+      (:wat::load-file! "scaled_linear.wat")
       (:wat::core::define
         (:user::main
           (stdin  :wat::io::IOReader)
@@ -54,9 +54,9 @@
     (:wat::test::program
       (:wat::config::set-dims! 1024)
       (:wat::config::set-capacity-mode! :error)
-      (:wat::core::load-file! "round.wat")
-      (:wat::core::load-file! "scale_tracker.wat")
-      (:wat::core::load-file! "scaled_linear.wat")
+      (:wat::load-file! "round.wat")
+      (:wat::load-file! "scale_tracker.wat")
+      (:wat::load-file! "scaled_linear.wat")
       (:wat::core::define
         (:user::main
           (stdin  :wat::io::IOReader)
@@ -94,9 +94,9 @@
     (:wat::test::program
       (:wat::config::set-dims! 1024)
       (:wat::config::set-capacity-mode! :error)
-      (:wat::core::load-file! "round.wat")
-      (:wat::core::load-file! "scale_tracker.wat")
-      (:wat::core::load-file! "scaled_linear.wat")
+      (:wat::load-file! "round.wat")
+      (:wat::load-file! "scale_tracker.wat")
+      (:wat::load-file! "scaled_linear.wat")
       (:wat::core::define
         (:user::main
           (stdin  :wat::io::IOReader)
@@ -147,9 +147,9 @@
     (:wat::test::program
       (:wat::config::set-dims! 1024)
       (:wat::config::set-capacity-mode! :error)
-      (:wat::core::load-file! "round.wat")
-      (:wat::core::load-file! "scale_tracker.wat")
-      (:wat::core::load-file! "scaled_linear.wat")
+      (:wat::load-file! "round.wat")
+      (:wat::load-file! "scale_tracker.wat")
+      (:wat::load-file! "scaled_linear.wat")
       (:wat::core::define
         (:user::main
           (stdin  :wat::io::IOReader)
@@ -195,9 +195,9 @@
     (:wat::test::program
       (:wat::config::set-dims! 1024)
       (:wat::config::set-capacity-mode! :error)
-      (:wat::core::load-file! "round.wat")
-      (:wat::core::load-file! "scale_tracker.wat")
-      (:wat::core::load-file! "scaled_linear.wat")
+      (:wat::load-file! "round.wat")
+      (:wat::load-file! "scale_tracker.wat")
+      (:wat::load-file! "scaled_linear.wat")
       (:wat::core::define
         (:user::main
           (stdin  :wat::io::IOReader)
@@ -253,9 +253,9 @@
     (:wat::test::program
       (:wat::config::set-dims! 1024)
       (:wat::config::set-capacity-mode! :error)
-      (:wat::core::load-file! "round.wat")
-      (:wat::core::load-file! "scale_tracker.wat")
-      (:wat::core::load-file! "scaled_linear.wat")
+      (:wat::load-file! "round.wat")
+      (:wat::load-file! "scale_tracker.wat")
+      (:wat::load-file! "scaled_linear.wat")
       ;; Tail-recursive helper — thread the map through n scaled-linear
       ;; calls, all with the same name + value. Returns the final map.
       (:wat::core::define

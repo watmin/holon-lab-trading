@@ -20,7 +20,7 @@
     (:wat::test::program
       (:wat::config::set-capacity-mode! :error)
       (:wat::config::set-dims! 1024)
-      (:wat::core::load-file! "rhythm.wat")
+      (:wat::load-file! "rhythm.wat")
       (:wat::core::define
         (:user::main
           (stdin  :wat::io::IOReader)
@@ -62,7 +62,7 @@
     (:wat::test::program
       (:wat::config::set-capacity-mode! :error)
       (:wat::config::set-dims! 1024)
-      (:wat::core::load-file! "rhythm.wat")
+      (:wat::load-file! "rhythm.wat")
       (:wat::core::define
         (:user::main
           (stdin  :wat::io::IOReader)
@@ -104,7 +104,7 @@
     (:wat::test::program
       (:wat::config::set-capacity-mode! :error)
       (:wat::config::set-dims! 1024)
-      (:wat::core::load-file! "rhythm.wat")
+      (:wat::load-file! "rhythm.wat")
       (:wat::core::define
         (:user::main
           (stdin  :wat::io::IOReader)
@@ -137,7 +137,7 @@
     (:wat::test::program
       (:wat::config::set-capacity-mode! :error)
       (:wat::config::set-dims! 1024)
-      (:wat::core::load-file! "rhythm.wat")
+      (:wat::load-file! "rhythm.wat")
       (:wat::core::define
         (:user::main
           (stdin  :wat::io::IOReader)
@@ -188,7 +188,7 @@
     (:wat::test::program
       (:wat::config::set-capacity-mode! :error)
       (:wat::config::set-dims! 1024)
-      (:wat::core::load-file! "rhythm.wat")
+      (:wat::load-file! "rhythm.wat")
       (:wat::core::define
         (:user::main
           (stdin  :wat::io::IOReader)
@@ -249,7 +249,7 @@
     (:wat::test::program
       (:wat::config::set-capacity-mode! :error)
       (:wat::config::set-dims! 1024)
-      (:wat::core::load-file! "rhythm.wat")
+      (:wat::load-file! "rhythm.wat")
       (:wat::core::define
         (:user::main
           (stdin  :wat::io::IOReader)
