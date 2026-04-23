@@ -20,6 +20,9 @@
 (:wat::core::load! :wat::load::file-path "types/pivot.wat")
 (:wat::core::load! :wat::load::file-path "types/candle.wat")
 
+;; Phase 3 — encoding helpers
+(:wat::core::load! :wat::load::file-path "encoding/round.wat")
+
 (:wat::core::define (:user::main
                      (stdin  :wat::io::IOReader)
                      (stdout :wat::io::IOWriter)
