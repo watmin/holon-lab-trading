@@ -22,10 +22,10 @@
   (:wat::core::let*
     (((values :Vec<f64>)
       (:wat::core::vec :f64 0.45 0.48 0.55 0.62 0.68 0.66 0.63))
-     ((r1 :Result<wat::holon::HolonAST,wat::holon::CapacityExceeded>)
+     ((r1 :wat::holon::BundleResult)
       (:trading::encoding::rhythm::indicator-rhythm
         "rsi" values 0.0 100.0 10.0))
-     ((r2 :Result<wat::holon::HolonAST,wat::holon::CapacityExceeded>)
+     ((r2 :wat::holon::BundleResult)
       (:trading::encoding::rhythm::indicator-rhythm
         "rsi" values 0.0 100.0 10.0))
      ((h1 :wat::holon::HolonAST)
@@ -49,10 +49,10 @@
   (:wat::core::let*
     (((values :Vec<f64>)
       (:wat::core::vec :f64 0.45 0.48 0.55 0.62 0.68 0.66 0.63))
-     ((r-rsi :Result<wat::holon::HolonAST,wat::holon::CapacityExceeded>)
+     ((r-rsi :wat::holon::BundleResult)
       (:trading::encoding::rhythm::indicator-rhythm
         "rsi" values 0.0 100.0 10.0))
-     ((r-macd :Result<wat::holon::HolonAST,wat::holon::CapacityExceeded>)
+     ((r-macd :wat::holon::BundleResult)
       (:trading::encoding::rhythm::indicator-rhythm
         "macd" values 0.0 100.0 10.0))
      ((h-rsi :wat::holon::HolonAST)
@@ -75,7 +75,7 @@
 (:deftest :trading::test::encoding::rhythm::test-few-values-still-succeeds
   (:wat::core::let*
     (((values :Vec<f64>) (:wat::core::vec :f64 0.5 0.6))
-     ((r :Result<wat::holon::HolonAST,wat::holon::CapacityExceeded>)
+     ((r :wat::holon::BundleResult)
       (:trading::encoding::rhythm::indicator-rhythm
         "rsi" values 0.0 100.0 10.0)))
     (:wat::test::assert-eq
@@ -101,10 +101,10 @@
       (:wat::core::vec :f64 0.1 0.2 0.3 0.4 0.5 0.6 0.7))
      ((falling :Vec<f64>)
       (:wat::core::vec :f64 0.9 0.8 0.7 0.6 0.5 0.4 0.3))
-     ((r-up :Result<wat::holon::HolonAST,wat::holon::CapacityExceeded>)
+     ((r-up :wat::holon::BundleResult)
       (:trading::encoding::rhythm::indicator-rhythm
         "rsi" rising 0.0 1.0 0.5))
-     ((r-dn :Result<wat::holon::HolonAST,wat::holon::CapacityExceeded>)
+     ((r-dn :wat::holon::BundleResult)
       (:trading::encoding::rhythm::indicator-rhythm
         "rsi" falling 0.0 1.0 0.5))
      ((h-up :wat::holon::HolonAST)
@@ -146,10 +146,10 @@
         0.40 0.42 0.44 0.46 0.48 0.50 0.52 0.54 0.56 0.58
         0.60 0.62 0.64 0.66 0.68 0.70 0.72 0.74 0.76 0.78
         0.80 0.82 0.84 0.86 0.88))
-     ((r-long :Result<wat::holon::HolonAST,wat::holon::CapacityExceeded>)
+     ((r-long :wat::holon::BundleResult)
       (:trading::encoding::rhythm::indicator-rhythm
         "rsi" long 0.0 1.0 0.1))
-     ((r-tail :Result<wat::holon::HolonAST,wat::holon::CapacityExceeded>)
+     ((r-tail :wat::holon::BundleResult)
       (:trading::encoding::rhythm::indicator-rhythm
         "rsi" tail 0.0 1.0 0.1))
      ((h-long :wat::holon::HolonAST)
@@ -179,14 +179,14 @@
   ;; structural coincidence.
   (:wat::core::let*
     (((values :Vec<f64>) (:wat::core::vec :f64 0.5 0.6))
-     ((r :Result<wat::holon::HolonAST,wat::holon::CapacityExceeded>)
+     ((r :wat::holon::BundleResult)
       (:trading::encoding::rhythm::indicator-rhythm
         "rsi" values 0.0 100.0 10.0))
      ((actual :wat::holon::HolonAST)
       (:wat::core::match r -> :wat::holon::HolonAST
         ((Ok h)  h)
         ((Err _) (:wat::holon::Atom "unreachable"))))
-     ((r-sentinel :Result<wat::holon::HolonAST,wat::holon::CapacityExceeded>)
+     ((r-sentinel :wat::holon::BundleResult)
       (:wat::holon::Bundle
         (:wat::core::vec :wat::holon::HolonAST
           (:wat::holon::Atom (:wat::core::quote ())))))

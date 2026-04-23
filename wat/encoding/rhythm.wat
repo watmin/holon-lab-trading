@@ -75,7 +75,7 @@
     (value :f64)
     (prev :f64)
     (delta-range :f64)
-    -> :Result<wat::holon::HolonAST,wat::holon::CapacityExceeded>)
+    -> :wat::holon::BundleResult)
   (:wat::core::let*
     (((delta :f64) (:wat::core::f64::- value prev))
      ((neg-range :f64) (:wat::core::f64::- 0.0 delta-range)))
@@ -94,7 +94,7 @@
     (vmin :f64)
     (vmax :f64)
     (delta-range :f64)
-    -> :Result<wat::holon::HolonAST,wat::holon::CapacityExceeded>)
+    -> :wat::holon::BundleResult)
   (:wat::core::let*
     (((value :f64)
       (:wat::core::match (:wat::core::get values i) -> :f64
@@ -103,7 +103,7 @@
      ((v-fact :wat::holon::HolonAST)
       (:trading::encoding::rhythm::value-fact value vmin vmax)))
     (:wat::core::if (:wat::core::= i 0)
-                    -> :Result<wat::holon::HolonAST,wat::holon::CapacityExceeded>
+                    -> :wat::holon::BundleResult
       (Ok v-fact)
       (:wat::core::let*
         (((prev :f64)
@@ -111,7 +111,7 @@
             (:wat::core::get values (:wat::core::i64::- i 1)) -> :f64
             ((Some v) v)
             (:None    0.0)))
-         ((d-fact :Result<wat::holon::HolonAST,wat::holon::CapacityExceeded>)
+         ((d-fact :wat::holon::BundleResult)
           (:trading::encoding::rhythm::delta-fact value prev delta-range))
          ((d-holon :wat::holon::HolonAST)
           (:wat::core::try d-fact)))
@@ -263,7 +263,7 @@
     (vmin :f64)
     (vmax :f64)
     (delta-range :f64)
-    -> :Result<wat::holon::HolonAST,wat::holon::CapacityExceeded>)
+    -> :wat::holon::BundleResult)
   (:wat::core::let*
     (((budget :i64) (:trading::encoding::rhythm::budget))
      ((max-facts :i64) (:wat::core::i64::+ budget 3))
@@ -272,7 +272,7 @@
       (:trading::encoding::rhythm::trim-tail values max-facts))
      ((len :i64) (:wat::core::length trimmed)))
     (:wat::core::if (:wat::core::< len 4)
-                    -> :Result<wat::holon::HolonAST,wat::holon::CapacityExceeded>
+                    -> :wat::holon::BundleResult
       ;; Short-window fallback. The vector-layer bundle primitive (holon-rs)
       ;; panics on empty input; we lift Lisp's '() — the Little Schemer's null
       ;; value — into an Atom and bundle that as a single-element sentinel.
