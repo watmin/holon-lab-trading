@@ -1,0 +1,13 @@
+[package]
+name = "holon-lab-trading"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Self-organizing trading enterprise, rebuilt on the wat language. Domain logic in wat/**/*.wat; Rust surface is two one-line macro invocations."
+
+[[bin]]
+name = "holon-lab-trading"
+path = "src/main.rs"
+
+[dependencies]
+wat = { path = "../wat-rs" }
