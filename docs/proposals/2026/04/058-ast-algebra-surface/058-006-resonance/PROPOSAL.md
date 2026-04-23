@@ -30,7 +30,7 @@ See FOUNDATION-CHANGELOG for the 2026-04-18 rejection record.
 A new core variant that keeps the dimensions where two vectors agree in sign and zeros the dimensions where they disagree:
 
 ```scheme
-(:wat::algebra::Resonance v reference)
+(:wat::holon::Resonance v reference)
 ```
 
 Semantically: `v` filtered through `reference` — the components of `v` that "resonate" with (point the same direction as) `reference` survive; the dissonant components are silenced.

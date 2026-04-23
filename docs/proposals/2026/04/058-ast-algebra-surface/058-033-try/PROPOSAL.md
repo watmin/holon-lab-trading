@@ -58,9 +58,9 @@ All three criteria satisfied. The form sits alongside `define` / `lambda` / `let
 
 ```scheme
 (:wat::core::define (:my::app::build-layer
-                    (items :Vec<holon::HolonAST>)
-                    -> :Result<holon::HolonAST,wat::algebra::CapacityExceeded>)
-  (:wat::core::match (:wat::algebra::Bundle items)
+                    (items :Vec<wat::holon::HolonAST>)
+                    -> :Result<wat::holon::HolonAST,wat::holon::CapacityExceeded>)
+  (:wat::core::match (:wat::holon::Bundle items)
     ((Ok h) (Ok h))
     ((Err e) (Err e))))   ;; ← purely mechanical — re-package what we got
 ```
@@ -71,20 +71,20 @@ That `((Err e) (Err e))` arm is the whole point of `try`. It's ceremony without 
 
 ```scheme
 (:wat::core::define (:my::app::build-layer
-                    (items :Vec<holon::HolonAST>)
-                    -> :Result<holon::HolonAST,wat::algebra::CapacityExceeded>)
-  (Ok (:wat::core::try (:wat::algebra::Bundle items))))
+                    (items :Vec<wat::holon::HolonAST>)
+                    -> :Result<wat::holon::HolonAST,wat::holon::CapacityExceeded>)
+  (Ok (:wat::core::try (:wat::holon::Bundle items))))
 ```
 
 And across a call chain — each function making an honest choice:
 
 ```scheme
-(:wat::core::define (:my::app::outer (xs :Vec<holon::HolonAST>)
-                                     -> :Result<holon::HolonAST,wat::algebra::CapacityExceeded>)
+(:wat::core::define (:my::app::outer (xs :Vec<wat::holon::HolonAST>)
+                                     -> :Result<wat::holon::HolonAST,wat::holon::CapacityExceeded>)
   (:wat::core::let*
-    (((bundled :holon::HolonAST) (:wat::core::try (:my::app::build-layer xs)))
-     ((composed :holon::HolonAST) (:wat::core::try (:my::app::build-layer
-                                                     (:wat::core::list :holon::HolonAST bundled)))))
+    (((bundled :wat::holon::HolonAST) (:wat::core::try (:my::app::build-layer xs)))
+     ((composed :wat::holon::HolonAST) (:wat::core::try (:my::app::build-layer
+                                                     (:wat::core::list :wat::holon::HolonAST bundled)))))
     (Ok composed)))
 ```
 
@@ -110,8 +110,8 @@ Each `try` site says "unwrap or bail." No function in the chain silently ignores
 
 ```scheme
 (:wat::core::let*
-  (((a :holon::HolonAST) (:wat::core::try (first-bundle ...)))
-   ((b :holon::HolonAST) (:wat::core::try (second-bundle ...))))
+  (((a :wat::holon::HolonAST) (:wat::core::try (first-bundle ...)))
+   ((b :wat::holon::HolonAST) (:wat::core::try (second-bundle ...))))
   (Ok (compose a b)))
 ```
 
@@ -151,7 +151,7 @@ The `TryPropagate` variant never reaches `:user::main` or the wat-vm binary. The
 
 The forms that became tolerable with `try` available:
 
-- **058-033-inscription-bundle-result** (amendment to 058-003): Bundle returns `:Result<holon::HolonAST, :wat::algebra::CapacityExceeded>`. Without `try` this would be hostile to use; with `try` the ergonomics survive.
+- **058-033-inscription-bundle-result** (amendment to 058-003): Bundle returns `:Result<wat::holon::HolonAST, :wat::holon::CapacityExceeded>`. Without `try` this would be hostile to use; with `try` the ergonomics survive.
 - **Stdlib macros routing through Bundle** (Ngram, Bigram, Trigram, HashMap, Vec, HashSet, Reject, Project): all inherit the Result wrap. Every user of them picks match or `try` at their call site.
 - **Future eval-family Result-wrapping**: `eval-ast!` / `eval-edn!` / `eval-digest!` / `eval-signed!` gain Result return types in a follow-up slice. `try` covers propagation uniformly.
 

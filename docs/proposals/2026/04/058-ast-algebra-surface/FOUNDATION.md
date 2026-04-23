@@ -41,9 +41,9 @@ These are not two different things. They are the same holon seen from two perspe
 **1. Literals are read from AST nodes, not recovered from vectors.**
 
 ```scheme
-(:wat::core::atom-value (:wat::algebra::Atom 42))   → 42     ; reads the AST node's field
-(:wat::core::atom-value (:wat::algebra::Atom "x"))  → "x"
-(:wat::core::atom-value (:wat::algebra::Atom true)) → true
+(:wat::core::atom-value (:wat::holon::Atom 42))   → 42     ; reads the AST node's field
+(:wat::core::atom-value (:wat::holon::Atom "x"))  → "x"
+(:wat::core::atom-value (:wat::holon::Atom true)) → true
 ```
 
 No cleanup. No codebook search. No cosine interpretation. The `Atom` AST node stores the literal. Reading it is field access.
@@ -102,11 +102,11 @@ Everything in `wat/core/primitives.wat` and `wat/std/vectors.wat` is lowercase. 
 UpperCase forms are **AST constructors**. They do NOT run. They build `HolonAST` nodes — descriptions of a holon-composition that can be encoded to a vector, cached, hashed, signed, transmitted, or deferred.
 
 ```scheme
-(:wat::algebra::Atom "rsi")              ; AST: a node representing "name this concept" — returns HolonAST
-(:wat::algebra::Bind role filler)        ; AST: a node representing binding — returns HolonAST
-(:wat::algebra::Bundle holons)           ; AST: a node representing superposition — returns HolonAST
-(:wat::algebra::Blend a b 1 -1)          ; AST: a node representing scalar-weighted combine — returns HolonAST
-(:wat::std::Sequential (:wat::core::vec a b))   ; AST: a node representing position-encoded bundle — returns HolonAST
+(:wat::holon::Atom "rsi")              ; AST: a node representing "name this concept" — returns HolonAST
+(:wat::holon::Bind role filler)        ; AST: a node representing binding — returns HolonAST
+(:wat::holon::Bundle holons)           ; AST: a node representing superposition — returns HolonAST
+(:wat::holon::Blend a b 1 -1)          ; AST: a node representing scalar-weighted combine — returns HolonAST
+(:wat::holon::Sequential (:wat::core::vec a b))   ; AST: a node representing position-encoded bundle — returns HolonAST
 ```
 
 The UpperCase forms are what users and stdlib WRITE in wat programs. They compose cheaply — building a nested AST is structural work, no vector computation. The VECTOR materializes only when the AST is **realized** (see "Executable semantics" below).
@@ -123,7 +123,7 @@ Three reasons the tier split is load-bearing:
 
    ```scheme
    (:wat::core::define (:wat::std::Difference a b) : Holon
-     (:wat::algebra::Blend a b 1 -1))
+     (:wat::holon::Blend a b 1 -1))
    ```
 
    compose UpperCase forms. The body is an AST-construction expression. Callers of `Difference` get a HolonAST back. Only when something asks for the vector does the encoder walk the AST and invoke lowercase primitives.
@@ -170,11 +170,11 @@ A consequence of the foundational principle (and of MAP VSA's compositional stru
 
 ### Per-frame capacity
 
-**The budget is `floor(sqrt(dims))`** — inscribed 2026-04-19 (see FOUNDATION-CHANGELOG and `058-003-bundle-list-signature/PROPOSAL.md`'s INSCRIPTION section). At `d = 10,000` → `budget = 100`; at `d = 4,096` → `64`; at `d = 1,024` → `32`. This is the capacity enforced by `:wat::algebra::Bundle` under the committed `:wat::config::capacity-mode`.
+**The budget is `floor(sqrt(dims))`** — inscribed 2026-04-19 (see FOUNDATION-CHANGELOG and `058-003-bundle-list-signature/PROPOSAL.md`'s INSCRIPTION section). At `d = 10,000` → `budget = 100`; at `d = 4,096` → `64`; at `d = 1,024` → `32`. This is the capacity enforced by `:wat::holon::Bundle` under the committed `:wat::config::capacity-mode`.
 
 **Why `sqrt(d)` and not Kanerva's `d / (2 · ln K)`.** Classical VSA derives capacity from the SNR of UNBINDING against a finite codebook of size K. The wat algebra is AST-primary: there is no codebook to distinguish against — retrieval is AST walking, and only similarity operations consume the vector budget. The binding physical constraint is the noise floor (`5 / sqrt(dims)` for 5σ confidence); `sqrt(d)` is the item count that keeps a bundle's single-element presence comfortably above the noise floor. Empirical match: `sqrt(10000) = 100`, which is what Kanerva's formula informally yielded with `K ~ few hundred` — same number, but derived from what the substrate actually guards.
 
-Prior-art confirmation: `holon-lab-trading/src/encoding/rhythm.rs:58` has shipped `budget = sqrt(10000) = 100` in production since before the 058 batch; the trading lab's rhythm trims to that cap before handing to Bundle. wat-rs's Bundle now enforces the same bound inside the dispatcher and surfaces overflow through the `:Result<_, :wat::algebra::CapacityExceeded>` return type under `:error` mode.
+Prior-art confirmation: `holon-lab-trading/src/encoding/rhythm.rs:58` has shipped `budget = sqrt(10000) = 100` in production since before the 058 batch; the trading lab's rhythm trims to that cap before handing to Bundle. wat-rs's Bundle now enforces the same bound inside the dispatcher and surfaces overflow through the `:Result<_, :wat::holon::CapacityExceeded>` return type under `:error` mode.
 
 ### Depth is free
 
@@ -226,12 +226,12 @@ Vector-level unbind degrades at each level (noise accumulates from sibling bindi
 
 ;; Walk arbitrarily deep:
 (:my::app::deep-get deeply-nested-thing
-          (:wat::core::vec (:wat::algebra::Atom "user")
-                (:wat::algebra::Atom "sessions")
-                (:wat::algebra::Atom 42)          ; concrete integer position
-                (:wat::algebra::Atom "actions")
-                (:wat::algebra::Atom 7)           ; concrete integer position
-                (:wat::algebra::Atom "metadata")))
+          (:wat::core::vec (:wat::holon::Atom "user")
+                (:wat::holon::Atom "sessions")
+                (:wat::holon::Atom 42)          ; concrete integer position
+                (:wat::holon::Atom "actions")
+                (:wat::holon::Atom 7)           ; concrete integer position
+                (:wat::holon::Atom "metadata")))
 ;; → the AST node at that path. Literal intact.
 ```
 
@@ -254,7 +254,7 @@ A wat program is an AST. An AST is a holon. A holon has a vector projection. The
 
 ```scheme
 (:wat::core::define (:my::app::hello-world name)
-  (:wat::std::string::join " " (:wat::core::vec (:wat::algebra::Atom "Hello,") name (:wat::algebra::Atom "!"))))
+  (:wat::std::string::join " " (:wat::core::vec (:wat::holon::Atom "Hello,") name (:wat::holon::Atom "!"))))
 ```
 
 This function definition is an AST — composed from existing core primitives (`Atom`, `Bind`, `Bundle`, and whatever specific program-form variants get added). It encodes to a deterministic 10k vector. That vector IS `hello-world`. Not a description of it. Not a serialization. The function.
@@ -271,7 +271,7 @@ The VECTOR form exists for algebraic operations on programs — comparison, stor
 
 ```scheme
 (:wat::core::define :my::app::f :my::app::hello-world)
-(eval :my::app::f (:wat::core::vec (:wat::algebra::Atom "watmin")))       ; → "Hello, watmin !"
+(eval :my::app::f (:wat::core::vec (:wat::holon::Atom "watmin")))       ; → "Hello, watmin !"
 ```
 
 **Programs in data structures:**
@@ -331,38 +331,38 @@ This unlocks the algebra's real power for self-referential reasoning:
 
 ```scheme
 ;; A program becomes an atomizable value:
-(:wat::algebra::Atom trained-model-program)   ;; :Atom<holon::HolonAST>
+(:wat::holon::Atom trained-model-program)   ;; :Atom<wat::holon::HolonAST>
 
 ;; Programs go in libraries keyed by identity:
 (:wat::std::HashMap
-  :run-1 (:wat::algebra::Atom prog-a)
-  :run-2 (:wat::algebra::Atom prog-b))
+  :run-1 (:wat::holon::Atom prog-a)
+  :run-2 (:wat::holon::Atom prog-b))
 
 ;; Programs get Bundled — superposition of a program population:
-(:wat::algebra::Bundle (:wat::core::vec
-  (:wat::algebra::Atom prog-1)
-  (:wat::algebra::Atom prog-2)
-  (:wat::algebra::Atom prog-3)))
+(:wat::holon::Bundle (:wat::core::vec
+  (:wat::holon::Atom prog-1)
+  (:wat::holon::Atom prog-2)
+  (:wat::holon::Atom prog-3)))
 
 ;; Programs get Bound to metadata:
-(:wat::algebra::Bind (:wat::algebra::Atom some-program)
-                   (:wat::algebra::Atom :outcome::success))
+(:wat::holon::Bind (:wat::holon::Atom some-program)
+                   (:wat::holon::Atom :outcome::success))
 
 ;; Programs get compared by identity:
-(:wat::algebra::cosine (:wat::algebra::Atom prog-a)
-                     (:wat::algebra::Atom prog-b))
+(:wat::holon::cosine (:wat::holon::Atom prog-a)
+                     (:wat::holon::Atom prog-b))
 ;; different programs → cosine ≈ 0
 ;; same program → cosine = 1 (deterministic)
 
 ;; Extraction recovers the program:
-(:wat::core::atom-value (:wat::algebra::Atom prog-a))  ;; → prog-a, fully reconstituted
+(:wat::core::atom-value (:wat::holon::Atom prog-a))  ;; → prog-a, fully reconstituted
 ;; Now eval it, walk it, modify it, spawn it.
 ```
 
 Two encodings of the same composite — both valid:
 
 - **`prog-a` directly** → structural vector (children composed); structure recoverable via unbind; good for analogy-on-structure, presence-of-subparts.
-- **`(:wat::algebra::Atom prog-a)`** → opaque-identity vector (EDN-hashed); structure not recoverable from vector; good for library keys, program similarity by identity, binding programs to metadata.
+- **`(:wat::holon::Atom prog-a)`** → opaque-identity vector (EDN-hashed); structure not recoverable from vector; good for library keys, program similarity by identity, binding programs to metadata.
 
 Applications choose per use case.
 
@@ -409,7 +409,7 @@ Every geometric operation on holon vectors applies directly to program vectors:
 
 (topk-similar query corpus 5)     ; five closest programs to query
 
-(:wat::core::filter (:wat::core::lambda ((p :holon::HolonAST) -> :bool)
+(:wat::core::filter (:wat::core::lambda ((p :wat::holon::HolonAST) -> :bool)
           (:wat::core::> (presence p query-vector) (noise-floor d)))
         program-library)          ; all programs that align with a target direction
 ```
@@ -427,9 +427,9 @@ An engram library of known-good programs becomes queryable by situation:
 Every operation in the algebra ops library works on program vectors:
 
 ```scheme
-(:wat::std::Subtract prog-full prog-a)      ; prog-full WITHOUT prog-a's contribution
-(:wat::algebra::Blend prog-a prog-b α)      ; interpolation between two programs
-(:wat::std::Amplify base specific s)        ; base program with specific pattern emphasized
+(:wat::holon::Subtract prog-full prog-a)      ; prog-full WITHOUT prog-a's contribution
+(:wat::holon::Blend prog-a prog-b α)      ; interpolation between two programs
+(:wat::holon::Amplify base specific s)        ; base program with specific pattern emphasized
 (:wat::std::Analogy prog-a prog-b prog-c)   ; A:B :: C:? — relational program transfer
 ```
 
@@ -479,12 +479,12 @@ User input to a wat program is data. It flows through the algebra as a value:
 
 ```scheme
 ;; SAFE — input is data, operated on as data:
-(:wat::core::define (:my::app::process (input :holon::HolonAST) -> :holon::HolonAST)
-  (:wat::std::get input (:wat::algebra::Atom :field)))
+(:wat::core::define (:my::app::process (input :wat::holon::HolonAST) -> :wat::holon::HolonAST)
+  (:wat::std::get input (:wat::holon::Atom :field)))
 
 ;; SAFE — input composed into a larger data structure:
-(:wat::core::define (:my::app::store-for-later (input :holon::HolonAST) -> :holon::HolonAST)
-  (:wat::std::HashMap (:wat::algebra::Atom :payload) input))
+(:wat::core::define (:my::app::store-for-later (input :wat::holon::HolonAST) -> :wat::holon::HolonAST)
+  (:wat::std::HashMap (:wat::holon::Atom :payload) input))
 ```
 
 In both cases, `input` is bound, bundled, queried, extracted. Nothing evaluates it as code.
@@ -493,7 +493,7 @@ The injection vector — evaluating user input as code — exists only when the 
 
 ```scheme
 ;; UNSAFE — the programmer consciously chose to evaluate user input:
-(:wat::core::define (:my::app::dangerous (user-code :holon::HolonAST) -> :holon::HolonAST)
+(:wat::core::define (:my::app::dangerous (user-code :wat::holon::HolonAST) -> :wat::holon::HolonAST)
   (eval user-code))
 ```
 
@@ -647,10 +647,10 @@ redef-mode = :strict         ;; default — name collisions halt startup
 ```scheme
 ;; Build an AST at runtime — perhaps from parsed user input, perhaps from
 ;; a pattern-matching result, perhaps from an LLM's output:
-(:wat::core::let (((composed :Vec<holon::HolonAST>)
+(:wat::core::let (((composed :Vec<wat::holon::HolonAST>)
        (:wat::core::vec ':wat::std::Difference
-             (:wat::core::vec ':wat::algebra::Atom :observed)
-             (:wat::core::vec ':wat::algebra::Atom :baseline))))
+             (:wat::core::vec ':wat::holon::Atom :observed)
+             (:wat::core::vec ':wat::holon::Atom :baseline))))
 
   ;; Eval checks every reference before executing:
   ;;   - Difference: exists in the static symbol table as a stdlib fn ✓
@@ -682,9 +682,9 @@ This is a SAFE `eval`. An attacker who supplies a malicious AST cannot invoke ar
 
 ```scheme
 (:wat::core::let (((transform :fn(Holon)->Holon)
-       (:wat::core::lambda ((t :holon::HolonAST) -> :holon::HolonAST)
-         (:wat::algebra::Bundle (:wat::core::vec t (:wat::algebra::Atom :tagged))))))
-  (transform (:wat::algebra::Atom :input)))
+       (:wat::core::lambda ((t :wat::holon::HolonAST) -> :wat::holon::HolonAST)
+         (:wat::holon::Bundle (:wat::core::vec t (:wat::holon::Atom :tagged))))))
+  (transform (:wat::holon::Atom :input)))
 ```
 
 A lambda is a VALUE, not a symbol-table entry. When it goes out of scope, it's cleaned up. Runtime code creation is preserved; symbol-table mutation is not.
@@ -723,7 +723,7 @@ These are consequences of the foundational principle, not features added afterwa
 
 ## `:wat::config` — Ambient Startup Constants
 
-Some values are pervasive enough that threading them through every function signature is noise. Vector dimension is the canonical example: every `:wat::algebra::Thermometer`, every `:wat::algebra::Bundle`, every cache-sizing heuristic, every noise-floor computation needs to know `d`. A program that passed `d` through every call site would be half parameters.
+Some values are pervasive enough that threading them through every function signature is noise. Vector dimension is the canonical example: every `:wat::holon::Thermometer`, every `:wat::holon::Bundle`, every cache-sizing heuristic, every noise-floor computation needs to know `d`. A program that passed `d` through every call site would be half parameters.
 
 The wat-vm solves this with a **kernel-owned config struct** reachable at `:wat::config`. The struct holds values the program commits to at startup. Every field is:
 
@@ -836,9 +836,9 @@ The **entry file** (the wat file the wat-vm starts from) has a two-part structur
 (:wat::config::set-dims! 10000)
 (:wat::config::set-capacity-mode! :error)
 
-;; ─── Part 2: Loads. Pull in stdlib and project source. ───────────────
-(:wat::core::load! "wat/std/Subtract.wat")
-(:wat::core::load! "wat/std/Chain.wat")
+;; ─── Part 2: Loads. Pull in project source. Stdlib (wat/holon/*,
+;;             wat/std/*) is baked into the runtime; no explicit
+;;             load! needed for :wat::holon::* or :wat::std::*. ───
 (:wat::core::load! "wat/project/trading/candle.wat")
 (:wat::core::load! "wat/project/trading/observer.wat")
 (:wat::core::load! "wat/project/trading/main.wat")
@@ -856,15 +856,15 @@ Parameters that previously threaded through function signatures disappear. A fun
 
 ```scheme
 ;; Before — d threaded:
-(:wat::core::define (:my::app::encode-price (p :f64) (d :usize) -> :holon::HolonAST)
-  (:wat::algebra::Thermometer p 0.0 100000.0 d))
+(:wat::core::define (:my::app::encode-price (p :f64) (d :usize) -> :wat::holon::HolonAST)
+  (:wat::holon::Thermometer p 0.0 100000.0 d))
 
 ;; After — d read from ambient config inside Thermometer's implementation:
-(:wat::core::define (:my::app::encode-price (p :f64) -> :holon::HolonAST)
-  (:wat::algebra::Thermometer p 0.0 100000.0))
+(:wat::core::define (:my::app::encode-price (p :f64) -> :wat::holon::HolonAST)
+  (:wat::holon::Thermometer p 0.0 100000.0))
 ```
 
-`:wat::algebra::Thermometer` itself reads `(:wat::config::dims)` to size its vector. No caller needs to supply `d`. Same for `Bundle`, `Bind`, `Permute` — every algebra primitive that previously required explicit `d` pulls it from the ambient config. Signatures shrink; call sites stop carrying values the substrate already knows.
+`:wat::holon::Thermometer` itself reads `(:wat::config::dims)` to size its vector. No caller needs to supply `d`. Same for `Bundle`, `Bind`, `Permute` — every algebra primitive that previously required explicit `d` pulls it from the ambient config. Signatures shrink; call sites stop carrying values the substrate already knows.
 
 ---
 
@@ -1341,7 +1341,7 @@ The remaining stdlib programs (Console, Cache) pass the bar because every multi-
 ### Implications for prior sections
 
 - **"The Algebra Is Immutable"** — the startup pipeline (parse, macro-expand, resolve, type-check, hash, verify, register, freeze, main-loop) runs on the kernel: the binary IS the main thread, which spawns the program graph into existence after the freeze. `eval` lives in a program; it is not a kernel primitive.
-- **"Caching Is Memoization"** — caching is userland; LRU caching ships via the external `wat-lru` sibling crate (`crates/wat-lru/wat/lru.wat` for `:user::wat::std::lru::LocalCache`; `crates/wat-lru/wat/service.wat` for `:user::wat::std::lru::CacheService`), composed into consumer binaries via `wat::main! { ..., deps: [wat_lru] }`. `wat/std/cached-encode.wat` (AST-caching wrapper) stays baked because it's cache-flavor-agnostic. Applications choose to use wat-lru, to build their own cache crate, or to forgo caching entirely. The kernel is unaware of caching semantics; it just delivers queue messages. (Arc 013 — externalization 2026-04-21.)
+- **"Caching Is Memoization"** — caching is userland; LRU caching ships via the external `wat-lru` sibling crate (`crates/wat-lru/wat/LocalCache.wat` for `:user::wat::std::lru::LocalCache`; `crates/wat-lru/wat/CacheService.wat` for `:user::wat::std::lru::CacheService`), composed into consumer binaries via `wat::main! { ..., deps: [wat_lru] }`. An `:wat::std::cached-encode` AST-caching wrapper is anticipated but not yet shipped — the specific "memoize holon encoding" pattern, cache-flavor-agnostic; reopens when a real caller surfaces. Applications choose to use wat-lru, to build their own cache crate, or to forgo caching entirely. The kernel is unaware of caching semantics; it just delivers queue messages. (Arc 013 — externalization 2026-04-21.)
 - **Q7 (redef-mode syntax, deferred)** — now strictly a userland concern. The kernel does not know about names; the application's load-and-register programs handle redefinition policy however they choose.
 
 The kernel is small on purpose. The algebra does the heavy thinking; the kernel just passes messages.
@@ -1428,9 +1428,9 @@ Operation                              Cost
 Composition — each frame is checked independently:
 
 ```scheme
-(:wat::core::let ((pair-ab (:wat::algebra::Bind (:wat::algebra::Atom "foo") (:wat::algebra::Atom "bar")))  ;; frame A: cost 2
-      (pair-cd (:wat::algebra::Bind (:wat::algebra::Atom "baz") (:wat::algebra::Atom "qux")))) ;; frame B: cost 2
-  (:wat::algebra::Bundle (:wat::core::vec pair-ab pair-cd)))                  ;; frame C: cost 2
+(:wat::core::let ((pair-ab (:wat::holon::Bind (:wat::holon::Atom "foo") (:wat::holon::Atom "bar")))  ;; frame A: cost 2
+      (pair-cd (:wat::holon::Bind (:wat::holon::Atom "baz") (:wat::holon::Atom "qux")))) ;; frame B: cost 2
+  (:wat::holon::Bundle (:wat::core::vec pair-ab pair-cd)))                  ;; frame C: cost 2
                                                                             ;; (pair-ab and pair-cd are
                                                                             ;;  each singular here)
 ```
@@ -1546,7 +1546,7 @@ Because memoization is a common pattern — and applications want it in two diff
 
 Both are programmable. The caller supplies:
 
-- The key type (any hashable type — `:holon::HolonAST`, `:String`, `:i64`, user-defined)
+- The key type (any hashable type — `:wat::holon::HolonAST`, `:String`, `:i64`, user-defined)
 - The value type (any serializable type)
 - The capacity policy (LRU, LFU, unbounded, application-specific)
 - The setup closure (initialize whatever backing store it needs)
@@ -1554,7 +1554,7 @@ Both are programmable. The caller supplies:
 
 Same configuration surface, two implementations. Local is fast but private; remote is shared but crosses the queue boundary.
 
-**3. AST caching functions — `wat/std/cached-encode.wat` and siblings.** A thin function over the algebra's `encode` plus a cache handle (local or remote — the function doesn't care). Takes an AST, returns the vector, memoizes in whatever cache the caller passed. The specific "memoize holon encoding" pattern, pre-packaged.
+**3. AST caching functions — `:wat::std::cached-encode` and siblings (aspirational; not yet shipped).** A thin function over the algebra's `encode` plus a cache handle (local or remote — the function doesn't care). Takes an AST, returns the vector, memoizes in whatever cache the caller passed. The specific "memoize holon encoding" pattern, pre-packaged. Will land when a real caller needs it; consumer apps can write their own in their own namespace in the meantime.
 
 ### Five choices per application
 
@@ -1838,7 +1838,7 @@ None of these need to be primitive. Step (1) is a `:wat::core::map`. Step (2) is
   (:wat::core::lambda (entry)
     (:wat::core::vec (:wat::core::first entry)
                      (presence (:wat::core::first entry) query-vector))))
-;; → :Vec<Pair<holon::HolonAST,f64>>   — every entry paired with its overlay score
+;; → :Vec<Pair<wat::holon::HolonAST,f64>>   — every entry paired with its overlay score
 ```
 
 No `Cleanup` in the core. The algebra returned the full list of (entry, presence-score) pairs. The caller now decides: top-1 (a fold with max-by-score), top-k (a sort then take), threshold filter (keep entries above `5/sqrt(d)` — the substrate noise floor), a weighted mixture of matches (a Bundle with Blend coefficients), or simply "pass the whole list onward" for a downstream stage. Four different policies, four different caller expressions, same substrate.
@@ -1850,15 +1850,15 @@ No `Cleanup` in the core. The algebra returned the full list of (entry, presence
 Every presence query — membership, retrieval, matching, recognition — returns `:f64`, not `:bool`:
 
 ```scheme
-(:wat::core::define (:my::app::member? (set-thought :holon::HolonAST) (candidate :holon::HolonAST) -> :f64)
+(:wat::core::define (:my::app::member? (set-thought :wat::holon::HolonAST) (candidate :wat::holon::HolonAST) -> :f64)
   (presence candidate (encode set-thought)))
 
-(:wat::core::define (:my::app::contains? (bundle-thought :holon::HolonAST) (candidate :holon::HolonAST) -> :f64)
+(:wat::core::define (:my::app::contains? (bundle-thought :wat::holon::HolonAST) (candidate :wat::holon::HolonAST) -> :f64)
   (presence candidate (encode bundle-thought)))
 
 (:wat::core::define (:my::app::recognize (observation :Vector)
-                                     (engram-lib :holon::HolonAST)
-                                     -> :Vec<Pair<holon::HolonAST,f64>>)
+                                     (engram-lib :wat::holon::HolonAST)
+                                     -> :Vec<Pair<wat::holon::HolonAST,f64>>)
   ;; Return every engram with its presence score. The caller decides
   ;; what to do with the list — top-1, above-threshold, weighted
   ;; bundle, whatever their application demands.
@@ -1875,12 +1875,12 @@ Uniform. Scalar-valued. The caller decides when a score is "enough," and which o
 For data structures where the key is EXACT — not a similarity match — the operation is AST-walking, not presence measurement:
 
 ```scheme
-(:wat::std::get (map-thought :holon::HolonAST) (key :holon::HolonAST) -> :holon::HolonAST)
+(:wat::std::get (map-thought :wat::holon::HolonAST) (key :wat::holon::HolonAST) -> :wat::holon::HolonAST)
 ;; Look up in the HashMap's runtime backing (Rust HashMap), find the entry whose key equals the query key
 ;; (by AST equality, not by vector similarity), return the value AST.
 ```
 
-This is structural retrieval. It uses no vectors, no cosine, no threshold. The runtime materializes the container's efficient Rust backing (HashMap for O(1) lookup, Vec for O(1) indexing, HashSet for O(1) membership); `get` goes through that backing. Succeeds or fails based on AST equality of the locator, not on vector similarity. Returns `:Option<holon::HolonAST>` — `(Some v)` on hit, `:None` on miss.
+This is structural retrieval. It uses no vectors, no cosine, no threshold. The runtime materializes the container's efficient Rust backing (HashMap for O(1) lookup, Vec for O(1) indexing, HashSet for O(1) membership); `get` goes through that backing. Succeeds or fails based on AST equality of the locator, not on vector similarity. Returns `:Option<wat::holon::HolonAST>` — `(Some v)` on hit, `:None` on miss.
 
 The algebra has two retrieval regimes, clean-separated:
 
@@ -1917,12 +1917,12 @@ These readings coexist. You can do work on either side:
 ```scheme
 ;; Filter a library of programs by alignment with a query:
 (:wat::core::let ((candidates (:wat::core::filter
-                    (:wat::core::lambda ((p :holon::HolonAST) -> :bool)
+                    (:wat::core::lambda ((p :wat::holon::HolonAST) -> :bool)
                       (:wat::core::> (presence query (encode p)) (noise-floor d)))
                     program-library)))
 
   ;; Run the candidates that aligned:
-  (:wat::core::map (:wat::core::lambda ((p :holon::HolonAST) -> :holon::HolonAST) (eval p))
+  (:wat::core::map (:wat::core::lambda ((p :wat::holon::HolonAST) -> :wat::holon::HolonAST) (eval p))
        candidates))
 ```
 
@@ -1989,8 +1989,8 @@ The Rust evaluator runs the wat interpreter. Given a `(defn ...)` and a call sit
 Without type annotations, the evaluator would need to either infer types at every call (slow, lossy) or accept runtime failures (fragile). Typed definitions make dispatch deterministic and verification static.
 
 ```scheme
-(:wat::core::define (:my::ns::amplify (x :holon::HolonAST) (y :holon::HolonAST) (s :f64) -> :holon::HolonAST)
-  (:wat::algebra::Blend x y 1 s))
+(:wat::core::define (:my::ns::amplify (x :wat::holon::HolonAST) (y :wat::holon::HolonAST) (s :f64) -> :wat::holon::HolonAST)
+  (:wat::holon::Blend x y 1 s))
 ```
 
 Three signal sites:
@@ -2005,7 +2005,7 @@ The Rust evaluator checks: call-site argument types match parameter types; body'
 
 The type system mirrors the algebra's kinds:
 
-- `:holon::HolonAST` — any HolonAST node
+- `:wat::holon::HolonAST` — any HolonAST node
 - `:Atom` — specifically an Atom (to read literals via `atom-value`)
 - `:f64`, `:f32` — floating-point primitives (Blend weights, scalar functions)
 - `:i32`, `:i64`, `:usize`, … — integer primitives (Permute steps, nth indices, counts)
@@ -2029,7 +2029,7 @@ Language core is therefore **required for the project to ship**, not "nice to ha
 
 ### The three layers, one naming discipline
 
-All three layers — language core, algebra core, stdlib (project and user) — use the same keyword-path naming convention (`:wat::core::...`, `:wat::algebra::...`, `:wat::std::...`, `:user::...`). No namespace mechanism; just naming discipline. See `## Naming Discipline — Keyword Paths, No Mechanism` for the canonical policy.
+All three layers — language core, algebra core, stdlib (project and user) — use the same keyword-path naming convention (`:wat::core::...`, `:wat::holon::...`, `:wat::std::...`, `:user::...`). No namespace mechanism; just naming discipline. See `## Naming Discipline — Keyword Paths, No Mechanism` for the canonical policy.
 
 ### Executable semantics — functions run, holons are realized on demand
 
@@ -2056,13 +2056,13 @@ A `(define ...)` form is not a specification. It is a **function**. When the wat
 ;; Runs. Returns 7.
 ```
 
-Bodies of type `:holon::HolonAST` are no different — they execute and return HolonAST values:
+Bodies of type `:wat::holon::HolonAST` are no different — they execute and return HolonAST values:
 
 ```scheme
-(:wat::core::define (:my::app::hello-world (name :Atom) -> :holon::HolonAST)
-  (:wat::std::Sequential (:wat::core::vec (:wat::algebra::Atom "hello") name)))
+(:wat::core::define (:my::app::hello-world (name :Atom) -> :wat::holon::HolonAST)
+  (:wat::holon::Sequential (:wat::core::vec (:wat::holon::Atom "hello") name)))
 
-(:my::app::hello-world (:wat::algebra::Atom :watmin))
+(:my::app::hello-world (:wat::holon::Atom :watmin))
 ;; Runs. Returns a HolonAST node structured as:
 ;;   Sequential((list (Atom "hello") (Atom :watmin)))
 ;; NO vector has been computed yet.
@@ -2080,8 +2080,8 @@ A `HolonAST` is a description of a holon, not a vector. The vector materializes 
 Until then, the AST is just data — nested nodes referencing Atoms, Binds, Bundles, Permutes. Compose arbitrarily deep holon-programs without paying encoding cost until you ask.
 
 ```scheme
-(:wat::core::define :my::app::greeting (:my::app::hello-world (:wat::algebra::Atom :watmin)))    ; AST value, no vector
-(:wat::core::define :my::app::another  (:my::app::hello-world (:wat::algebra::Atom :alice)))     ; AST value, no vector
+(:wat::core::define :my::app::greeting (:my::app::hello-world (:wat::holon::Atom :watmin)))    ; AST value, no vector
+(:wat::core::define :my::app::another  (:my::app::hello-world (:wat::holon::Atom :alice)))     ; AST value, no vector
 
 ;; Still no vectors. These are just AST descriptions.
 
@@ -2100,11 +2100,11 @@ Until then, the AST is just data — nested nodes referencing Atoms, Binds, Bund
 
 ### What this means for the two cores
 
-- **Algebra Core** UpperCase forms (`Atom`, `Bind`, `Bundle`, ...) are AST constructors. They return `:holon::HolonAST`.
+- **Algebra Core** UpperCase forms (`Atom`, `Bind`, `Bundle`, ...) are AST constructors. They return `:wat::holon::HolonAST`.
 - **Language Core** forms (`define`, `lambda`, `let`, `if`, ...) are the machinery that runs. They define and invoke functions.
 - **Stdlib** `(define ...)` forms compose UpperCase expressions inside function bodies. They produce holons when called.
 
-The `:holon::HolonAST` type is not "the vector" — it is "the HolonAST node that can BE a vector when realized." Users compose holons freely; the machine realizes lazily.
+The `:wat::holon::HolonAST` type is not "the vector" — it is "the HolonAST node that can BE a vector when realized." Users compose holons freely; the machine realizes lazily.
 
 ---
 
@@ -2119,88 +2119,102 @@ holon-lab-trading/src (Rust)
       The encoder evaluates HolonAST trees into vectors.
       Cache keys on HolonAST structural hash.
 
+wat/holon/
+  └── Algebra idioms that compose :wat::holon::* primitives. Each
+      file is one macro or define. Keyword path = file path
+      (arc 022 slice 2).
+
+      wat/holon/Subtract.wat        ;; :wat::holon::Subtract       (macro over Blend: w1=1, w2=-1)
+      wat/holon/Amplify.wat         ;; :wat::holon::Amplify        (macro over Blend)
+      wat/holon/Reject.wat          ;; :wat::holon::Reject         (macro — Gram-Schmidt)
+      wat/holon/Project.wat         ;; :wat::holon::Project        (macro — Reject's complement)
+      wat/holon/Sequential.wat      ;; :wat::holon::Sequential     (macro, bind-chain)
+      wat/holon/Ngram.wat           ;; :wat::holon::Ngram          (macro)
+      wat/holon/Bigram.wat          ;; :wat::holon::Bigram         (macro: Ngram 2)
+      wat/holon/Trigram.wat         ;; :wat::holon::Trigram        (macro: Ngram 3)
+      wat/holon/Log.wat             ;; :wat::holon::Log            (macro over Thermometer)
+      wat/holon/Circular.wat        ;; :wat::holon::Circular       (macro — cos/sin basis)
+
 wat/std/
-  └── Stdlib forms that COMPILE into AST or are functions — macros,
-      functions, data-structure constructors, local data structures.
-      One file per form. Keyword path = file path.
+  └── Stdlib plumbing that isn't holon algebra — services, test
+      harness, sandboxing, stream combinators. One file per form
+      or per service. Keyword path = file path.
 
-      wat/std/Subtract.wat        ;; :wat::std::Subtract       (macro)
-      wat/std/Amplify.wat         ;; :wat::std::Amplify        (macro)
-      wat/std/Reject.wat          ;; :wat::std::Reject         (macro — Gram-Schmidt)
-      wat/std/Project.wat         ;; :wat::std::Project        (macro — Reject's complement)
-      wat/std/Sequential.wat      ;; :wat::std::Sequential     (macro, bind-chain)
-      wat/std/Ngram.wat           ;; :wat::std::Ngram          (macro)
-      wat/std/Bigram.wat          ;; :wat::std::Bigram         (macro: Ngram 2)
-      wat/std/Trigram.wat         ;; :wat::std::Trigram        (macro: Ngram 3)
-      wat/std/HashMap.wat         ;; :wat::std::HashMap        (macro)
-      wat/std/Vec.wat             ;; :wat::std::Vec            (macro)
-      wat/std/HashSet.wat         ;; :wat::std::HashSet        (macro)
-      wat/std/Log.wat             ;; :wat::std::Log            (macro)
-      wat/std/Circular.wat        ;; :wat::std::Circular       (macro)
-      wat/std/Sequential.wat      ;; :wat::std::Sequential     (macro)
-      (LocalCache + Cache moved to external crate wat-lru arc 013 —
-       :user::wat::std::lru::LocalCache, :user::wat::std::lru::CacheService)
-      wat/std/cached-encode.wat   ;; :wat::std::cached-encode  (function)
-      ... one file per form.
-
-      (Note: :wat::kernel::HandlePool is NOT under wat/std/ — it ships
-       with the kernel alongside make-bounded-queue, spawn, select.
-       It is the deadlock guard; every mailbox-backed driver relies
-       on its claim-or-panic invariant. Infrastructure, not pattern.)
-
-wat/std/program/
-  └── Stdlib PROGRAMS — spawnable wat-vm programs with their own
-      lifecycle, owned state, and queue interfaces. Exactly TWO ship
-      (see "Programs are userland — with two exceptions"):
-
-      wat/std/program/Console.wat  ;; :wat::std::program::Console
-                                    ;;   dual-sink fan-in serializer
-                                    ;;   over :rust::std::io::Stdout + :rust::std::io::Stderr;
-                                    ;;   the sole gateway a good wat
-                                    ;;   program uses to reach the
-                                    ;;   world. Client handles carry
-                                    ;;   tagged msgs; /out and /err
-                                    ;;   helpers encode the tag.
-      wat/std/program/Cache.wat    ;; :wat::std::program::Cache<K,V>
-                                    ;;   LRU memoization with telemetry
-                                    ;;   hooks; the hot path of any holon
-                                    ;;   program that encodes ASTs
       wat/std/stream.wat           ;; :wat::std::stream::*
                                     ;;   CSP pipeline stdlib — Stream<T>
                                     ;;   typealias + spawn-producer / map /
-                                    ;;   filter / chunks / for-each /
-                                    ;;   collect / fold (see 058-034).
-                                    ;;   Each intermediate combinator
-                                    ;;   spawns ONE worker over a
-                                    ;;   bounded(1) queue; terminals drive
-                                    ;;   the pipeline and join the handle.
-                                    ;;   Composition via explicit let* —
-                                    ;;   the typed-binding chain IS the
-                                    ;;   pipeline. No one-liner composer;
-                                    ;;   let* is already the honest form
-                                    ;;   (see 058-034 REJECTED section
-                                    ;;   for the "verbose is honest"
-                                    ;;   reasoning).
+                                    ;;   filter / chunks / with-state /
+                                    ;;   for-each / collect / fold
+                                    ;;   (see 058-034). Each intermediate
+                                    ;;   combinator spawns ONE worker over
+                                    ;;   a bounded(1) queue; terminals
+                                    ;;   drive the pipeline and join the
+                                    ;;   handle. Composition via explicit
+                                    ;;   let* — the typed-binding chain IS
+                                    ;;   the pipeline. No one-liner
+                                    ;;   composer; let* is already the
+                                    ;;   honest form (see 058-034 REJECTED
+                                    ;;   section for "verbose is honest").
+      wat/std/test.wat             ;; :wat::test::* — assertion harness,
+                                    ;;   deftest, run, run-ast, program.
+      wat/std/hermetic.wat         ;; :wat::kernel::run-sandboxed-hermetic-ast
+                                    ;;   wat-stdlib wrapper over
+                                    ;;   fork-with-forms + wait-child.
+      wat/std/service/Console.wat  ;; :wat::std::service::Console — the
+                                    ;;   only service currently baked;
+                                    ;;   dual-sink fan-in over stdout/stderr.
 
-      No more. Database, telemetry pipelines, rate-gates, signal
-      converters, domain-specific observers/brokers/treasuries — all
-      USERLAND. Apps ship them under their own paths (:project::.../
-      program/..., alice/program/..., etc.). See FOUNDATION's
-      "Programs are userland" subsection for the six-rule conformance
-      contract.
+      HashMap / HashSet / Vec / get / contains? / assoc are NOT
+      stdlib — they're :wat::core::* (arc 021; they reach
+      Rust-internal state, can't be written in wat). LocalCache
+      and CacheService ship as an external crate wat-lru (arc
+      013 — :user::wat::std::lru::*).
 
-      The two-directory split reflects the substrate distinction:
-      wat/std/         — compiles into AST or runs as a function call
-      wat/std/program/ — runs as an independent wat-vm program
+      (Note: :wat::kernel::HandlePool is NOT under wat/std/ — it
+       ships with the kernel alongside make-bounded-queue, spawn,
+       select. It is the deadlock guard; every mailbox-backed
+       driver relies on its claim-or-panic invariant.
+       Infrastructure, not pattern.)
+
+      Stdlib SERVICES (under wat/std/service/) are spawnable
+      wat-vm programs with their own lifecycle, owned state, and
+      queue interfaces. Exactly ONE currently ships baked:
+
+      wat/std/service/Console.wat   ;; :wat::std::service::Console
+                                     ;;   dual-sink fan-in serializer
+                                     ;;   over :rust::std::io::Stdout +
+                                     ;;   :rust::std::io::Stderr; the
+                                     ;;   sole gateway a good wat program
+                                     ;;   uses to reach the world. Client
+                                     ;;   handles carry tagged msgs; /out
+                                     ;;   and /err helpers encode the tag.
+
+      Cache (LRU memoization with telemetry hooks) used to ship
+      here as `wat/std/service/Cache.wat` but was externalized to
+      the wat-lru sibling crate in arc 013 —
+      `:user::wat::std::lru::CacheService`. Consumers opt in via
+      `wat::main! { deps: [wat_lru] }`.
+
+      No more baked services. Database, telemetry pipelines,
+      rate-gates, signal converters, domain-specific
+      observers/brokers/treasuries — all USERLAND. Apps ship them
+      under their own paths (:project::.../service/...,
+      alice/service/..., etc.). See FOUNDATION's "Programs are
+      userland" subsection for the conformance contract.
+
+      The three-directory split reflects the substrate distinction:
+      wat/holon/        — algebra idioms over :wat::holon::* primitives
+      wat/std/          — plumbing macros/functions/typealiases
+      wat/std/service/  — independent wat-vm programs with lifecycles
 ```
 
-**Each stdlib file is a single `defmacro` / `define` / `program` declaration whose keyword-path name matches the file path.** The Rust wat-vm binary compiles them in via per-file `load` calls in its startup manifest. Users add their own stdlib the same way under their own directories (`wat/alice/math/clamp.wat`, `wat/alice/program/ClampServer.wat`, etc.).
+**Each stdlib file is a single `defmacro` / `define` / `program` declaration whose keyword-path name matches the file path.** The Rust wat-vm binary compiles them in via per-file `load` calls in its startup manifest. Users add their own stdlib the same way under their own directories (`wat/alice/math/clamp.wat`, `wat/alice/service/ClampServer.wat`, etc.).
 
-**Keyword path = file path.** `:wat::std::Subtract` lives at `wat/std/Subtract.wat`; `:wat::std::program::Cache` lives at `wat/std/program/Cache.wat`. No translation. No manifest of exports to maintain. Cryptographic identity is per-file: signing `wat/std/Subtract.wat` signs exactly that form's body. Growth is additive: new form = new file, no edits elsewhere. `ls wat/std/` and `ls wat/std/program/` ARE the stdlib inventories for their respective kinds.
+**Keyword path = file path.** `:wat::holon::Subtract` lives at `wat/holon/Subtract.wat`; `:wat::std::service::Console` lives at `wat/std/service/Console.wat`. No translation. No manifest of exports to maintain. Cryptographic identity is per-file: signing `wat/holon/Subtract.wat` signs exactly that form's body. Growth is additive: new form = new file, no edits elsewhere. `ls wat/holon/`, `ls wat/std/`, and `ls wat/std/service/` ARE the inventories for their respective tiers.
 
-User code follows the same discipline: `:alice::math::clamp` lives at `wat/alice/math/clamp.wat` (under the project's wat root). If alice ships a program, it lives at `wat/alice/program/MyProgram.wat` under the keyword path `:alice::program::MyProgram`. The file path under `wat/` mirrors the keyword-path segments after the initial `:`. Cross-project distribution is a tarball of `wat/` directories with signatures per file.
+User code follows the same discipline: `:alice::math::clamp` lives at `wat/alice/math/clamp.wat` (under the project's wat root). If alice ships a service, it lives at `wat/alice/service/MyServer.wat` under the keyword path `:alice::service::MyServer`. The file path under `wat/` mirrors the keyword-path segments after the initial `:`. Cross-project distribution is a tarball of `wat/` directories with signatures per file.
 
-**The `program/` segment is an honest name, not a mechanism.** It tells the reader (and the naming system) that what's at that path RUNS rather than COMPILES-into-AST. No special parser treatment; the convention is purely directory organization reflecting the kind of artifact. Users are free to use or not use the convention in their own code — `:alice::Cache` would work too, just less self-documenting.
+**The `service/` segment is an honest name, not a mechanism.** It tells the reader (and the naming system) that what's at that path RUNS as a long-lived spawnable program rather than COMPILES-into-AST or resolves as a function call. No special parser treatment; the convention is purely directory organization reflecting the kind of artifact. Users are free to use or not use the convention in their own code — `:alice::Cache` would work too, just less self-documenting. (Renamed from `program/` to `service/` pre-publish; see BOOK Chapter 21.)
 
 ---
 
@@ -2219,11 +2233,11 @@ All four naming positions in the language — language core, algebra core, stdli
 :wat::core::lambda
 :wat::core::if
 
-:wat::algebra::Atom           ; algebra core primitive
-:wat::algebra::Bind
-:wat::algebra::Bundle
+:wat::holon::Atom           ; algebra core primitive
+:wat::holon::Bind
+:wat::holon::Bundle
 
-:wat::std::Subtract           ; project stdlib
+:wat::holon::Subtract           ; project stdlib
 :wat::std::HashMap
 :wat::std::Vec
 
@@ -2241,7 +2255,7 @@ Anyone can claim any prefix. Collisions are prevented by **discipline and cultur
 ### What this means
 
 - **Types use the same discipline** — `:project::market::Candle`, `:alice::types::Price`.
-- **Macros use the same discipline** — `:wat::std::Subtract`, `:my::vocab::Unbind`.
+- **Macros use the same discipline** — `:wat::holon::Subtract`, `:my::vocab::Unbind`.
 - **Atoms use the same discipline** — `(Atom :wat::std::circular-cos-basis)`, `(Atom :my-app::thing)`.
 - **There is no escape hatch.** This is the policy across every naming position in the language.
 
@@ -2267,9 +2281,9 @@ The project reserves four prefixes, and they are **protected at startup** — us
 - `:wat::core::...` — language core primitives (`:wat::core::define`, `:wat::core::lambda`, `:wat::core::let`, `:wat::core::let*`, `:wat::core::if`, `:wat::core::match`, `:wat::core::cond`, `:wat::core::defmacro`, `:wat::core::try`, `:wat::core::load!`, `:wat::core::vec`, `:wat::core::list`, `:wat::core::tuple`, `:wat::core::conj`, `:wat::core::quote`, `:wat::core::atom-value`, `:wat::core::eval-ast!`, `:wat::core::eval-edn!`, `:wat::core::eval-digest!`, `:wat::core::eval-signed!`, `:wat::core::first`, `:wat::core::second`, `:wat::core::third`, `:wat::core::rest`, `:wat::core::map`, `:wat::core::foldl`, `:wat::core::range`, `:wat::core::take`, `:wat::core::drop`, `:wat::core::length`, `:wat::core::empty?`, `:wat::core::reverse`, `:wat::core::struct`, `:wat::core::enum`, `:wat::core::newtype`, `:wat::core::typealias`, `:wat::core::i64::+`, `:wat::core::i64::-`, `:wat::core::i64::*`, `:wat::core::i64::/`, `:wat::core::f64::+`, `:wat::core::f64::-`, `:wat::core::f64::*`, `:wat::core::f64::/`, `:wat::core::i64::to-string`, `:wat::core::i64::to-f64`, `:wat::core::f64::to-string`, `:wat::core::f64::to-i64`, `:wat::core::string::to-i64`, `:wat::core::string::to-f64`, `:wat::core::bool::to-string`, `:wat::core::string::to-bool`, `:wat::core::>`, `:wat::core::=`, …)
 - `:wat::kernel::...` — wat-vm kernel primitives (`:wat::kernel::make-bounded-queue`, `:wat::kernel::make-unbounded-queue`, `:wat::kernel::spawn`, `:wat::kernel::send`, `:wat::kernel::recv`, `:wat::kernel::try-recv`, `:wat::kernel::select`, `:wat::kernel::drop`, `:wat::kernel::join`, `:wat::kernel::HandlePool`, `:wat::kernel::stopped?`). **`spawn`** accepts a keyword-path literal OR a lambda-valued expression as its first argument; **`send`** is Option-returning (`:Option<()>`), symmetric with `recv`'s `:Option<T>` on disconnect.
 - `:wat::config::...` — ambient startup constants: setters (`set-dims!`, `set-capacity-mode!`, `set-global-seed!`, `set-noise-floor!`), accessors (`dims`, `capacity-mode`, `global-seed`, `noise-floor`), and the `:wat::config::CapacityMode` enum. Required-at-startup or defaulted values the program author commits at most once; see "`:wat::config` — Ambient Startup Constants."
-- `:wat::algebra::...` — algebra core primitives (`:wat::algebra::Atom`, `:wat::algebra::Bind`, `:wat::algebra::Bundle`, `:wat::algebra::Blend`, `:wat::algebra::cosine`, `:wat::algebra::dot`, `:wat::algebra::presence?`, …)
+- `:wat::holon::...` — algebra core primitives (`:wat::holon::Atom`, `:wat::holon::Bind`, `:wat::holon::Bundle`, `:wat::holon::Blend`, `:wat::holon::cosine`, `:wat::holon::dot`, `:wat::holon::presence?`, …)
 - `:wat::io::...` — I/O primitives for the real OS streams handed to `:user::main` (`:wat::io::write` for `:rust::std::io::Stdout` / `:rust::std::io::Stderr`, `:wat::io::read-line` for `:rust::std::io::Stdin`). No channel indirection; calls go straight to the OS stream via std's internal locking.
-- `:wat::std::...` — project stdlib (`:wat::std::Subtract`, `:wat::std::HashMap`, `:wat::std::HashSet`, `:wat::std::Chain`, `:wat::std::LocalCache`, `:wat::std::program::Console`, `:wat::std::program::Cache`, circular basis atoms, …). The wat-level smart constructors and spawnable programs live here; they may wrap Rust types (HashMap produces a `:rust::std::collections::HashMap<K,V>`) but their call surface is wat-native.
+- `:wat::std::...` — project stdlib (`:wat::holon::Subtract`, `:wat::std::HashMap`, `:wat::std::HashSet`, `:wat::std::Chain`, `:wat::std::LocalCache`, `:wat::std::program::Console`, `:wat::std::program::Cache`, circular basis atoms, …). The wat-level smart constructors and spawnable programs live here; they may wrap Rust types (HashMap produces a `:rust::std::collections::HashMap<K,V>`) but their call surface is wat-native.
   - `:wat::std::list::...` — generic list combinators that compose core primitives (`:wat::std::list::pairwise-map`, `:wat::std::list::n-wise-map`, `:wat::std::list::map-with-index`, `:wat::std::list::window`, `:wat::std::list::zip`, `:wat::std::list::take-while`, …). Each is a short composition of Rust iterator methods; each is called from stdlib-macro-emitted ASTs and from user code.
   - `:wat::std::math::...` — math primitives used inside stdlib macros (`:wat::std::math::cos`, `:wat::std::math::sin`, `:wat::std::math::pi`, `:wat::std::math::log`, `:wat::std::math::ln`).
   - `:wat::std::stream::...` — CSP pipeline combinators (`:wat::std::stream::Stream<T>` typealias, `:wat::std::stream::Producer<T>` typealias, `:wat::std::stream::spawn-producer`, `map`, `filter`, `chunks`, `for-each`, `collect`, `fold`). Each intermediate combinator spawns one worker over a bounded(1) queue; terminals drive the pipeline and join the handle. Composition via explicit `let*` chain — the typed-binding chain IS the pipeline (see `058-034-stream-stdlib`).
@@ -2287,7 +2301,7 @@ REJECTED. Every call to a wat-vm-provided form uses its full keyword path, alway
 (:wat::core::define (:my::app::hello (name :String) -> :String)
   (:wat::std::string::join "" (:wat::core::vec "Hello, " name "!")))
 
-(:wat::algebra::Bundle (:wat::core::vec x y z))
+(:wat::holon::Bundle (:wat::core::vec x y z))
 (:wat::kernel::send out "hello")
 ```
 
@@ -2320,7 +2334,7 @@ There is no "shadowable alias" tier and no "outermost bare scope" — just lexic
 
 The `### Redefinition mode — opt-in startup knob` subsection covers collision behavior for user-defined names. With no bare aliases, the rules simplify:
 
-- **`:wat/...` paths are protected in BOTH modes.** `:strict` and `:allow-redef` agree: you cannot redefine anything at `:wat::core::`, `:wat::kernel::`, `:wat::algebra::`, or `:wat::std::`. Attempt = halt.
+- **`:wat/...` paths are protected in BOTH modes.** `:strict` and `:allow-redef` agree: you cannot redefine anything at `:wat::core::`, `:wat::kernel::`, `:wat::holon::`, or `:wat::std::`. Attempt = halt.
 - **`:allow-redef` only matters for user-path collisions.** Two files both defining `:alice::math::clamp` with different bodies: that's a user-path collision. `:strict` halts; `:allow-redef` permits with logging. No bare-alias interaction to worry about — aliases do not exist.
 
 ### Type-tagged hashing keeps literal types distinct
@@ -2417,7 +2431,7 @@ The language core from 058 and this FOUNDATION polish pass:
 
 Plus the syntactic feature pervading all of the above:
 
-- **Type annotations** (`:holon::HolonAST`, `:f64`, `:i32`, `:bool`, `:Vec<T>`, `:fn(args)->return`, keyword-path user types) — required on `define` and `lambda` signatures; carried on `struct`/`enum`/`newtype` field declarations. `:holon::HolonAST` is an enum with 6 variants (Atom, Bind, Bundle, Permute, Thermometer, Blend) — functions operating on `:holon::HolonAST` pattern-match to select variant behavior.
+- **Type annotations** (`:wat::holon::HolonAST`, `:f64`, `:i32`, `:bool`, `:Vec<T>`, `:fn(args)->return`, keyword-path user types) — required on `define` and `lambda` signatures; carried on `struct`/`enum`/`newtype` field declarations. `:wat::holon::HolonAST` is an enum with 6 variants (Atom, Bind, Bundle, Permute, Thermometer, Blend) — functions operating on `:wat::holon::HolonAST` pattern-match to select variant behavior.
 
 Other host-Lisp forms (`let`, `let*`, `if`, `cond`, `match`, `begin`, arithmetic, comparison, etc.) are **substrate-inherited** — wat inherits them from its Lisp host rather than defining them anew. They are language tools, but not novel in wat specifically.
 
@@ -2456,8 +2470,7 @@ The entry file — the wat file the wat-vm starts from (the one declaring `:user
 (:wat::config::set-dims! 10000)
 (:wat::config::set-capacity-mode! :error)
 
-;; ─── Part 2: Loads. Pull in stdlib and project source. ──────────
-(:wat::core::load! "wat/std/Chain.wat")
+;; ─── Part 2: Loads. Pull in project source. ────────────────────
 (:wat::core::load! "wat/project/trading/main.wat")
 ```
 
@@ -2501,29 +2514,29 @@ This section freezes the full algebra in its target shape (post-058). Core forms
 ```scheme
 ;; --- MAP canonical ---
 
-(:wat::algebra::Atom literal)
+(:wat::holon::Atom literal)
 ;; AST node storing a literal (string, int, float, bool, keyword).
 ;; Literal is READ DIRECTLY from the AST node via (:wat::core::atom-value ...).
 ;; Vector projection: deterministic bipolar vector from type-aware hash.
-;;   (:wat::algebra::Atom "foo")  — string literal
-;;   (:wat::algebra::Atom 42)     — integer literal
-;;   (:wat::algebra::Atom 1.6)    — float literal
-;;   (:wat::algebra::Atom true)   — boolean literal
-;;   (:wat::algebra::Atom :name)  — keyword literal
+;;   (:wat::holon::Atom "foo")  — string literal
+;;   (:wat::holon::Atom 42)     — integer literal
+;;   (:wat::holon::Atom 1.6)    — float literal
+;;   (:wat::holon::Atom true)   — boolean literal
+;;   (:wat::holon::Atom :name)  — keyword literal
 ;; Type-aware hash ensures (Atom 1) ≠ (Atom "1") ≠ (Atom 1.0)
 ;; NO null — Rust doesn't have null; wat doesn't have null.
 ;; Absence is :Option<T>; unit is :().
 
-(:wat::algebra::Bind a b)
+(:wat::holon::Bind a b)
 ;; element-wise multiplication, self-inverse
-;; (:wat::algebra::Bind a (:wat::algebra::Bind a b)) = b
+;; (:wat::holon::Bind a (:wat::holon::Bind a b)) = b
 
-(:wat::algebra::Bundle list-of-holons)
+(:wat::holon::Bundle list-of-holons)
 ;; list → element-wise sum + threshold
 ;; commutative, takes an explicit list (not variadic)
 ;;
-;; Signature: :Vec<holon::HolonAST> -> :Result<holon::HolonAST,
-;;                                              :wat::algebra::CapacityExceeded>
+;; Signature: :Vec<wat::holon::HolonAST> -> :Result<wat::holon::HolonAST,
+;;                                              :wat::holon::CapacityExceeded>
 ;; (per 058-003 INSCRIPTION 2026-04-19 — capacity-guard cascade)
 ;;
 ;; Under every committed :capacity-mode the return type is Result:
@@ -2535,12 +2548,12 @@ This section freezes the full algebra in its target shape (post-058). Core forms
 ;; budget = floor(sqrt(dims))  per FOUNDATION "Per-frame capacity"
 ;; Callers match explicitly or propagate via :wat::core::try (058-033).
 
-(:wat::algebra::Permute child k)
+(:wat::holon::Permute child k)
 ;; circular shift of dimensions by integer k
 
 ;; --- Scalar primitives ---
 
-(:wat::algebra::Thermometer value min max)
+(:wat::holon::Thermometer value min max)
 ;; gradient encoding: proportion of dimensions set to +1
 ;; based on (value - min) / (max - min)
 ;; exact cosine geometry — extremes anti-correlated.
@@ -2558,7 +2571,7 @@ This section freezes the full algebra in its target shape (post-058). Core forms
 ;; running the same algebra at the same d. Proven in holon-rs at d=10,000
 ;; across 652k candles and multiple production lab runs.
 
-(:wat::algebra::Blend a b w1 w2)
+(:wat::holon::Blend a b w1 w2)
 ;; scalar-weighted binary combination
 ;; threshold(w1·a + w2·b)
 ;; weights can be any real numbers (including negative)
@@ -2569,11 +2582,11 @@ This section freezes the full algebra in its target shape (post-058). Core forms
 Orthogonal to the six HolonAST-producing core forms, the algebra exposes scalar-returning measurements as a separate tier. These operate on Holons but return `:f64`, not a new Holon:
 
 ```scheme
-(:wat::algebra::cosine a b)     ;; :holon::HolonAST :holon::HolonAST -> :f64
+(:wat::holon::cosine a b)     ;; :wat::holon::HolonAST :wat::holon::HolonAST -> :f64
 ;; Cosine similarity. Returns dot(a, b) / (norm(a) * norm(b)).
 ;; Used for presence measurement against the substrate noise floor (5/sqrt(d)).
 
-(:wat::algebra::dot a b)        ;; :holon::HolonAST :holon::HolonAST -> :f64
+(:wat::holon::dot a b)        ;; :wat::holon::HolonAST :wat::holon::HolonAST -> :f64
 ;; Dot product. Elementwise multiply, sum reduction.
 ;; Used by stdlib's Reject/Project for computed Gram-Schmidt coefficients;
 ;; available to applications for any scalar measurement on vector pairs.
@@ -2590,23 +2603,23 @@ Retrieval is NOT a core form. Presence is measured by `cosine(encode(target), re
 
 (:wat::core::define (:wat::std::Linear v scale)
   ;; value on a known bounded scale
-  (:wat::algebra::Thermometer v 0 scale))
+  (:wat::holon::Thermometer v 0 scale))
 
-(:wat::core::define (:wat::std::Log v min max)
+(:wat::core::define (:wat::holon::Log v min max)
   ;; value spanning orders of magnitude
-  (:wat::algebra::Thermometer (ln v) (ln min) (ln max)))
+  (:wat::holon::Thermometer (ln v) (ln min) (ln max)))
 
-(:wat::core::define (:wat::std::Circular v period)
+(:wat::core::define (:wat::holon::Circular v period)
   ;; value on a cycle
   (:wat::core::let ((theta (:wat::core::* 2 pi (:wat::core::/ v period))))
-    (:wat::algebra::Blend (:wat::algebra::Atom :wat::std::circular-cos-basis)
-           (:wat::algebra::Atom :wat::std::circular-sin-basis)
+    (:wat::holon::Blend (:wat::holon::Atom :wat::std::circular-cos-basis)
+           (:wat::holon::Atom :wat::std::circular-sin-basis)
            (cos theta)
            (sin theta))))
 
 ;; --- Structural compositions ---
 
-(:wat::core::define (:wat::std::Sequential list-of-holons)
+(:wat::core::define (:wat::holon::Sequential list-of-holons)
   ;; positional encoding — BIND-CHAIN with Permute (not Bundle-sum).
   ;; (Sequential [a])       = a
   ;; (Sequential [a b])     = Bind(a, Permute(b, 1))
@@ -2620,66 +2633,66 @@ Retrieval is NOT a core form. Presence is measured by `cosine(encode(target), re
 ;; Bundle, enclosing context already carries the temporal meaning.
 ;; Userland may define it in their own namespace if they want the name:
 ;;   (:wat::core::defmacro (:my::vocab::Concurrent (xs :AST) -> :AST)
-;;     `(:wat::algebra::Bundle ,xs))
+;;     `(:wat::holon::Bundle ,xs))
 
 ;; Then was REJECTED (058-011) — arity-specialization of Sequential,
 ;; demonstrates nothing Sequential doesn't. Userland may define it:
 ;;   (:wat::core::defmacro (:my::vocab::Then (a :AST) (b :AST) -> :AST)
-;;     `(:wat::std::Sequential (:wat::core::vec ,a ,b)))
+;;     `(:wat::holon::Sequential (:wat::core::vec ,a ,b)))
 
 (:wat::core::define (:wat::std::Chain list-of-holons)
   ;; adjacency — Bundle of pairwise binary Sequentials
   ;; distinct from Sequential: captures transitions, not absolute positions
-  (:wat::algebra::Bundle
+  (:wat::holon::Bundle
     (:wat::core::map (:wat::core::lambda (pair)
-           (:wat::std::Sequential (:wat::core::vec (:wat::core::first pair) (:wat::core::second pair))))
+           (:wat::holon::Sequential (:wat::core::vec (:wat::core::first pair) (:wat::core::second pair))))
          (pairwise list-of-holons))))
 
-(:wat::core::define (:wat::std::Ngram n list-of-holons)
+(:wat::core::define (:wat::holon::Ngram n list-of-holons)
   ;; n-wise adjacency — generalizes Chain
-  (:wat::algebra::Bundle
+  (:wat::holon::Bundle
     (:wat::core::map (:wat::core::lambda (window)
-           (:wat::algebra::Bind (:wat::algebra::Atom "ngram")
-                 (:wat::std::Sequential window)))
+           (:wat::holon::Bind (:wat::holon::Atom "ngram")
+                 (:wat::holon::Sequential window)))
          (n-wise n list-of-holons))))
 
 ;; --- Weighted-combination idioms over Blend ---
 
-(:wat::core::define (:wat::std::Amplify x y s)
+(:wat::core::define (:wat::holon::Amplify x y s)
   ;; boost component y in x by factor s
-  (:wat::algebra::Blend x y 1 s))
+  (:wat::holon::Blend x y 1 s))
 
-(:wat::core::define (:wat::std::Subtract x y)
+(:wat::core::define (:wat::holon::Subtract x y)
   ;; remove y from x at full strength
   ;; was Negate(x, y, "subtract") — now an explicit Blend idiom
-  (:wat::algebra::Blend x y 1 -1))
+  (:wat::holon::Blend x y 1 -1))
 
 ;; (Flip REJECTED — see 058-020/PROPOSAL.md; magic weight, no production use.)
 
 ;; --- Gram-Schmidt stdlib duo (058-005) ---
 ;;
-;; Uses :wat::algebra::dot (scalar-returning measurement) alongside Blend.
+;; Uses :wat::holon::dot (scalar-returning measurement) alongside Blend.
 ;; Both macros compose Blend with computed negative coefficients.
 
-(:wat::core::define (:wat::std::Reject x y)
+(:wat::core::define (:wat::holon::Reject x y)
   ;; x with y's direction removed: x - ((x·y)/(y·y)) · y
   ;; The Gram-Schmidt reject step. Production-cited in the DDoS detection
   ;; mechanism (primer series-001-002 line 277-289) and engram matching.
   ;; Renamed from Orthogonalize (058-005) to align with primer + holon-rs.
-  (:wat::algebra::Blend x y 1
-      (:wat::core::- (:wat::core::/ (:wat::algebra::dot x y)
-                                (:wat::algebra::dot y y)))))
+  (:wat::holon::Blend x y 1
+      (:wat::core::- (:wat::core::/ (:wat::holon::dot x y)
+                                (:wat::holon::dot y y)))))
 
-(:wat::core::define (:wat::std::Project x y)
+(:wat::core::define (:wat::holon::Project x y)
   ;; x's component along y's direction. The Gram-Schmidt project step.
   ;; Project + Reject = x (Gram-Schmidt decomposition).
-  (:wat::std::Subtract x (:wat::std::Reject x y)))
+  (:wat::holon::Subtract x (:wat::holon::Reject x y)))
 
 ;; --- Relational transfer: DEFERRED ---
 ;; Analogy (058-014) is DEFERRED — proven working but not adopted.
 ;; See 058-014/PROPOSAL.md for the resumable audit record.
 ;; Inline form when needed:
-;;   (:wat::algebra::Bundle (:wat::core::vec c (:wat::std::Subtract b a)))
+;;   (:wat::holon::Bundle (:wat::core::vec c (:wat::holon::Subtract b a)))
 
 ;; --- Data structures (Rust-surface names) ---
 ;;
@@ -2689,22 +2702,22 @@ Retrieval is NOT a core form. Presence is measured by `cosine(encode(target), re
 ;;   HashSet  ↔  std::collections::HashSet
 ;; One name per concept across algebra, type annotation, and runtime backing.
 
-(:wat::core::define (:wat::std::HashMap (pairs :Vec<Pair<holon::HolonAST,holon::HolonAST>>) -> :holon::HolonAST)
+(:wat::core::define (:wat::std::HashMap (pairs :Vec<Pair<wat::holon::HolonAST,wat::holon::HolonAST>>) -> :wat::holon::HolonAST)
   ;; Key-value container. Each pair becomes a Bind of key to value; all pairs
   ;; bundled together. Runtime backs it with Rust's HashMap for O(1) lookups.
-  (:wat::algebra::Bundle
-    (:wat::core::map (:wat::core::lambda ((pair :(Holon,Holon)) -> :holon::HolonAST)
-           (:wat::algebra::Bind (:wat::core::first pair) (:wat::core::second pair)))
+  (:wat::holon::Bundle
+    (:wat::core::map (:wat::core::lambda ((pair :(Holon,Holon)) -> :wat::holon::HolonAST)
+           (:wat::holon::Bind (:wat::core::first pair) (:wat::core::second pair)))
          pairs)))
 
-(:wat::core::define (:wat::std::Vec (items :Vec<holon::HolonAST>) -> :holon::HolonAST)
+(:wat::core::define (:wat::std::Vec (items :Vec<wat::holon::HolonAST>) -> :wat::holon::HolonAST)
   ;; Indexed container. Each item bound to its position as an integer atom.
   ;; (Atom i) is the atom whose literal IS the integer i. Runtime backs it
   ;; with Rust's Vec for O(1) indexing.
-  (:wat::algebra::Bundle
+  (:wat::holon::Bundle
     (map-indexed
-      (:wat::core::lambda ((i :usize) (item :holon::HolonAST) -> :holon::HolonAST)
-        (:wat::algebra::Bind (:wat::algebra::Atom i) item))
+      (:wat::core::lambda ((i :usize) (item :wat::holon::HolonAST) -> :wat::holon::HolonAST)
+        (:wat::holon::Bind (:wat::holon::Atom i) item))
       items)))
 
 ;; :wat::std::HashSet — variadic, element-list flat args.
@@ -2720,7 +2733,7 @@ Retrieval is NOT a core form. Presence is measured by `cosine(encode(target), re
 
 ;; --- get: unified structural retrieval ---
 ;;
-;; Works uniformly across HashMap, Vec, HashSet. Returns :Option<holon::HolonAST>.
+;; Works uniformly across HashMap, Vec, HashSet. Returns :Option<wat::holon::HolonAST>.
 ;; Direct lookup through the container's efficient Rust backing — no walk,
 ;; no cosine, no cleanup. The AST describes the container; the runtime
 ;; materializes the efficient backing (HashMap, Vec, HashSet) for O(1)
@@ -2731,7 +2744,7 @@ Retrieval is NOT a core form. Presence is measured by `cosine(encode(target), re
 ;;   (:wat::std::get (c :Vec<T>)                                (i :usize))  -> :Option<T>   ;; index into vec
 ;;   (:wat::std::get (c :rust::std::collections::HashSet<T>)    (x :T))      -> :Option<T>   ;; membership → Some(x) or None
 
-(:wat::core::define (:wat::std::get (container :holon::HolonAST) (locator :holon::HolonAST) -> :Option<holon::HolonAST>)
+(:wat::core::define (:wat::std::get (container :wat::holon::HolonAST) (locator :wat::holon::HolonAST) -> :Option<wat::holon::HolonAST>)
   ;; Dispatches on the container's runtime backing:
   ;;   HashMap → HashMap::get(locator) — hash lookup, O(1) avg
   ;;   Vec     → Vec[locator]          — direct index, O(1)
@@ -2752,7 +2765,7 @@ Retrieval is NOT a core form. Presence is measured by `cosine(encode(target), re
 ;; learns once. Userland may define the alias if decode-intent framing
 ;; matters to their vocab:
 ;;   (:wat::core::defmacro (:my::vocab::Unbind (c :AST) (k :AST) -> :AST)
-;;     `(:wat::algebra::Bind ,c ,k))
+;;     `(:wat::holon::Bind ,c ,k))
 ```
 
 (Note: `Cleanup` as a VSA operation is NOT part of the wat algebra. The AST-primary framing eliminates the need for codebook-based recovery — see "Presence is Measurement, Not Verdict." Argmax-over-candidates, when an application needs it, is a stdlib fold over presence measurements on (AST, vector) pairs. Not a primitive.)
@@ -2784,7 +2797,7 @@ All eight forms are loaded at startup. The wat-vm distinguishes them by what kin
 ;; --- Error propagation ---
 ;;
 ;; (per 058-033 INSCRIPTION 2026-04-19 — the forcing function that
-;; makes Result-returning forms like :wat::algebra::Bundle ergonomic)
+;; makes Result-returning forms like :wat::holon::Bundle ergonomic)
 
 (:wat::core::try <result-expr>)
 ;; Unwrap Ok v → v, or short-circuit the enclosing Result-returning
@@ -2953,7 +2966,7 @@ All eight forms are loaded at startup. The wat-vm distinguishes them by what kin
 ;;   :f64 :f32 :i8 :i16 :i32 :i64 :i128 :u8 :u16 :u32 :u64 :u128
 ;;   :usize :isize :bool :char :String :&str :()
 ;;
-;; Algebra — :holon::HolonAST is an enum; :Atom, Bind, Bundle, Permute,
+;; Algebra — :wat::holon::HolonAST is an enum; :Atom, Bind, Bundle, Permute,
 ;;   :Thermometer, Blend
 ;;   are its seven variants (not separate subtypes). Pattern-match to
 ;;   select variant behavior.
@@ -2989,8 +3002,8 @@ All eight forms are loaded at startup. The wat-vm distinguishes them by what kin
 ;;   :HashMap<K,V>
 ;;   :fn(List<i32>)->Option<f64>
 ;;   :HashMap<String,fn(i32)->i32>
-;;   :Result<HashMap<Atom,holon::HolonAST>,String>
-;;   :Atom<holon::HolonAST>
+;;   :Result<HashMap<Atom,wat::holon::HolonAST>,String>
+;;   :Atom<wat::holon::HolonAST>
 ;;   :Atom<i64>
 ;;
 ;; --- ILLEGAL: a second ':' inside a parametric type ---
@@ -3000,18 +3013,18 @@ All eight forms are loaded at startup. The wat-vm distinguishes them by what kin
 ;; bare Rust symbol names — do NOT re-quote them.
 ;;
 ;; WRONG (two colons in one type token):
-;;   :Atom<:holon::HolonAST>                 ;; ':holon::HolonAST' is a re-quote; illegal
+;;   :Atom<:wat::holon::HolonAST>                 ;; ':wat::holon::HolonAST' is a re-quote; illegal
 ;;   :Vec<:T>                     ;; ':T' is a re-quote; illegal
 ;;   :HashMap<:K,:V>               ;; ':K,:V' are re-quotes; illegal
 ;;   :rust::crossbeam_channel::Receiver<:wat::kernel::Signal>  ;; same mistake
 ;;   :Vec<:(Holon,f64)>       ;; same mistake at any nesting depth
 ;;
 ;; RIGHT (one colon at the start, bare Rust symbols inside):
-;;   :Atom<holon::HolonAST>
+;;   :Atom<wat::holon::HolonAST>
 ;;   :Vec<T>
 ;;   :HashMap<K,V>
 ;;   :rust::crossbeam_channel::Receiver<wat/kernel/Signal>
-;;   :Vec<Pair<holon::HolonAST,f64>>
+;;   :Vec<Pair<wat::holon::HolonAST,f64>>
 ;;
 ;; Rule of thumb: the ':' opens the quote; everything inside the matched
 ;; brackets up to the balancing closer is part of the SAME symbol. A
@@ -3019,11 +3032,11 @@ All eight forms are loaded at startup. The wat-vm distinguishes them by what kin
 ;; inside a quoted expression.
 ;;
 ;; NO :Any. Every case that wanted :Any has a principled replacement:
-;;   - Universal algebra value   →  :holon::HolonAST
+;;   - Universal algebra value   →  :wat::holon::HolonAST
 ;;   - Heterogeneous primitives  →  :Union<T,U,V>
 ;;   - Generic container elem    →  parametric T, K, V, ...
-;;   - eval's return             →  :fn(:holon::HolonAST)->Holon  (or parametric)
-;;   - Engram library entries    →  :Vec<Pair<holon::HolonAST,Vector>>
+;;   - eval's return             →  :fn(:wat::holon::HolonAST)->Holon  (or parametric)
+;;   - Engram library entries    →  :Vec<Pair<wat::holon::HolonAST,Vector>>
 ;;
 ;; NO null. Rust doesn't have null; wat doesn't have null.
 ;;   - Optional value            →  :Option<T>  with variants :None and (Some value)
@@ -3045,34 +3058,34 @@ Atoms accept any typed literal. **Use the literal type that matches what the thi
 
 ```scheme
 ;; INTEGER: use when the thing is a concrete integer.
-(:wat::algebra::Atom 0)           ; position zero in a Vec — zero IS an integer
-(:wat::algebra::Atom 42)          ; the integer 42
-(:wat::algebra::Atom -1)          ; the integer -1
+(:wat::holon::Atom 0)           ; position zero in a Vec — zero IS an integer
+(:wat::holon::Atom 42)          ; the integer 42
+(:wat::holon::Atom -1)          ; the integer -1
 
 ;; FLOAT: use when the thing is a concrete float.
-(:wat::algebra::Atom 1.6)         ; the float 1.6
-(:wat::algebra::Atom 3.14159)     ; the float pi (approximate)
+(:wat::holon::Atom 1.6)         ; the float 1.6
+(:wat::holon::Atom 3.14159)     ; the float pi (approximate)
 
 ;; BOOLEAN: use when the thing is concretely true or false.
-(:wat::algebra::Atom true)
-(:wat::algebra::Atom false)
+(:wat::holon::Atom true)
+(:wat::holon::Atom false)
 
 ;; STRING: use when the thing IS a string literal.
-(:wat::algebra::Atom "rsi")       ; the string "rsi"
-(:wat::algebra::Atom "trail")     ; the string "trail"
+(:wat::holon::Atom "rsi")       ; the string "rsi"
+(:wat::holon::Atom "trail")     ; the string "trail"
 
 ;; KEYWORD: use when the thing is a SYMBOLIC NAME — no concrete literal form.
-(:wat::algebra::Atom :wat::std::circular-cos-basis)    ; a reserved symbolic anchor
-(:wat::algebra::Atom :trading::momentum-lens)          ; a named concept
-(:wat::algebra::Atom :rsi)                            ; a short-form symbolic name
+(:wat::holon::Atom :wat::std::circular-cos-basis)    ; a reserved symbolic anchor
+(:wat::holon::Atom :trading::momentum-lens)          ; a named concept
+(:wat::holon::Atom :rsi)                            ; a short-form symbolic name
 ```
 
 The distinction matters because atoms store their literal on the AST node:
 
 ```scheme
-(:wat::core::atom-value (:wat::algebra::Atom 0))      ; → 0    (the integer)
-(:wat::core::atom-value (:wat::algebra::Atom "0"))    ; → "0"  (the string)
-(:wat::core::atom-value (:wat::algebra::Atom :pos::0)) ; → :pos::0  (the keyword)
+(:wat::core::atom-value (:wat::holon::Atom 0))      ; → 0    (the integer)
+(:wat::core::atom-value (:wat::holon::Atom "0"))    ; → "0"  (the string)
+(:wat::core::atom-value (:wat::holon::Atom :pos::0)) ; → :pos::0  (the keyword)
 ```
 
 These are three different things. The type-aware hash gives them three different vectors. **Pick the type that matches the semantic, not the type that wraps the semantic.**
@@ -3082,8 +3095,8 @@ These are three different things. The type-aware hash gives them three different
 For references that ARE genuinely symbolic (no concrete literal form available), the stdlib uses keyword atoms with distinctive full names:
 
 ```scheme
-(:wat::algebra::Atom :wat::std::circular-cos-basis)    ; used by Circular encoder
-(:wat::algebra::Atom :wat::std::circular-sin-basis)    ; used by Circular encoder
+(:wat::holon::Atom :wat::std::circular-cos-basis)    ; used by Circular encoder
+(:wat::holon::Atom :wat::std::circular-sin-basis)    ; used by Circular encoder
 ```
 
 These are TRULY symbolic — "the cos basis vector" has no natural integer or string representation. It's just a name. Keyword is the right type.
@@ -3097,49 +3110,49 @@ Vec position atoms are NOT in this category. Position 0 IS the integer 0. Use `(
 ```scheme
 ;; Role-filler separation everywhere — Bind joins name-atom to value:
 
-(:wat::algebra::Bind (:wat::algebra::Atom "rsi")   (:wat::algebra::Thermometer 0.73 0 1))
-(:wat::algebra::Bind (:wat::algebra::Atom "bytes") (:wat::std::Log 1500 1 1000000))
-(:wat::algebra::Bind (:wat::algebra::Atom "hour")  (:wat::std::Circular 14 24))
+(:wat::holon::Bind (:wat::holon::Atom "rsi")   (:wat::holon::Thermometer 0.73 0 1))
+(:wat::holon::Bind (:wat::holon::Atom "bytes") (:wat::holon::Log 1500 1 1000000))
+(:wat::holon::Bind (:wat::holon::Atom "hour")  (:wat::holon::Circular 14 24))
 
 ;; Co-occurring observations — Bundle is the primitive, context carries the temporal meaning:
-(:wat::algebra::Bind (:wat::algebra::Atom :observed-at-t1)
-      (:wat::algebra::Bundle
+(:wat::holon::Bind (:wat::holon::Atom :observed-at-t1)
+      (:wat::holon::Bundle
         (:wat::core::vec
-          (:wat::algebra::Bind (:wat::algebra::Atom "rsi")   (:wat::algebra::Thermometer 0.73 0 1))
-          (:wat::algebra::Bind (:wat::algebra::Atom "macd")  (:wat::algebra::Thermometer -0.02 -1 1)))))
+          (:wat::holon::Bind (:wat::holon::Atom "rsi")   (:wat::holon::Thermometer 0.73 0 1))
+          (:wat::holon::Bind (:wat::holon::Atom "macd")  (:wat::holon::Thermometer -0.02 -1 1)))))
 
 ;; Temporal sequence:
 (:wat::std::Chain
   (:wat::core::vec
-    (:wat::algebra::Bind (:wat::algebra::Atom "rsi") (:wat::algebra::Thermometer 0.68 0 1))
-    (:wat::algebra::Bind (:wat::algebra::Atom "rsi") (:wat::algebra::Thermometer 0.71 0 1))
-    (:wat::algebra::Bind (:wat::algebra::Atom "rsi") (:wat::algebra::Thermometer 0.74 0 1))))
+    (:wat::holon::Bind (:wat::holon::Atom "rsi") (:wat::holon::Thermometer 0.68 0 1))
+    (:wat::holon::Bind (:wat::holon::Atom "rsi") (:wat::holon::Thermometer 0.71 0 1))
+    (:wat::holon::Bind (:wat::holon::Atom "rsi") (:wat::holon::Thermometer 0.74 0 1))))
 
 ;; Relational verb with bundled observations:
-(:wat::algebra::Bind (:wat::algebra::Atom "diverging")
-      (:wat::algebra::Bundle
+(:wat::holon::Bind (:wat::holon::Atom "diverging")
+      (:wat::holon::Bundle
         (:wat::core::vec
-          (:wat::algebra::Bind (:wat::algebra::Atom "rsi")   (:wat::algebra::Thermometer 0.73 0 1))
-          (:wat::algebra::Bind (:wat::algebra::Atom "price") (:wat::algebra::Thermometer 0.25 0 1)))))
+          (:wat::holon::Bind (:wat::holon::Atom "rsi")   (:wat::holon::Thermometer 0.73 0 1))
+          (:wat::holon::Bind (:wat::holon::Atom "price") (:wat::holon::Thermometer 0.25 0 1)))))
 
 ;; --- Data structures — the unified holon data algebra ---
 
 ;; HashMap as key-value store:
 (:wat::core::define :my::app::portfolio
   (:wat::std::HashMap
-    "USDC" (:wat::algebra::Thermometer 5000 0 10000)
-    "WBTC" (:wat::algebra::Thermometer 0.5  0 1.0)))
+    "USDC" (:wat::holon::Thermometer 5000 0 10000)
+    "WBTC" (:wat::holon::Thermometer 0.5  0 1.0)))
 
 (:wat::std::get :my::app::portfolio "USDC")      ; → (Thermometer 5000 0 10000)
 
 ;; Vec as indexed collection:
 (:wat::core::define :my::app::recent-rsi
   (:wat::std::Vec (:wat::core::vec
-    (:wat::algebra::Thermometer 0.68 0 1)
-    (:wat::algebra::Thermometer 0.71 0 1)
-    (:wat::algebra::Thermometer 0.74 0 1))))
+    (:wat::holon::Thermometer 0.68 0 1)
+    (:wat::holon::Thermometer 0.71 0 1)
+    (:wat::holon::Thermometer 0.74 0 1))))
 
-(:wat::std::get :my::app::recent-rsi (:wat::algebra::Atom 2))          ; → (Thermometer 0.74 0 1)
+(:wat::std::get :my::app::recent-rsi (:wat::holon::Atom 2))          ; → (Thermometer 0.74 0 1)
 
 ;; Nested — HashMap of Vecs of holons:
 (:wat::core::define :my::app::observer-state
@@ -3148,7 +3161,7 @@ Vec position atoms are NOT in this category. Position 0 IS the integer 0. Use `(
     "portfolio"       :my::app::portfolio))
 
 (:wat::std::get (:wat::std::get :my::app::observer-state "market-readings")
-     (:wat::algebra::Atom 0))                    ; → (Thermometer 0.68 0 1)
+     (:wat::holon::Atom 0))                    ; → (Thermometer 0.68 0 1)
 
 ;; --- The locator can be ANY holon (aspirational; see note below) ---
 
@@ -3165,14 +3178,14 @@ Vec position atoms are NOT in this category. Position 0 IS the integer 0. Use `(
 
 (:wat::core::define :my::app::keyed-by-composite
   (:wat::std::HashMap
-    (:wat::algebra::Bundle (:wat::core::vec (:wat::algebra::Atom "rsi") (:wat::algebra::Atom "overbought")))
+    (:wat::holon::Bundle (:wat::core::vec (:wat::holon::Atom "rsi") (:wat::holon::Atom "overbought")))
       some-value
-    (:wat::algebra::Bind (:wat::algebra::Atom "macd") (:wat::algebra::Atom "crossing-up"))
+    (:wat::holon::Bind (:wat::holon::Atom "macd") (:wat::holon::Atom "crossing-up"))
       other-value))
 
 ;; Retrieve with the same composite as locator:
 (:wat::std::get :my::app::keyed-by-composite
-     (:wat::algebra::Bundle (:wat::core::vec (:wat::algebra::Atom "rsi") (:wat::algebra::Atom "overbought"))))
+     (:wat::holon::Bundle (:wat::core::vec (:wat::holon::Atom "rsi") (:wat::holon::Atom "overbought"))))
 ;; → some-value
 
 ;; Keys can be HashMaps. Values can be HashMaps. Arbitrary nesting:
@@ -3181,8 +3194,8 @@ Vec position atoms are NOT in this category. Position 0 IS the integer 0. Use `(
     (:wat::std::HashMap "a" "b")                                          ; key IS a HashMap
     (:wat::std::Vec (:wat::core::vec                                      ; value IS a Vec
       (:wat::std::HashMap "x" "y")                                        ; of HashMaps
-      (:wat::algebra::Atom "atom-in-the-middle")                          ; of atoms
-      (:wat::std::Vec (:wat::core::vec (:wat::algebra::Atom "nested") (:wat::algebra::Atom "deeper")))))))   ; of Vecs
+      (:wat::holon::Atom "atom-in-the-middle")                          ; of atoms
+      (:wat::std::Vec (:wat::core::vec (:wat::holon::Atom "nested") (:wat::holon::Atom "deeper")))))))   ; of Vecs
 ```
 
 ---
@@ -3224,12 +3237,12 @@ The implementation choice is outside FOUNDATION's scope. FOUNDATION declares the
 **Proposals that argue CORE status:**
 
 ```scheme
-(:wat::algebra::Atom literal)                 ; 058-001  — typed-literal generalization
-(:wat::algebra::Bind a b)                     ; 058-021  — primitive affirmation
-(:wat::algebra::Bundle list-of-holons)        ; 058-003  — list signature lock
-(:wat::algebra::Permute child k)              ; 058-022  — primitive affirmation
-(:wat::algebra::Thermometer value min max)    ; 058-023  — primitive affirmation
-(:wat::algebra::Blend a b w1 w2)              ; 058-002  — PIVOTAL, two independent weights
+(:wat::holon::Atom literal)                 ; 058-001  — typed-literal generalization
+(:wat::holon::Bind a b)                     ; 058-021  — primitive affirmation
+(:wat::holon::Bundle list-of-holons)        ; 058-003  — list signature lock
+(:wat::holon::Permute child k)              ; 058-022  — primitive affirmation
+(:wat::holon::Thermometer value min max)    ; 058-023  — primitive affirmation
+(:wat::holon::Blend a b w1 w2)              ; 058-002  — PIVOTAL, two independent weights
 ```
 
 **058-006 Resonance and 058-007 ConditionalBind are REJECTED.** Speculative primitives with no cited production use beyond unit tests. The "more general primitive" questions (Mask for Resonance, Select for ConditionalBind) reveal neither is the right level of abstraction. When real use demands them, propose with concrete evidence. See FOUNDATION-CHANGELOG 2026-04-18 entry.
@@ -3238,7 +3251,7 @@ The implementation choice is outside FOUNDATION's scope. FOUNDATION declares the
 
 **Blend is ACCEPTED.** Two independent real-valued scalar weights (Option B), negative weights allowed, binary arity. Formalizes scalar-weighted combination, enabling Circular/Amplify/Subtract as stdlib macros. (Flip 058-020 REJECTED separately.) See 058-002/PROPOSAL.md's ACCEPTED banner for the full reasoning.
 
-**Negate decomposed to three stdlib macros — one rejected.** The original Negate proposal had three modes; 058 split and reclassified them: `subtract` → stdlib Blend idiom (058-019); `flip` → REJECTED (058-020, no production use, magic weight); `orthogonalize` → stdlib Gram-Schmidt duo Reject/Project (058-005, renamed from Orthogonalize, uses Blend + `:wat::algebra::dot`). All three operations live in stdlib; the original Negate name does not appear in the shipped algebra.
+**Negate decomposed to three stdlib macros — one rejected.** The original Negate proposal had three modes; 058 split and reclassified them: `subtract` → stdlib Blend idiom (058-019); `flip` → REJECTED (058-020, no production use, magic weight); `orthogonalize` → stdlib Gram-Schmidt duo Reject/Project (058-005, renamed from Orthogonalize, uses Blend + `:wat::holon::dot`). All three operations live in stdlib; the original Negate name does not appear in the shipped algebra.
 
 ### Algebra Stdlib (18 forms)
 
@@ -3246,26 +3259,26 @@ The implementation choice is outside FOUNDATION's scope. FOUNDATION declares the
 
 ```scheme
 ;; Blend-derived idioms (accepted)
-(:wat::std::Amplify x y s)                ; 058-015  — scale y's emphasis, Blend(x, y, 1, s)
-(:wat::std::Subtract x y)                 ; 058-019  — remove y linearly, Blend(x, y, 1, -1)
-(:wat::std::Log v min max)                ; 058-017  — Blend over log-transformed inputs
-(:wat::std::Circular v period)            ; 058-018  — Blend of cos/sin-basis atoms
+(:wat::holon::Amplify x y s)                ; 058-015  — scale y's emphasis, Blend(x, y, 1, s)
+(:wat::holon::Subtract x y)                 ; 058-019  — remove y linearly, Blend(x, y, 1, -1)
+(:wat::holon::Log v min max)                ; 058-017  — Blend over log-transformed inputs
+(:wat::holon::Circular v period)            ; 058-018  — Blend of cos/sin-basis atoms
 
-;; Gram-Schmidt duo (058-005) — use :wat::algebra::dot + Blend
-(:wat::std::Reject x y)                   ; x with y's direction removed (was Orthogonalize)
-(:wat::std::Project x y)                  ; x's component along y; = Subtract(x, Reject(x, y))
+;; Gram-Schmidt duo (058-005) — use :wat::holon::dot + Blend
+(:wat::holon::Reject x y)                   ; x with y's direction removed (was Orthogonalize)
+(:wat::holon::Project x y)                  ; x's component along y; = Subtract(x, Reject(x, y))
 
 ;; Rejected Blend-derived names: Difference (058-004), Linear (058-008),
 ;; Flip (058-020) — see individual PROPOSAL.md REJECTED banners.
 
 ;; Structural compositions
-(:wat::std::Sequential list)              ; 058-009  — BIND-CHAIN with positional Permute
+(:wat::holon::Sequential list)              ; 058-009  — BIND-CHAIN with positional Permute
 ;; Concurrent REJECTED (058-010) — redundant with Bundle; userland macro if desired.
 ;; Then REJECTED (058-011) — arity-specialization of Sequential; userland.
 ;; Chain REJECTED (058-012) — redundant with Bigram (= Ngram 2 xs).
-(:wat::std::Ngram n list)                 ; 058-013  — n-wise adjacency over Sequential-encoded windows
-(:wat::std::Bigram list)                  ; 058-013  — Ngram 2; named shortcut
-(:wat::std::Trigram list)                 ; 058-013  — Ngram 3; named shortcut
+(:wat::holon::Ngram n list)                 ; 058-013  — n-wise adjacency over Sequential-encoded windows
+(:wat::holon::Bigram list)                  ; 058-013  — Ngram 2; named shortcut
+(:wat::holon::Trigram list)                 ; 058-013  — Ngram 3; named shortcut
 
 ;; Relational (1)
 
@@ -3278,7 +3291,7 @@ The implementation choice is outside FOUNDATION's scope. FOUNDATION declares the
 ;; Unbind REJECTED (058-024) — identity alias for Bind; userland.
 ```
 
-Plus lowercase helpers: `get` (unified structural retrieval across HashMap / Vec / HashSet, returns `:Option<holon::HolonAST>`) and `atom-value` (direct field access on an Atom AST node). These are stdlib but not UpperCase — they're accessors, not AST constructors. `nth` is retired — `(get vec i)` replaces it.
+Plus lowercase helpers: `get` (unified structural retrieval across HashMap / Vec / HashSet, returns `:Option<wat::holon::HolonAST>`) and `atom-value` (direct field access on an Atom AST node). These are stdlib but not UpperCase — they're accessors, not AST constructors. `nth` is retired — `(get vec i)` replaces it.
 
 ### Language Core (9 forms)
 
@@ -3305,7 +3318,7 @@ Compile-time forms (materialized into the Rust-backed wat-vm binary; cannot be r
 Syntactic feature pervading all of the above:
 
 ```scheme
-type annotations               ; 058-030  — :holon::HolonAST, Atom, Rust primitives, parametric, user keyword-path
+type annotations               ; 058-030  — :wat::holon::HolonAST, Atom, Rust primitives, parametric, user keyword-path
 ```
 
 Language core is minimal by criterion: just enough to make the algebra stdlib exist as runnable code, define user types statically, load both phases with cryptographic trust, and dispatch correctly. Everything else is host-inherited from Lisp or belongs in stdlib.
@@ -3366,7 +3379,7 @@ If you are auditing a specific change, read the changelog alongside this documen
 
 ## Open Questions
 
-1. ~~**Stdlib location.**~~ **RESOLVED.** One file per stdlib form. `:wat::std::Subtract` lives at `wat/std/Subtract.wat`; `:wat::std::Chain` at `wat/std/Chain.wat`; `:wat::std::HashMap` at `wat/std/HashMap.wat`. Keyword-path IS file-path. Matches the per-form cryptographic-identity story (signing one file signs one form's body; editing Chain doesn't move Subtract's hash), makes growth purely additive (new form = new file), and makes `ls wat/std/` the stdlib inventory. No manifest file to keep in sync. Same pattern as 058 itself (one proposal per directory). See "Where Each Lives" for the updated directory layout.
+1. ~~**Stdlib location.**~~ **RESOLVED.** One file per stdlib form. `:wat::holon::Subtract` lives at `wat/holon/Subtract.wat`; `:wat::std::stream` at `wat/std/stream.wat`; `:wat::std::service::Console` at `wat/std/service/Console.wat`. Keyword-path IS file-path. Matches the per-form cryptographic-identity story (signing one file signs one form's body; editing one form doesn't move another's hash), makes growth purely additive (new form = new file), and makes `ls wat/holon/` + `ls wat/std/` the stdlib inventories. No manifest file to keep in sync. Same pattern as 058 itself (one proposal per directory). Arc 021 moved HashMap / HashSet / Vec / get / contains? / assoc to `:wat::core::*` (Rust-backed, can't be written in wat); arc 022 slice 2 moved the holon-algebra idioms from `wat/std/` to `wat/holon/`. See "Where Each Lives" for the current directory layout.
 
 2. ~~**Stdlib optimization path.**~~ **RESOLVED — dissolves into the cache.** Q2 rested on a false distinction. After 058-031 macro expansion, a stdlib form's AST and a user-written AST with the same shape are literally the same AST — same hash, same cache entry, same encoding cost. There is no "stdlib form" tier to optimize at runtime because after parse-time expansion, stdlib forms don't exist as distinct nodes. The optimization story for ALL composed forms — stdlib or user — is the L1/L2 holon cache hitting on recurring subtrees (Proposal 057); the encoder walks the AST once, subtree vectors cache, repeated substructure pays encoding cost once. If an expression is big, it's big — the AST IS the program. No Rust-side helper tier. No dual implementation. One source (the wat macro), one walker (the encoder), one cache (L1/L2). A "hot stdlib form" is indistinguishable, after expansion, from any other hot composed AST; both are served by the same cache.
 
@@ -3376,7 +3389,7 @@ If you are auditing a specific change, read the changelog alongside this documen
 
 5. ~~**Ngram's `n` parameter handling.**~~ **RESOLVED.** `Ngram` with different `n` produces a different expanded AST (different Sequential-encoded windows bundled). The integer `n` lives in the structural form after macro expansion, so the cache key naturally distinguishes `(Ngram 2 xs)` from `(Ngram 3 xs)`. No special handling needed beyond the generic expansion + hash pipeline.
 
-6. ~~**The MAP canonical set completeness.**~~ **RESOLVED — wrong question.** "Completeness" is unanswerable without knowing every future application; any answer is either speculation or circular. The honest framing is narrower and true: **this is the set we know we need right now**, argued by the forms the 058 sub-proposals successfully defended against FOUNDATION's criterion. The six algebra-core variants — `Atom`, `Bind`, `Bundle`, `Permute`, `Thermometer`, `Blend` — cover every vector-producing operation 058 identified after the Resonance/ConditionalBind rejections and the Orthogonalize → stdlib reframe (Reject/Project live at `:wat::std::` over Blend + `:wat::algebra::dot`). If a future application reveals a primitive that cannot be expressed with existing forms, a new proposal argues it against the criterion (demonstrates a distinct algebraic operation; is domain-agnostic; the encoder must treat it distinctly) and adds it. The proposal process IS the extension mechanism. Same spirit as the stdlib-as-blueprint rule: don't ship forms speculatively; ship only what demonstrates a distinct pattern you need today. Not "is this the complete set?" but "is this every form we know we need?" — yes.
+6. ~~**The MAP canonical set completeness.**~~ **RESOLVED — wrong question.** "Completeness" is unanswerable without knowing every future application; any answer is either speculation or circular. The honest framing is narrower and true: **this is the set we know we need right now**, argued by the forms the 058 sub-proposals successfully defended against FOUNDATION's criterion. The six algebra-core variants — `Atom`, `Bind`, `Bundle`, `Permute`, `Thermometer`, `Blend` — cover every vector-producing operation 058 identified after the Resonance/ConditionalBind rejections and the Orthogonalize → stdlib reframe (Reject/Project live at `:wat::std::` over Blend + `:wat::holon::dot`). If a future application reveals a primitive that cannot be expressed with existing forms, a new proposal argues it against the criterion (demonstrates a distinct algebraic operation; is domain-agnostic; the encoder must treat it distinctly) and adds it. The proposal process IS the extension mechanism. Same spirit as the stdlib-as-blueprint rule: don't ship forms speculatively; ship only what demonstrates a distinct pattern you need today. Not "is this the complete set?" but "is this every form we know we need?" — yes.
 
 7. ~~**`:allow-redef` expression syntax.**~~ **RESOLVED — by analogy with `:user::main`.** Datamancer's insight: "user declares main by name." The `:user::main` entry-point convention dictates the resolution for redef too. The user doesn't need a special syntax to express "this redefines an existing name"; they just **USE the name**. The CLI flag `redef-mode=:allow-redef` at wat-vm startup permits later-loaded definitions to replace earlier ones; the user expresses intent simply by writing `(define (:some::existing/name ...) ...)` with a name that already exists in a prior-loaded file. The wat-vm logs each replacement (prior file + new file + resolved body) for audit. No per-file pragma, no `(redefines ...)` form at the definition site, no startup manifest directive — just the mode flag at the system level, and "using the name" at the declaration level. Same shape as `:user::main`: kernel-looked-up slot filled by the user's declaration. The mode is a system-wide opt-in; the syntax IS the declaration.
 

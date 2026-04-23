@@ -12,7 +12,7 @@
 >
 > ```scheme
 > (:wat::core::defmacro (:my::vocab::Linear (v :AST) (min :AST) (max :AST) -> :AST)
->   `(:wat::algebra::Thermometer ,v ,min ,max))
+>   `(:wat::holon::Thermometer ,v ,min ,max))
 > ```
 >
 > This proposal is kept in the record as an honest trace of the design process.
@@ -49,8 +49,8 @@ Parallel proposals 058-017-log and 058-018-circular apply the same reframing to 
           (t (:wat::core::/ (:wat::core::- ,value min) (:wat::core::- max min)))                    ; normalize to [0,1]
           (w-low (:wat::core::- 1 t))
           (w-high t))
-     (:wat::algebra::Blend (:wat::algebra::Thermometer ,low-atom dim)
-            (:wat::algebra::Thermometer ,high-atom dim)
+     (:wat::holon::Blend (:wat::holon::Thermometer ,low-atom dim)
+            (:wat::holon::Thermometer ,high-atom dim)
             w-low
             w-high)))
 ```
@@ -156,7 +156,7 @@ Delete the Linear encoder match arm (~15-20 lines including tests). Macro expans
   `(:wat::core::let* ((min (:wat::core::first ,scale))
           (max (:wat::core::second ,scale))
           (t (:wat::core::/ (:wat::core::- ,value min) (:wat::core::- max min))))
-     (:wat::algebra::Blend (:wat::algebra::Thermometer ,low dim) (:wat::algebra::Thermometer ,high dim) (:wat::core::- 1 t) t)))
+     (:wat::holon::Blend (:wat::holon::Thermometer ,low dim) (:wat::holon::Thermometer ,high dim) (:wat::core::- 1 t) t)))
 ```
 
 Registered at parse time (per 058-031-defmacro): every `(Linear ...)` invocation is rewritten to the canonical `let* + Blend-over-Thermometers` form before hashing.

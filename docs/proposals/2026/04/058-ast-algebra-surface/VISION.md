@@ -20,7 +20,7 @@ In a classical database, there is a separation: data lives at some address (memo
 A query in wat is a function call — an AST that describes what to compute:
 
 ```scheme
-(event-at-time (:wat::algebra::Atom "2026-04-17T12:00:00"))
+(event-at-time (:wat::holon::Atom "2026-04-17T12:00:00"))
 ```
 
 This expression is data (an AST). It projects to a vector. Evaluating it produces the answer — which is ALSO an AST (and a vector).
@@ -45,14 +45,14 @@ Carin Meier's Clojure VSA talk mentioned "time databases" — time-indexed store
 ```scheme
 (:wat::core::define :my::app::event-stream
   (:wat::std::HashMap (:wat::core::vec
-    (:wat::core::vec (:wat::algebra::Atom "2026-04-17T12:00") event-1)
-    (:wat::core::vec (:wat::algebra::Atom "2026-04-17T13:00") event-2)
-    (:wat::core::vec (:wat::algebra::Atom "2026-04-17T14:00") event-3)
+    (:wat::core::vec (:wat::holon::Atom "2026-04-17T12:00") event-1)
+    (:wat::core::vec (:wat::holon::Atom "2026-04-17T13:00") event-2)
+    (:wat::core::vec (:wat::holon::Atom "2026-04-17T14:00") event-3)
     ;; ... arbitrary depth via Recursive Composition ...
     )))
 
 ;; Exact lookup — address is a literal:
-(:wat::std::get :my::app::event-stream (:wat::algebra::Atom "2026-04-17T12:00"))
+(:wat::std::get :my::app::event-stream (:wat::holon::Atom "2026-04-17T12:00"))
 
 ;; Semantic search — address is a pattern (cosine over vectors):
 (match-library query-holon event-library)
@@ -72,11 +72,11 @@ Because programs are holons, a program can build another program and return it a
 ```scheme
 (:wat::core::define (:my::app::build-matcher pattern)
   ;; Returns a function AST that matches against `pattern`
-  (Fn (:wat::std::Vec (:wat::core::vec (:wat::algebra::Atom :candidate)))
-      (:wat::algebra::Bundle (:wat::core::vec
-        (:wat::core::if (matches? (:wat::algebra::Atom :candidate) pattern)
-            (:wat::algebra::Atom :match)
-            (:wat::algebra::Atom :no-match))))))
+  (Fn (:wat::std::Vec (:wat::core::vec (:wat::holon::Atom :candidate)))
+      (:wat::holon::Bundle (:wat::core::vec
+        (:wat::core::if (matches? (:wat::holon::Atom :candidate) pattern)
+            (:wat::holon::Atom :match)
+            (:wat::holon::Atom :no-match))))))
 
 (:wat::core::define :my::app::match-reversal (:my::app::build-matcher reversal-pattern))
 ;; match-reversal is a function, built from data.

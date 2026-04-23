@@ -160,7 +160,7 @@ pub enum TypeDef {
 }
 
 pub struct TypeEnv {
-    builtins: HashMap<wat::core::keyword, BuiltinType>,    // :holon::HolonAST, :Atom, :f64, etc.
+    builtins: HashMap<wat::core::keyword, BuiltinType>,    // :wat::holon::HolonAST, :Atom, :f64, etc.
     user_types: HashMap<wat::core::keyword, TypeDef>,
     // Frozen after startup.
 }
@@ -254,13 +254,13 @@ Runs after the Resolver. For each `define` (and each nested expression):
 3. Verify the body's final type matches the declared return type.
 4. Store the verified function in the SymbolTable.
 
-Key subtlety: **UpperCase forms produce `:holon::HolonAST`; lowercase primitives produce `:Vector` or other concrete types.** The type checker must know which layer each form is at. Maintain a table:
+Key subtlety: **UpperCase forms produce `:wat::holon::HolonAST`; lowercase primitives produce `:Vector` or other concrete types.** The type checker must know which layer each form is at. Maintain a table:
 
 ```rust
 let upper_signatures = hashmap!{
     "Atom"        => FunctionType { params: vec!["AtomLiteral"],    return: "Holon" },
     "Bind"        => FunctionType { params: vec!["Holon", "Holon"], return: "Holon" },
-    "Bundle"      => FunctionType { params: vec!["List<holon::HolonAST>"],   return: "Holon" },
+    "Bundle"      => FunctionType { params: vec!["List<wat::holon::HolonAST>"],   return: "Holon" },
     // ...
 };
 
@@ -457,7 +457,7 @@ Essentially: `verify` the AST against the static environment, then return it. Th
 
 Eval errors reveal the exact node that failed and why:
 - "Unknown function `:attacker::evil/exec` at path ..."
-- "Expected :holon::HolonAST, got :i32 at argument 2 of Difference"
+- "Expected :wat::holon::HolonAST, got :i32 at argument 2 of Difference"
 - "Unknown type `:fake::type/Foo`"
 
 ---

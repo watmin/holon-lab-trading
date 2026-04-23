@@ -11,9 +11,9 @@
 
 Landed in wat-rs as the reframed bind-chain.
 
-- **Source:** [`wat-rs/wat/std/Sequential.wat`](https://github.com/watmin/wat-rs/blob/main/wat/std/Sequential.wat)
-- **Tests:** [`wat-rs/wat-tests/std/Sequential.wat`](https://github.com/watmin/wat-rs/blob/main/wat-tests/std/Sequential.wat) — two deftests: self-identity (the sequence is present in itself) and order-sensitivity (`[a,b,c]` and `[a,c,b]` are orthogonal at the noise-floor discriminator).
-- **Shape:** `(:wat::std::Sequential (xs :AST<List<holon::HolonAST>>) -> :AST<holon::HolonAST>)`
+- **Source:** [`wat-rs/wat/holon/Sequential.wat`](https://github.com/watmin/wat-rs/blob/main/wat/holon/Sequential.wat)
+- **Tests:** [`wat-rs/wat-tests/holon/Sequential.wat`](https://github.com/watmin/wat-rs/blob/main/wat-tests/holon/Sequential.wat) — two deftests: self-identity (the sequence is present in itself) and order-sensitivity (`[a,b,c]` and `[a,c,b]` are orthogonal at the noise-floor discriminator).
+- **Shape:** `(:wat::holon::Sequential (xs :AST<List<wat::holon::HolonAST>>) -> :AST<wat::holon::HolonAST>)`
 
 ### Expansion shape
 
@@ -48,7 +48,7 @@ Sequential is stdlib, and its expansion is **bind-chain with positional Permute*
 ### The correct expansion
 
 ```scheme
-(:wat::core::defmacro (:wat::std::Sequential (items :AST<List<holon::HolonAST>>) -> :AST<holon::HolonAST>)
+(:wat::core::defmacro (:wat::holon::Sequential (items :AST<List<wat::holon::HolonAST>>) -> :AST<wat::holon::HolonAST>)
   ;; Bind-chain with positional Permute:
   ;;   (Sequential [a])       = a
   ;;   (Sequential [a b])     = Bind(a, Permute(b, 1))
@@ -82,7 +82,7 @@ The trading lab's `indicator_rhythm` function hand-rolls the bind-chain trigram 
 Bind(Bind(fact_0, Permute(fact_1, 1)), Permute(fact_2, 2))
 
 // After (stdlib):
-(:wat::std::Sequential (:wat::core::vec fact_0 fact_1 fact_2))
+(:wat::holon::Sequential (:wat::core::vec fact_0 fact_1 fact_2))
 ```
 
 Datamancer 2026-04-18: *"I expect we will use this in the trading-lab — we just didn't have a useful tool yet."* The migration is the production-evidence commitment.
@@ -98,10 +98,10 @@ Datamancer 2026-04-18: *"I expect we will use this in the trading-lab — we jus
 ### What this unblocks
 
 - **Ngram (058-013)** — reframes to use bind-chain Sequential; math now matches production.
-- **Bigram (new)** — named stdlib macro, `(:wat::std::Bigram xs) → (:wat::std::Ngram 2 xs)`.
-- **Trigram (new)** — named stdlib macro, `(:wat::std::Trigram xs) → (:wat::std::Ngram 3 xs)`.
+- **Bigram (new)** — named stdlib macro, `(:wat::holon::Bigram xs) → (:wat::holon::Ngram 2 xs)`.
+- **Trigram (new)** — named stdlib macro, `(:wat::holon::Trigram xs) → (:wat::holon::Ngram 3 xs)`.
 - **Chain (058-012)** — REJECTED. Redundant with Bigram. See its PROPOSAL.md for the record.
-- **Trading lab migration** — `indicator_rhythm` trigrams become `(:wat::std::Trigram facts)`.
+- **Trading lab migration** — `indicator_rhythm` trigrams become `(:wat::holon::Trigram facts)`.
 
 ---
 
@@ -118,10 +118,10 @@ This proposal argues that the grandfathering should end. `Sequential` should be 
 `Sequential(list-of-holons)` is position-encoded bundling: each holon `t_i` at position `i` is permuted by `i` steps, and the permuted holons are bundled.
 
 ```scheme
-(:wat::core::defmacro (:wat::std::Sequential (holons :AST) -> :AST)
-  `(:wat::algebra::Bundle
+(:wat::core::defmacro (:wat::holon::Sequential (holons :AST) -> :AST)
+  `(:wat::holon::Bundle
      (map-with-index
-       (:wat::core::lambda (t i) (:wat::algebra::Permute t i))
+       (:wat::core::lambda (t i) (:wat::holon::Permute t i))
        ,holons)))
 ```
 
@@ -129,10 +129,10 @@ Or, thought of with explicit index iteration:
 
 ```scheme
 ;; conceptual unrolling of the emitted expansion for a known-length list:
-(:wat::algebra::Bundle
-  (:wat::core::vec (:wat::algebra::Permute (:wat::std::nth holons 0) 0)
-        (:wat::algebra::Permute (:wat::std::nth holons 1) 1)
-        (:wat::algebra::Permute (:wat::std::nth holons 2) 2)
+(:wat::holon::Bundle
+  (:wat::core::vec (:wat::holon::Permute (:wat::std::nth holons 0) 0)
+        (:wat::holon::Permute (:wat::std::nth holons 1) 1)
+        (:wat::holon::Permute (:wat::std::nth holons 2) 2)
         ...))
 ```
 
@@ -163,10 +163,10 @@ As a stdlib macro, Sequential is visible in the wat source, inspectable, extensi
 ```scheme
 ;; user can define related macros:
 (:wat::core::defmacro (:my::vocab::ReverseSequential (holons :AST) -> :AST)
-  `(:wat::std::Sequential (reverse ,holons)))
+  `(:wat::holon::Sequential (reverse ,holons)))
 
 (:wat::core::defmacro (:my::vocab::SequentialFromN (start :AST) (holons :AST) -> :AST)
-  `(:wat::algebra::Bundle (map-with-index (:wat::core::lambda (t i) (:wat::algebra::Permute t (:wat::core::+ i ,start))) ,holons)))
+  `(:wat::holon::Bundle (map-with-index (:wat::core::lambda (t i) (:wat::holon::Permute t (:wat::core::+ i ,start))) ,holons)))
 ```
 
 As a variant, Sequential's behavior is hidden in Rust encoder dispatch. Users can't trivially produce related forms without compiling new Rust.
@@ -250,9 +250,9 @@ Delete the Sequential encoder match arm (~15-20 lines including tests).
 
 ```scheme
 ;; wat/std/sequences.wat (or equivalent)
-(:wat::core::defmacro (:wat::std::Sequential (holons :AST) -> :AST)
-  `(:wat::algebra::Bundle
-     (map-with-index (:wat::core::lambda (t i) (:wat::algebra::Permute t i)) ,holons)))
+(:wat::core::defmacro (:wat::holon::Sequential (holons :AST) -> :AST)
+  `(:wat::holon::Bundle
+     (map-with-index (:wat::core::lambda (t i) (:wat::holon::Permute t i)) ,holons)))
 ```
 
 Registered at parse time (per 058-031-defmacro): every `(Sequential ...)` invocation is rewritten to the canonical `(Bundle (map-with-index ...))` form before hashing. `map-with-index` itself remains a regular runtime list combinator, not a macro.

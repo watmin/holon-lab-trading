@@ -29,7 +29,7 @@ A wat stdlib function that produces the element-wise difference of two holons:
 
 ```scheme
 (:wat::core::define (:wat::std::Difference a b)
-  (:wat::algebra::Blend a b 1 -1))
+  (:wat::holon::Blend a b 1 -1))
 ;; Expands to: threshold(1·a + (-1)·b) = threshold(a - b)
 ```
 
@@ -69,7 +69,7 @@ Across vocab modules, distinctions between "current vs prior," "observed vs base
 **2. The stdlib form is one line.**
 
 ```scheme
-(:wat::core::define (:wat::std::Difference a b) (:wat::algebra::Blend a b 1 -1))
+(:wat::core::define (:wat::std::Difference a b) (:wat::holon::Blend a b 1 -1))
 ```
 
 No implementation complexity. Just a named composition over Blend.
@@ -84,10 +84,10 @@ Without `Difference`, Analogy's body is `(Bundle (list c (Blend b a 1 -1)))` —
 
 ```scheme
 ;; "how different is x from y, in the direction of z?"
-(:wat::algebra::Resonance (:wat::std::Difference x y) z)
+(:wat::holon::Resonance (:wat::std::Difference x y) z)
 
 ;; "the delta, amplified:"
-(:wat::std::Amplify (:wat::std::Difference x y) reference strength)
+(:wat::holon::Amplify (:wat::std::Difference x y) reference strength)
 ```
 
 Stdlib idioms compose with each other naturally.
@@ -160,7 +160,7 @@ Yes — `(Blend a b 1 -1)`. The proposal argues that the named form improves rea
 
 ```scheme
 (:wat::core::define (:wat::std::Difference a b)
-  (:wat::algebra::Blend a b 1 -1))
+  (:wat::holon::Blend a b 1 -1))
 ```
 
 Lives in whichever wat file holds the stdlib (likely `wat/std/holons.wat` or similar — see open question 1 in FOUNDATION.md).

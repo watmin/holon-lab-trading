@@ -13,9 +13,9 @@
 
 Landed in wat-rs as a defmacro over Blend, exactly as specified.
 
-- **Source:** [`wat-rs/wat/std/Subtract.wat`](https://github.com/watmin/wat-rs/blob/main/wat/std/Subtract.wat) (3 lines of form)
-- **Tests:** [`wat-rs/wat-tests/std/Subtract.wat`](https://github.com/watmin/wat-rs/blob/main/wat-tests/std/Subtract.wat) — two deftests covering both branches of the noise-floor discriminator (self-presence above, unrelated-presence below)
-- **Shape:** `(:wat::core::defmacro (:wat::std::Subtract (x :AST<holon::HolonAST>) (y :AST<holon::HolonAST>) -> :AST<holon::HolonAST>) \`(:wat::algebra::Blend ,x ,y 1.0 -1.0))`
+- **Source:** [`wat-rs/wat/holon/Subtract.wat`](https://github.com/watmin/wat-rs/blob/main/wat/holon/Subtract.wat) (3 lines of form)
+- **Tests:** [`wat-rs/wat-tests/holon/Subtract.wat`](https://github.com/watmin/wat-rs/blob/main/wat-tests/holon/Subtract.wat) — two deftests covering both branches of the noise-floor discriminator (self-presence above, unrelated-presence below)
+- **Shape:** `(:wat::core::defmacro (:wat::holon::Subtract (x :AST<wat::holon::HolonAST>) (y :AST<wat::holon::HolonAST>) -> :AST<wat::holon::HolonAST>) \`(:wat::holon::Blend ,x ,y 1.0 -1.0))`
 
 ### Divergences from the original spec
 
@@ -33,9 +33,9 @@ Weights shipped as `1.0 -1.0` (f64) rather than the proposal's literal `1 -1` (i
 A wat stdlib macro (per 058-031-defmacro) that linearly removes `y`'s contribution from `x`:
 
 ```scheme
-(:wat::core::defmacro (:wat::std::Subtract (x :AST) (y :AST) -> :AST)
-  `(:wat::algebra::Blend ,x ,y 1 -1))
-;; Expands at parse time to: (:wat::algebra::Blend x y 1 -1)
+(:wat::core::defmacro (:wat::holon::Subtract (x :AST) (y :AST) -> :AST)
+  `(:wat::holon::Blend ,x ,y 1 -1))
+;; Expands at parse time to: (:wat::holon::Blend x y 1 -1)
 ;; which computes: threshold(1·x + (-1)·y) — linearly subtract y from x
 ```
 
@@ -61,9 +61,9 @@ Both criteria met.
 Vocab modules that want to cleanse an observation of a known pattern use subtraction framing:
 
 ```scheme
-(:wat::std::Subtract observation known-noise)     ; strip the known noise
-(:wat::std::Subtract signal trend)                 ; detrend the signal
-(:wat::std::Subtract candidate prototype)          ; extract deviation
+(:wat::holon::Subtract observation known-noise)     ; strip the known noise
+(:wat::holon::Subtract signal trend)                 ; detrend the signal
+(:wat::holon::Subtract candidate prototype)          ; extract deviation
 ```
 
 Reading as "strip, detrend, extract" is immediate. Reading as `Blend(..., 1, -1)` forces mechanical decoding.
@@ -148,8 +148,8 @@ Yes — `(Blend x y 1 -1)` or `(Amplify x y -1)`. Named form earns its place via
 **wat stdlib addition** — `wat/std/blends.wat`:
 
 ```scheme
-(:wat::core::defmacro (:wat::std::Subtract (x :AST) (y :AST) -> :AST)
-  `(:wat::algebra::Blend ,x ,y 1 -1))
+(:wat::core::defmacro (:wat::holon::Subtract (x :AST) (y :AST) -> :AST)
+  `(:wat::holon::Blend ,x ,y 1 -1))
 ```
 
 Registered at parse time (per 058-031-defmacro): every `(Subtract x y)` invocation is rewritten to `(Blend x y 1 -1)` before hashing.

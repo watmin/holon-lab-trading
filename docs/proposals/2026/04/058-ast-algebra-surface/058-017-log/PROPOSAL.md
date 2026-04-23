@@ -11,9 +11,9 @@
 
 Landed in wat-rs as a defmacro over Thermometer with log-transformed inputs.
 
-- **Source:** [`wat-rs/wat/std/Log.wat`](https://github.com/watmin/wat-rs/blob/main/wat/std/Log.wat)
-- **Shape:** `(:wat::std::Log (value :AST<f64>) (min :AST<f64>) (max :AST<f64>) -> :AST<holon::HolonAST>)` → `` `(:wat::algebra::Thermometer (:wat::std::math::ln ,value) (:wat::std::math::ln ,min) (:wat::std::math::ln ,max)) ``
-- **Tests:** indirect — trading-lab vocabulary modules (rhythms, excursions) exercise Log throughout. No dedicated `wat-tests/std/Log.wat` yet.
+- **Source:** [`wat-rs/wat/holon/Log.wat`](https://github.com/watmin/wat-rs/blob/main/wat/holon/Log.wat)
+- **Shape:** `(:wat::holon::Log (value :AST<f64>) (min :AST<f64>) (max :AST<f64>) -> :AST<wat::holon::HolonAST>)` → `` `(:wat::holon::Thermometer (:wat::std::math::ln ,value) (:wat::std::math::ln ,min) (:wat::std::math::ln ,max)) ``
+- **Tests:** indirect — trading-lab vocabulary modules (rhythms, excursions) exercise Log throughout. No dedicated `wat-tests/holon/Log.wat` yet.
 
 ### Divergences from the original spec
 
@@ -21,7 +21,7 @@ The original framing was "reframe Log over Blend." The landed form is **over The
 
 ### What this inscription does NOT add
 
-- **No dedicated test file.** Ship a `wat-tests/std/Log.wat` when a concrete caller surfaces an edge case worth pinning.
+- **No dedicated test file.** Ship a `wat-tests/holon/Log.wat` when a concrete caller surfaces an edge case worth pinning.
 
 ---
 
@@ -43,8 +43,8 @@ Every ratio, rate, and multiplicative quantity in the vocab passes through Log. 
 **Macro expansion** (after Blend acceptance — 058-002):
 
 ```scheme
-(:wat::core::defmacro (:wat::std::Log (value :AST) (min :AST) (max :AST) -> :AST)
-  `(:wat::algebra::Thermometer (:wat::std::math::ln ,value)
+(:wat::core::defmacro (:wat::holon::Log (value :AST) (min :AST) (max :AST) -> :AST)
+  `(:wat::holon::Thermometer (:wat::std::math::ln ,value)
                               (:wat::std::math::ln ,min)
                               (:wat::std::math::ln ,max)))
 ```
@@ -81,8 +81,8 @@ With Blend as a pivotal core form (058-002), `Log` becomes a stdlib macro (per 0
 ### Stdlib definition
 
 ```scheme
-(:wat::core::defmacro (:wat::std::Log (value :AST) (min :AST) (max :AST) -> :AST)
-  `(:wat::algebra::Thermometer (log ,value) (log ,min) (log ,max)))
+(:wat::core::defmacro (:wat::holon::Log (value :AST) (min :AST) (max :AST) -> :AST)
+  `(:wat::holon::Thermometer (log ,value) (log ,min) (log ,max)))
 ```
 
 Log-transform the value and the bounds, then encode linearly with Thermometer. Because Thermometer's encoding is intrinsically linear in its inputs, log-transforming the inputs gives log-scale output — the geometric midpoint of `[min, max]` lands at the linear midpoint of the Thermometer gradient.
@@ -186,12 +186,12 @@ Delete the Log encoder match arm (~15-20 lines). Macro expansion is handled by 0
 **wat stdlib addition** — `wat/std/scalars.wat`:
 
 ```scheme
-(:wat::core::defmacro (:wat::std::Log (low :AST) (high :AST) (value :AST) (scale :AST) -> :AST)
+(:wat::core::defmacro (:wat::holon::Log (low :AST) (high :AST) (value :AST) (scale :AST) -> :AST)
   `(:wat::core::let* ((min (:wat::core::first ,scale))
           (max (:wat::core::second ,scale))
           (t (:wat::core::/ (:wat::core::- (log ,value) (log min))
                 (:wat::core::- (log max) (log min)))))
-     (:wat::algebra::Blend (:wat::algebra::Thermometer ,low dim) (:wat::algebra::Thermometer ,high dim) (:wat::core::- 1 t) t)))
+     (:wat::holon::Blend (:wat::holon::Thermometer ,low dim) (:wat::holon::Thermometer ,high dim) (:wat::core::- 1 t) t)))
 ```
 
 Registered at parse time (per 058-031-defmacro): every `(Log ...)` invocation is rewritten to the canonical `let* + Blend-over-Thermometers` form before hashing.

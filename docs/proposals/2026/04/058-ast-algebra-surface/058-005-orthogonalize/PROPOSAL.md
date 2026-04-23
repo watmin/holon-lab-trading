@@ -11,13 +11,13 @@
 
 Both macros landed in wat-rs. Production-cited use cases held: DDoS sidecar's `reject(packet, baseline_subspace)` core detection mechanism (Challenge 010, F1=1.000); engram matching's `project(packet, baseline_components)` subspace reconstruction.
 
-- **Reject:** [`wat-rs/wat/std/Reject.wat`](https://github.com/watmin/wat-rs/blob/main/wat/std/Reject.wat)
-  - `(:wat::std::Reject (x :AST<holon::HolonAST>) (y :AST<holon::HolonAST>) -> :AST<holon::HolonAST>)`
+- **Reject:** [`wat-rs/wat/holon/Reject.wat`](https://github.com/watmin/wat-rs/blob/main/wat/holon/Reject.wat)
+  - `(:wat::holon::Reject (x :AST<wat::holon::HolonAST>) (y :AST<wat::holon::HolonAST>) -> :AST<wat::holon::HolonAST>)`
   - Expands to `Blend(x, y, 1.0, -(dot(x,y)/dot(y,y)))` — the projection-removal shape. Negation spelled as binary `(:wat::core::f64::- 0.0 ratio)` per the 2026-04-19 typed-arith split.
-- **Project:** [`wat-rs/wat/std/Project.wat`](https://github.com/watmin/wat-rs/blob/main/wat/std/Project.wat)
-  - `(:wat::std::Project (x :AST<holon::HolonAST>) (y :AST<holon::HolonAST>) -> :AST<holon::HolonAST>)`
-  - Expands to `` `(:wat::std::Subtract ,x (:wat::std::Reject ,x ,y)) `` — the complementary shape. One name per operation; Project is Subtract-of-Reject.
-- **Tests:** [`wat-rs/wat-tests/std/Reject.wat`](https://github.com/watmin/wat-rs/blob/main/wat-tests/std/Reject.wat) — two deftests proving Reject strips y-direction (presence(y, Reject(x,y)) = false) and Project preserves it (presence(y, Project(x,y)) = true). The Gram-Schmidt invariant verified at the noise-floor discriminator.
+- **Project:** [`wat-rs/wat/holon/Project.wat`](https://github.com/watmin/wat-rs/blob/main/wat/holon/Project.wat)
+  - `(:wat::holon::Project (x :AST<wat::holon::HolonAST>) (y :AST<wat::holon::HolonAST>) -> :AST<wat::holon::HolonAST>)`
+  - Expands to `` `(:wat::holon::Subtract ,x (:wat::holon::Reject ,x ,y)) `` — the complementary shape. One name per operation; Project is Subtract-of-Reject.
+- **Tests:** [`wat-rs/wat-tests/holon/Reject.wat`](https://github.com/watmin/wat-rs/blob/main/wat-tests/holon/Reject.wat) — two deftests proving Reject strips y-direction (presence(y, Reject(x,y)) = false) and Project preserves it (presence(y, Project(x,y)) = true). The Gram-Schmidt invariant verified at the noise-floor discriminator.
 
 ### Algebra core shrank 7 → 6
 
@@ -26,7 +26,7 @@ As a consequence of this reframe, the algebra core shipped at **six** primitives
 ### What this inscription does NOT add
 
 - **Multi-vector Gram-Schmidt.** Only pairwise. Orthogonalizing `x` against a set `{y1, y2, ...}` requires repeated application — either a stdlib macro (`gram-schmidt`) or userland composition. Neither shipped; deferred until a caller surfaces.
-- **A primitive `dot` at stdlib level.** `:wat::algebra::dot` ships at the algebra measurement tier alongside `cosine`; Reject/Project call it internally. No re-export.
+- **A primitive `dot` at stdlib level.** `:wat::holon::dot` ships at the algebra measurement tier alongside `cosine`; Reject/Project call it internally. No re-export.
 
 ---
 
@@ -42,28 +42,28 @@ The Gram-Schmidt projection-removal and projection operations ship as **two stdl
 ;; Geometric interpretation: the residual of x after projecting out y's direction.
 ;; The Gram-Schmidt reject step; the component of x orthogonal to y.
 
-(:wat::core::defmacro (:wat::std::Reject (x :AST<holon::HolonAST>) (y :AST<holon::HolonAST>) -> :AST<holon::HolonAST>)
-  `(:wat::algebra::Blend ,x ,y 1
-      (:wat::core::- (:wat::core::/ (:wat::algebra::dot ,x ,y)
-                                (:wat::algebra::dot ,y ,y)))))
+(:wat::core::defmacro (:wat::holon::Reject (x :AST<wat::holon::HolonAST>) (y :AST<wat::holon::HolonAST>) -> :AST<wat::holon::HolonAST>)
+  `(:wat::holon::Blend ,x ,y 1
+      (:wat::core::- (:wat::core::/ (:wat::holon::dot ,x ,y)
+                                (:wat::holon::dot ,y ,y)))))
 
 ;; Project — x's component along y's direction.
 ;; Formula:  ((x·y)/(y·y)) · y    equivalently:  x - Reject(x, y)
 ;; Geometric interpretation: the shadow x casts on y's axis.
 
-(:wat::core::defmacro (:wat::std::Project (x :AST<holon::HolonAST>) (y :AST<holon::HolonAST>) -> :AST<holon::HolonAST>)
-  `(:wat::std::Subtract ,x (:wat::std::Reject ,x ,y)))
+(:wat::core::defmacro (:wat::holon::Project (x :AST<wat::holon::HolonAST>) (y :AST<wat::holon::HolonAST>) -> :AST<wat::holon::HolonAST>)
+  `(:wat::holon::Subtract ,x (:wat::holon::Reject ,x ,y)))
 ```
 
 Invariant: `Project(x, y) + Reject(x, y) = x`. The Gram-Schmidt duo — every vector decomposes into an along-y part and an orthogonal-to-y part.
 
-### New measurement primitive: `:wat::algebra::dot`
+### New measurement primitive: `:wat::holon::dot`
 
-Both macros depend on a scalar-returning dot-product measurement — `(:wat::algebra::dot x y) -> :f64`. This is a **measurement primitive**, not a HolonAST variant (scalar-out, not vector-out). Sibling to `:wat::algebra::cosine` (already implicit in presence measurement). `cosine` is already computed as normalized dot; this proposal exposes `dot` explicitly as its own primitive.
+Both macros depend on a scalar-returning dot-product measurement — `(:wat::holon::dot x y) -> :f64`. This is a **measurement primitive**, not a HolonAST variant (scalar-out, not vector-out). Sibling to `:wat::holon::cosine` (already implicit in presence measurement). `cosine` is already computed as normalized dot; this proposal exposes `dot` explicitly as its own primitive.
 
 Signature:
 ```
-(:wat::algebra::dot :holon::HolonAST :holon::HolonAST) -> :f64
+(:wat::holon::dot :wat::holon::HolonAST :wat::holon::HolonAST) -> :f64
 ```
 
 Implementation: elementwise product, sum reduction. Rust: `a.iter().zip(b.iter()).map(|(ai, bi)| ai * bi).sum::<f64>()`. Trivial cost; the operation already exists internally wherever `cosine` is computed.
@@ -87,8 +87,8 @@ Holon-rs uses `reject`. Challenge 010 writeups use `reject`. The rename aligns w
 Users who prefer the mathematical term define their own alias in their namespace:
 
 ```scheme
-(:wat::core::define (:my::vocab::Orthogonalize (x :holon::HolonAST) (y :holon::HolonAST) -> :holon::HolonAST)
-  (:wat::std::Reject x y))
+(:wat::core::define (:my::vocab::Orthogonalize (x :wat::holon::HolonAST) (y :wat::holon::HolonAST) -> :wat::holon::HolonAST)
+  (:wat::holon::Reject x y))
 ```
 
 ### Why stdlib, not core
@@ -111,7 +111,7 @@ This is not speculative. Production-cited with concrete measurements.
 
 ### Questions for Designers — all resolved
 
-**Q1** (Orthogonalize as core vs. widened Blend with computed weights): RESOLVED — stdlib macro over widened Blend. The Option B Blend acceptance (independent real-valued weights) + `:wat::algebra::dot` measurement primitive make the reframing clean. Algebra core shrinks from 7 to 6 forms.
+**Q1** (Orthogonalize as core vs. widened Blend with computed weights): RESOLVED — stdlib macro over widened Blend. The Option B Blend acceptance (independent real-valued weights) + `:wat::holon::dot` measurement primitive make the reframing clean. Algebra core shrinks from 7 to 6 forms.
 
 **Q2** (should Project also be proposed first-class): RESOLVED — YES. Ship Project as companion stdlib macro. `Project + Reject = x` (Gram-Schmidt decomposition). Primer cites both with production use. Both earn stdlib by the distinct-pattern test; together they name the canonical duo.
 
@@ -120,10 +120,10 @@ This is not speculative. Production-cited with concrete measurements.
 **Q4** (handling of zero-magnitude y): document as user responsibility. When `dot(y,y) = 0` (y is the zero vector), the Reject computation divides by zero. The macro expansion produces `NaN` at runtime. Callers that may receive a zero y guard with an explicit check before calling — or define a safe variant in their namespace:
 
 ```scheme
-(:wat::core::define (:my::vocab::safe-reject (x :holon::HolonAST) (y :holon::HolonAST) -> :holon::HolonAST)
-  (:wat::core::if (:wat::core::= 0.0 (:wat::algebra::dot y y))
+(:wat::core::define (:my::vocab::safe-reject (x :wat::holon::HolonAST) (y :wat::holon::HolonAST) -> :wat::holon::HolonAST)
+  (:wat::core::if (:wat::core::= 0.0 (:wat::holon::dot y y))
       x  ;; nothing to project out — return x unchanged
-      (:wat::std::Reject x y)))
+      (:wat::holon::Reject x y)))
 ```
 
 The stdlib doesn't ship this safe wrapper (domain-specific; users pick their own convention — skip, panic, error-return, return-x).
@@ -132,10 +132,10 @@ The stdlib doesn't ship this safe wrapper (domain-specific; users pick their own
 
 ### What this unblocks
 
-- **DDoS detection** continues to work; wat-level `:wat::std::Reject` and `:wat::std::Project` name the primitives cleanly.
+- **DDoS detection** continues to work; wat-level `:wat::holon::Reject` and `:wat::holon::Project` name the primitives cleanly.
 - **Subspace operations** — Gram-Schmidt basis construction, engram library projections, baseline residual scoring — all expressible via Reject iteration over a basis.
 - **Algebra core shrinks 7 → 6 forms** — Atom, Bind, Bundle, Blend, Permute, Thermometer. Cleaner core; richer stdlib.
-- **New measurement primitive `:wat::algebra::dot`** — first-class scalar-returning operation. Exposed explicitly rather than implicit in cosine.
+- **New measurement primitive `:wat::holon::dot`** — first-class scalar-returning operation. Exposed explicitly rather than implicit in cosine.
 
 ### What this doesn't affect
 
@@ -162,7 +162,7 @@ The first two modes dissolve into Blend idioms. The third is the genuinely new o
 A new core variant that removes a component's geometric direction from a vector:
 
 ```scheme
-(:wat::algebra::Orthogonalize x y)
+(:wat::holon::Orthogonalize x y)
 ```
 
 Semantically: given vectors `x` and `y`, produce a new vector that is `x` with `y`'s direction projected out. The result is **orthogonal to `y` under similarity measurement** — the algebra's primary evaluation framework (see FOUNDATION's "Algebraic laws under similarity measurement").
@@ -236,7 +236,7 @@ If Blend accepted computed weights (expressions evaluable at encoding time, usin
 
 ```scheme
 (:wat::core::define (:wat::std::Orthogonalize x y)
-  (:wat::algebra::Blend x y 1 (:wat::core::- (:wat::core::/ (dot x y) (dot y y)))))
+  (:wat::holon::Blend x y 1 (:wat::core::- (:wat::core::/ (dot x y) (dot y y)))))
 ```
 
 Whether to widen Blend is a design question — it would require wat to support scalar-expression evaluation in AST positions, which changes the AST's character from "static tree of literals" to "tree with arithmetic in scalar positions."

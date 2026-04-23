@@ -98,7 +98,7 @@ things carried information, the verbose form is the honest form
 
 The body is a Lisp expression that evaluates AT PARSE TIME to produce a new AST. The resulting AST replaces the invocation.
 
-Every macro parameter carries a concrete value type `T` via the `:AST<T>` wrapper (per 058-032). `T` is the value type the argument expression must produce — `:holon::HolonAST`, `:f64`, `:Vec<holon::HolonAST>`, etc. Bare `:AST` without `<T>` is not a valid parameter type; the language enforces the same discipline on macros as on every other typed position.
+Every macro parameter carries a concrete value type `T` via the `:AST<T>` wrapper (per 058-032). `T` is the value type the argument expression must produce — `:wat::holon::HolonAST`, `:f64`, `:Vec<wat::holon::HolonAST>`, etc. Bare `:AST` without `<T>` is not a valid parameter type; the language enforces the same discipline on macros as on every other typed position.
 
 ## Why This Form Exists
 
@@ -111,7 +111,7 @@ Stdlib aliases like `Concurrent`, `Set`, `Subtract`, `Flip`, `Then`, `Chain` all
 ```scheme
 (:wat::std::Concurrent xs)    → AST: (Call :wat::std::Concurrent (xs))   hash: H1
 (:wat::std::HashSet xs)       → AST: (Call :wat::std::HashSet (xs))      hash: H2
-(:wat::algebra::Bundle xs)    → AST: (Call :wat::algebra::Bundle (xs))   hash: H3
+(:wat::holon::Bundle xs)    → AST: (Call :wat::holon::Bundle (xs))   hash: H3
 ```
 
 All three produce the same vector (elementwise threshold sum). But they have three distinct hashes. FOUNDATION's claim — `hash(AST) IS the holon's identity` — becomes contradictory: **same meaning, different identities.**
@@ -122,13 +122,13 @@ If `Concurrent` and `Set` are MACROS rather than functions, they expand at parse
 
 ```scheme
 (:wat::std::Concurrent xs)    → parser sees macro call → expands
-                            → AST becomes: (Call :wat::algebra::Bundle (xs))
-                            → hash: H3 (same as (:wat::algebra::Bundle xs) directly)
+                            → AST becomes: (Call :wat::holon::Bundle (xs))
+                            → hash: H3 (same as (:wat::holon::Bundle xs) directly)
 
-(:wat::std::HashSet xs)       → same expansion path → AST: (Call :wat::algebra::Bundle (xs))
+(:wat::std::HashSet xs)       → same expansion path → AST: (Call :wat::holon::Bundle (xs))
                             → hash: H3
 
-(:wat::algebra::Bundle xs)    → no macro expansion needed → AST: (Call :wat::algebra::Bundle (xs))
+(:wat::holon::Bundle xs)    → no macro expansion needed → AST: (Call :wat::holon::Bundle (xs))
                             → hash: H3
 ```
 
@@ -172,58 +172,58 @@ The `expansion-body` is a Lisp expression. It can use:
 **Pure alias — Concurrent:**
 
 ```scheme
-(:wat::core::defmacro (:wat::std::Concurrent (xs :AST<List<holon::HolonAST>>) -> :AST<holon::HolonAST>)
-  `(:wat::algebra::Bundle ,xs))
+(:wat::core::defmacro (:wat::std::Concurrent (xs :AST<List<wat::holon::HolonAST>>) -> :AST<wat::holon::HolonAST>)
+  `(:wat::holon::Bundle ,xs))
 
 ;; User writes:
 (:wat::std::Concurrent (:wat::core::vec a b c))
 
 ;; Parser expands:
-(:wat::algebra::Bundle (:wat::core::vec a b c))
+(:wat::holon::Bundle (:wat::core::vec a b c))
 ```
 
 **Transforming — Subtract:**
 
 ```scheme
-(:wat::core::defmacro (:wat::std::Subtract (x :AST<holon::HolonAST>) (y :AST<holon::HolonAST>) -> :AST<holon::HolonAST>)
-  `(:wat::algebra::Blend ,x ,y 1 -1))
+(:wat::core::defmacro (:wat::holon::Subtract (x :AST<wat::holon::HolonAST>) (y :AST<wat::holon::HolonAST>) -> :AST<wat::holon::HolonAST>)
+  `(:wat::holon::Blend ,x ,y 1 -1))
 
 ;; User writes:
-(:wat::std::Subtract a b)
+(:wat::holon::Subtract a b)
 
 ;; Parser expands:
-(:wat::algebra::Blend a b 1 -1)
+(:wat::holon::Blend a b 1 -1)
 ```
 
 **Parameterized — Amplify:**
 
 ```scheme
-(:wat::core::defmacro (:wat::std::Amplify (x :AST<holon::HolonAST>) (y :AST<holon::HolonAST>) (s :AST<f64>) -> :AST<holon::HolonAST>)
-  `(:wat::algebra::Blend ,x ,y 1 ,s))
+(:wat::core::defmacro (:wat::holon::Amplify (x :AST<wat::holon::HolonAST>) (y :AST<wat::holon::HolonAST>) (s :AST<f64>) -> :AST<wat::holon::HolonAST>)
+  `(:wat::holon::Blend ,x ,y 1 ,s))
 
 ;; User writes:
-(:wat::std::Amplify a b 2)
+(:wat::holon::Amplify a b 2)
 
 ;; Parser expands:
-(:wat::algebra::Blend a b 1 2)
+(:wat::holon::Blend a b 1 2)
 ```
 
 **Higher-order expansion — Chain:**
 
 ```scheme
-(:wat::core::defmacro (:wat::std::Chain (holons :AST<List<holon::HolonAST>>) -> :AST<holon::HolonAST>)
-  `(:wat::algebra::Bundle (pairwise-map :wat::std::Then ,holons)))
+(:wat::core::defmacro (:wat::std::Chain (holons :AST<List<wat::holon::HolonAST>>) -> :AST<wat::holon::HolonAST>)
+  `(:wat::holon::Bundle (pairwise-map :wat::std::Then ,holons)))
 
 ;; User writes:
 (:wat::std::Chain (:wat::core::vec a b c d))
 
 ;; Parser expands:
-(:wat::algebra::Bundle (pairwise-map :wat::std::Then (:wat::core::vec a b c d)))
+(:wat::holon::Bundle (pairwise-map :wat::std::Then (:wat::core::vec a b c d)))
 
 ;; which further expands Then:
-(:wat::algebra::Bundle (pairwise-map
-         (:wat::core::lambda ((a :holon::HolonAST) (b :holon::HolonAST) -> :holon::HolonAST)
-           (:wat::algebra::Bundle (:wat::core::vec a (:wat::algebra::Permute b 1))))
+(:wat::holon::Bundle (pairwise-map
+         (:wat::core::lambda ((a :wat::holon::HolonAST) (b :wat::holon::HolonAST) -> :wat::holon::HolonAST)
+           (:wat::holon::Bundle (:wat::core::vec a (:wat::holon::Permute b 1))))
          (:wat::core::vec a b c d)))
 ```
 
@@ -327,7 +327,7 @@ Matthew Flatt's 2016 paper — *"Binding as Sets of Scopes"* — is the referenc
 
 ```scheme
 ;; Macro introduces `tmp`:
-(:wat::core::defmacro (:my::vocab::swap-thoughts (a :AST<holon::HolonAST>) (b :AST<holon::HolonAST>) -> :AST<holon::HolonAST>)
+(:wat::core::defmacro (:my::vocab::swap-thoughts (a :AST<wat::holon::HolonAST>) (b :AST<wat::holon::HolonAST>) -> :AST<wat::holon::HolonAST>)
   `(:wat::core::let ((tmp ,a))          ; `tmp` here has macro-scope M
      (set! ,a ,b)
      (set! ,b tmp)))

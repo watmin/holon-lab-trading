@@ -24,7 +24,7 @@ Landed in wat-rs. The 2026-04-19 shipped-shape amendment below documents the fla
 >
 > The form previously called `Map` is now named `HashMap` — matching Rust's `std::collections::HashMap` directly. The wat UpperCase constructor, the type annotation `:HashMap<K,V>`, and the runtime backing all share one name. This is consistent with the Rust-primitive type decision (`:f64` not `:Scalar`, `:bool` not `:Bool`) — one name per concept across algebra, type annotation, and runtime.
 >
-> **Also changed in the same sweep:** `get` is now direct structural lookup (no `cleanup`, no `Unbind` to a noisy vector, no codebook). The runtime materializes a Rust `HashMap` from the Holon AST for O(1) lookups. `get` returns `:Option<holon::HolonAST>` — `(Some v)` on hit, `:None` on miss.
+> **Also changed in the same sweep:** `get` is now direct structural lookup (no `cleanup`, no `Unbind` to a noisy vector, no codebook). The runtime materializes a Rust `HashMap` from the Holon AST for O(1) lookups. `get` returns `:Option<wat::holon::HolonAST>` — `(Some v)` on hit, `:None` on miss.
 >
 > The concept is unchanged. Only the name and the accessor mechanics.
 >
@@ -51,7 +51,7 @@ Landed in wat-rs. The 2026-04-19 shipped-shape amendment below documents the fla
 
 ## HISTORICAL CONTENT — SUPERSEDED BY BANNER ABOVE
 
-The sections below were written before the 2026-04-18 container-constructor rename + `get`-unification sweep. They describe an earlier design where `get` was `(cleanup (Unbind map-vec key))` — a vector-side retrieval over a codebook, with designer questions about cleanup behavior and encoder dispatch. **That design is REPLACED.** `get` is now direct structural lookup through the runtime's Rust `HashMap` backing — O(1), exact, returning `:Option<holon::HolonAST>`. Cleanup doesn't participate; Unbind doesn't participate; there is no codebook. The banner at the top of this file is authoritative; the content below is preserved as audit record only.
+The sections below were written before the 2026-04-18 container-constructor rename + `get`-unification sweep. They describe an earlier design where `get` was `(cleanup (Unbind map-vec key))` — a vector-side retrieval over a codebook, with designer questions about cleanup behavior and encoder dispatch. **That design is REPLACED.** `get` is now direct structural lookup through the runtime's Rust `HashMap` backing — O(1), exact, returning `:Option<wat::holon::HolonAST>`. Cleanup doesn't participate; Unbind doesn't participate; there is no codebook. The banner at the top of this file is authoritative; the content below is preserved as audit record only.
 
 ---
 
@@ -60,10 +60,10 @@ The sections below were written before the 2026-04-18 container-constructor rena
 A wat stdlib function that constructs an encoded dictionary from a list of key-value pairs:
 
 ```scheme
-(:wat::core::define (:wat::std::HashMap (pairs :Vec<Pair<holon::HolonAST,holon::HolonAST>>) -> :holon::HolonAST)
-  (:wat::algebra::Bundle
-    (:wat::core::map (:wat::core::lambda ((pair :(Holon,Holon)) -> :holon::HolonAST)
-           (:wat::algebra::Bind (:wat::core::first pair) (:wat::core::second pair)))
+(:wat::core::define (:wat::std::HashMap (pairs :Vec<Pair<wat::holon::HolonAST,wat::holon::HolonAST>>) -> :wat::holon::HolonAST)
+  (:wat::holon::Bundle
+    (:wat::core::map (:wat::core::lambda ((pair :(Holon,Holon)) -> :wat::holon::HolonAST)
+           (:wat::holon::Bind (:wat::core::first pair) (:wat::core::second pair)))
          pairs)))
 ```
 
@@ -75,27 +75,27 @@ Expands to a Bundle of `Bind(key, value)` for each pair — classical VSA role-f
 
 ```scheme
 (:wat::core::define :my::app::record
-  (:wat::std::HashMap (:wat::core::vec (:wat::core::vec (:wat::algebra::Atom :color) red-value)
-                 (:wat::core::vec (:wat::algebra::Atom :shape) circle-value)
-                 (:wat::core::vec (:wat::algebra::Atom :size)  large-value))))
+  (:wat::std::HashMap (:wat::core::vec (:wat::core::vec (:wat::holon::Atom :color) red-value)
+                 (:wat::core::vec (:wat::holon::Atom :shape) circle-value)
+                 (:wat::core::vec (:wat::holon::Atom :size)  large-value))))
 
 ;; Retrieval: get the value for :color
 (:wat::core::define :my::app::recovered-color
-  (:wat::std::get :my::app::record (:wat::algebra::Atom :color)))
+  (:wat::std::get :my::app::record (:wat::holon::Atom :color)))
 ;; → (Some red-value)  [the value AST, not a noisy decode]
 ```
 
 ### The `get` accessor — unified across HashMap, Vec, HashSet
 
 ```scheme
-(:wat::core::define (:wat::std::get (container :holon::HolonAST) (locator :holon::HolonAST) -> :Option<holon::HolonAST>)
+(:wat::core::define (:wat::std::get (container :wat::holon::HolonAST) (locator :wat::holon::HolonAST) -> :Option<wat::holon::HolonAST>)
   ;; Structural lookup through the container's efficient Rust backing.
   ;; For HashMap: hash-based lookup against the key, O(1) average.
   ;; Returns (Some value) on hit, :None on miss.
   ...)
 ```
 
-No `cleanup`. No noisy `Unbind` decode. No codebook. The runtime uses Rust's HashMap under the hood; the Holon describes what the container IS; `get` goes through the efficient backing. This is the same `get` that works on `Vec` (indexed) and `HashSet` (membership) — one signature, uniform contract, returns `:Option<holon::HolonAST>` everywhere.
+No `cleanup`. No noisy `Unbind` decode. No codebook. The runtime uses Rust's HashMap under the hood; the Holon describes what the container IS; `get` goes through the efficient backing. This is the same `get` that works on `Vec` (indexed) and `HashSet` (membership) — one signature, uniform contract, returns `:Option<wat::holon::HolonAST>` everywhere.
 
 See FOUNDATION's "Presence is Measurement, Not Verdict" for why Cleanup is not part of the wat algebra. Structural retrieval (`get`) uses AST equality and the runtime's Rust backing; similarity retrieval (`presence`) uses cosine against the noise floor. Two regimes, cleanly separated.
 
@@ -211,8 +211,8 @@ Yes — via explicit Bundle/Bind composition. Named form earns its place via rea
 
 ```scheme
 (:wat::core::define (:wat::std::HashMap kv-pairs)
-  (:wat::algebra::Bundle
-    (:wat::core::map (:wat::core::lambda (kv) (:wat::algebra::Bind (:wat::core::first kv) (:wat::core::second kv))) kv-pairs)))
+  (:wat::holon::Bundle
+    (:wat::core::map (:wat::core::lambda (kv) (:wat::holon::Bind (:wat::core::first kv) (:wat::core::second kv))) kv-pairs)))
 
 (:wat::core::define (:wat::std::get map-holon key candidates)
   (cleanup (Unbind map-holon key) candidates))

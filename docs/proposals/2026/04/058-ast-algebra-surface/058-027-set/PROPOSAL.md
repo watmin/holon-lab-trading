@@ -58,7 +58,7 @@ A wat stdlib macro (per 058-031-defmacro) that constructs an encoded unordered c
 
 ```scheme
 (:wat::core::defmacro (:wat::std::HashSet (xs :AST) -> :AST)
-  `(:wat::algebra::Bundle ,xs))
+  `(:wat::holon::Bundle ,xs))
 ```
 
 Expansion is Bundle. The distinction is reader intent at source: `HashSet` communicates "data-structure: unordered collection with O(1) membership"; `Bundle` communicates "superposition primitive." Both collapse to the same canonical AST after parse-time expansion, so `hash((HashSet xs)) = hash((Bundle xs))` — no alias collision.
@@ -218,7 +218,7 @@ Yes — `(Bundle xs)`. Named form earns its place via data-structure reader inte
 
 ```scheme
 (:wat::core::defmacro (:wat::std::HashSet (xs :AST) -> :AST)
-  `(:wat::algebra::Bundle ,xs))
+  `(:wat::holon::Bundle ,xs))
 ```
 
 Registered at parse time (per 058-031-defmacro): every `(Set xs)` invocation is rewritten to `(Bundle xs)` before hashing.

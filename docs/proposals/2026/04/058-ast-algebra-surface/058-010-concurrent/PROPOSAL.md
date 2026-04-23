@@ -10,7 +10,7 @@
 >
 > ```scheme
 > (:wat::core::defmacro (:my::vocab::Concurrent (xs :AST) -> :AST)
->   `(:wat::algebra::Bundle ,xs))
+>   `(:wat::holon::Bundle ,xs))
 > ```
 >
 > Same mechanics. Users' namespace. Project stdlib stays lean.
@@ -28,7 +28,7 @@ A wat stdlib macro (per 058-031-defmacro) that expresses "these holons happen si
 
 ```scheme
 (:wat::core::defmacro (:wat::std::Concurrent (xs :AST) -> :AST)
-  `(:wat::algebra::Bundle ,xs))
+  `(:wat::holon::Bundle ,xs))
 ```
 
 Identical expansion to `Bundle`, identical vector output. The ONLY difference is the name at source level — expansion happens at parse time, so `hash(AST)` sees only the canonical `(Bundle ...)` form.
@@ -75,7 +75,7 @@ Holon's Python and Rust libraries expose Concurrent as a named operation alongsi
 
 ```scheme
 (:wat::core::defmacro (:wat::std::Concurrent (xs :AST) -> :AST)
-  `(:wat::algebra::Bundle ,xs))
+  `(:wat::holon::Bundle ,xs))
 ```
 
 One line. No implementation risk, no perf cost, no cache complication (parse-time expansion eliminates the cache-key concern raised in earlier drafts — see Arguments Against #2). The cost is just "a name exists in stdlib."
@@ -146,7 +146,7 @@ Yes — `(Bundle xs)`. The stdlib form asserts reader intent.
 ```scheme
 ;; wat/std/sequences.wat (or similar)
 (:wat::core::defmacro (:wat::std::Concurrent (xs :AST) -> :AST)
-  `(:wat::algebra::Bundle ,xs))
+  `(:wat::holon::Bundle ,xs))
 ```
 
 Registration is parse-time (per 058-031-defmacro): the macro is loaded during the startup expansion pass, and every `(Concurrent ...)` invocation in source is rewritten to `(Bundle ...)` before hashing.

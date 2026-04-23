@@ -11,13 +11,13 @@
 
 **Three converging reasons.**
 
-**(1) The proposal's Flip is a different operation from the primer's `flip`.** The primer (`series-001-002-holon-ops.md`) documents `flip(vec)` as **elementwise negation of a single vector** — `similarity(vec, flip(vec)) ≈ -1.0`, the "logical NOT of a vector." This proposal's `Flip(x, y)` is a **2-argument gated inversion** that expands to `(:wat::algebra::Blend x y 1 -2)` — fundamentally a different operation. Two distinct operations wearing the same name would confuse readers who move between the primer and wat source.
+**(1) The proposal's Flip is a different operation from the primer's `flip`.** The primer (`series-001-002-holon-ops.md`) documents `flip(vec)` as **elementwise negation of a single vector** — `similarity(vec, flip(vec)) ≈ -1.0`, the "logical NOT of a vector." This proposal's `Flip(x, y)` is a **2-argument gated inversion** that expands to `(:wat::holon::Blend x y 1 -2)` — fundamentally a different operation. Two distinct operations wearing the same name would confuse readers who move between the primer and wat source.
 
 **(2) Hickey's `-2` callout cannot be defended cleanly.** The proposal claimed `-2` is "the minimum inversion weight," but this is not quite true — any weight `w < -1` flips agreed dimensions after threshold (`-1.01`, `-1.5`, `-2`, `-10` all produce the same thresholded result). `-2` is the smallest convenient integer, not the minimum. The choice is a tradition-matching convention, not an algebraic property. The specific pre-threshold magnitude produced at `-2` vs `-3` matters only if a downstream consumer reads the pre-threshold float, which no operation in the 058 surface does.
 
 **(3) No cited production use.** The proposal's rationale — "adversarial inversion, counter-signaling, trust inversion" — is described in the abstract; no challenge batch citation, no DDoS lab citation, no trading lab citation. Same pattern as Resonance (058-006) and ConditionalBind (058-007) — speculative primitive with no concrete application beyond unit tests.
 
-**What users who need this write instead.** The operation exists regardless of the name: `(:wat::algebra::Blend x y 1 -2)` inline, with a comment explaining the intent. No stdlib name required for a pattern nobody has used.
+**What users who need this write instead.** The operation exists regardless of the name: `(:wat::holon::Blend x y 1 -2)` inline, with a comment explaining the intent. No stdlib name required for a pattern nobody has used.
 
 **What we preserve.** If the primer's single-arg elementwise negation ever needs a home, that is a different proposal — `(:wat::std::Negate v)` taking ONE argument, classical VSA "anti-vector" semantics, trivially expressed via Blend (`(Blend v v -1 0)` produces `-v` after threshold). That is a separately defensible addition when a real application motivates it; 058-020 as written did not make that case.
 
@@ -37,8 +37,8 @@ A wat stdlib macro (per 058-031-defmacro) that inverts `y`'s contribution in a b
 
 ```scheme
 (:wat::core::defmacro (:wat::std::Flip (x :AST) (y :AST) -> :AST)
-  `(:wat::algebra::Blend ,x ,y 1 -2))
-;; Expands at parse time to: (:wat::algebra::Blend x y 1 -2)
+  `(:wat::holon::Blend ,x ,y 1 -2))
+;; Expands at parse time to: (:wat::holon::Blend x y 1 -2)
 ;; which computes: threshold(1·x + (-2)·y) — inverts y's sign contribution, double weighted
 ```
 
@@ -181,7 +181,7 @@ Yes — `(Blend x y 1 -2)`. Named form earns its place via the inversion-intent 
 
 ```scheme
 (:wat::core::defmacro (:wat::std::Flip (x :AST) (y :AST) -> :AST)
-  `(:wat::algebra::Blend ,x ,y 1 -2))
+  `(:wat::holon::Blend ,x ,y 1 -2))
 ```
 
 Registered at parse time (per 058-031-defmacro): every `(Flip x y)` invocation is rewritten to `(Blend x y 1 -2)` before hashing.

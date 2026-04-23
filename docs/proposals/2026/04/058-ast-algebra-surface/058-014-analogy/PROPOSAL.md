@@ -19,7 +19,7 @@ Analogy occupies a third status between ACCEPTED and REJECTED:
 - **Classical VSA heritage** — Plate, Kanerva, Eliasmith all describe it. It's one of VSA's most-cited strengths, documented in the primer (`series-001-002-holon-ops.md` line 159-170): `analogy(a, b, c) → C + (B - A)`.
 - **Primer cites** a concrete hypothetical use (cross-domain rule transfer: "SYN flood 80 → 443") but says "Explored in the challenge batches" — no challenge number, no F1=X.XX measurement.
 - **Not currently adopted** — trading lab doesn't use Analogy. DDoS lab doesn't use Analogy. Challenge batches "explored" it without citing measurable outcomes.
-- **Trivially expressible when needed** — users who want the operation write `(:wat::algebra::Bundle (:wat::core::vec c (:wat::std::Subtract b a)))` inline; the stdlib name is convenience, not a new primitive.
+- **Trivially expressible when needed** — users who want the operation write `(:wat::holon::Bundle (:wat::core::vec c (:wat::holon::Subtract b a)))` inline; the stdlib name is convenience, not a new primitive.
 
 Unlike Flip (magic-weight, primer-collision with single-arg `flip`), Resonance (no citation, wrong abstraction level per Mask Q2), or ConditionalBind (half-abstraction — gate-consumer without a gate-producer), **Analogy is clean; it just lacks adoption**. Rejecting it would suggest something is structurally wrong with it, which isn't true. Accepting it would ship a name nobody uses today.
 
@@ -54,7 +54,7 @@ A wat stdlib macro (per 058-031-defmacro) that produces the classic VSA analogy 
 
 ```scheme
 (:wat::core::defmacro (:wat::std::Analogy (a :AST) (b :AST) (c :AST) -> :AST)
-  `(:wat::algebra::Bundle (:wat::core::vec ,c (:wat::std::Subtract ,b ,a))))
+  `(:wat::holon::Bundle (:wat::core::vec ,c (:wat::holon::Subtract ,b ,a))))
 ```
 
 Expands to `c + (b - a)` — the classic "A is to B as C is to ?" vector arithmetic. The result is a Holon that represents the fourth term of the analogy as a point in thought-space. The caller retrieves the actual answer by measuring **presence** of that Holon against a candidate library — presence measurement above the substrate's noise floor (5σ ≈ 0.05 at d=10,000) identifies the matching candidate.
@@ -104,7 +104,7 @@ The typical usage is:
                      (presence cand (encode (:wat::std::Analogy king queen man))))))
 ```
 
-With `Analogy` named, this reads as "complete this analogy, then measure each candidate's overlay by presence." Without `Analogy`, the expression's inner form becomes `(:wat::algebra::Bundle (:wat::core::vec man (:wat::std::Subtract queen king)))` — mechanically identical, but the reader has to recognize the pattern.
+With `Analogy` named, this reads as "complete this analogy, then measure each candidate's overlay by presence." Without `Analogy`, the expression's inner form becomes `(:wat::holon::Bundle (:wat::core::vec man (:wat::holon::Subtract queen king)))` — mechanically identical, but the reader has to recognize the pattern.
 
 Cleanup is NOT used here — Cleanup was rejected as a core form (see 058-025 and FOUNDATION's "Presence is Measurement, Not Verdict"). Retrieval is presence measurement against known candidates; selection — picking a single winner or ranking or filtering by threshold — is the caller's policy, not a substrate primitive. No `argmax` exists in the algebra.
 
@@ -118,7 +118,7 @@ If the algebra exposes `Bind`, `Bundle`, `Permute`, `Subtract`, `Analogy` as a c
 
 ```scheme
 (:wat::core::defmacro (:wat::std::Analogy (a :AST) (b :AST) (c :AST) -> :AST)
-  `(:wat::algebra::Bundle (:wat::core::vec ,c (:wat::std::Subtract ,b ,a))))
+  `(:wat::holon::Bundle (:wat::core::vec ,c (:wat::holon::Subtract ,b ,a))))
 ```
 
 One line. Is a named form earning its place for one line of expansion?
@@ -149,9 +149,9 @@ Some users already write analogies inline. Adding a named form might not be used
 ;; The caller's next step — whether that is max-by-score, threshold
 ;; filter, top-k sort, or a weighted bundle — lives in the caller.
 (:wat::core::define (:my::app::measure-candidates
-                    (analogy-result :holon::HolonAST)
-                    (candidates     :Vec<holon::HolonAST>)
-                    -> :Vec<Pair<holon::HolonAST,f64>>)
+                    (analogy-result :wat::holon::HolonAST)
+                    (candidates     :Vec<wat::holon::HolonAST>)
+                    -> :Vec<Pair<wat::holon::HolonAST,f64>>)
   (:wat::core::map candidates
     (:wat::core::lambda (c)
       (:wat::core::vec c (presence c (encode analogy-result))))))
@@ -211,7 +211,7 @@ Yes — `(Bundle (list c (Subtract b a)))`, or directly `(Bundle (list c (Blend 
 ```scheme
 ;; wat/std/reasoning.wat (or similar)
 (:wat::core::defmacro (:wat::std::Analogy (a :AST) (b :AST) (c :AST) -> :AST)
-  `(:wat::algebra::Bundle (:wat::core::vec ,c (:wat::std::Subtract ,b ,a))))
+  `(:wat::holon::Bundle (:wat::core::vec ,c (:wat::holon::Subtract ,b ,a))))
 ```
 
 Depends on `Bundle` (core), `Subtract` (stdlib macro, 058-019). Registered at parse time (per 058-031-defmacro): every `(Analogy ...)` invocation expands to the canonical Bundle + Subtract form, and `Subtract` is then expanded further to `Blend` in the same pass.

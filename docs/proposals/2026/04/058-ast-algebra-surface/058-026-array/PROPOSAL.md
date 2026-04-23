@@ -4,7 +4,7 @@
 >
 > The form previously called `Array` is now named `Vec` — matching Rust's `std::vec::Vec` directly. The wat UpperCase constructor, the type annotation `:Vec<T>`, and the runtime backing all share one name. One name per concept across algebra, type annotation, and runtime.
 >
-> **Also:** `nth` is retired. Use `get` — `(get my-vec i)` with an integer index returns `:Option<holon::HolonAST>`.
+> **Also:** `nth` is retired. Use `get` — `(get my-vec i)` with an integer index returns `:Option<wat::holon::HolonAST>`.
 
 **Scope:** algebra
 **Class:** STDLIB (runtime constructor building a HashMap with integer keys) — **INSCRIPTION amendment 2026-04-20**
@@ -80,7 +80,7 @@ stage). `conj` is the primitive.
 
 ## HISTORICAL CONTENT — SUPERSEDED BY BANNER ABOVE
 
-The sections below were written before the 2026-04-18 rename + `get`-unification sweep. They reference `nth` as the accessor and describe an earlier Sequential-alias encoding. **Both are REPLACED.** `nth` is retired — use `get` with an integer index, returning `:Option<holon::HolonAST>` through the runtime's Rust `Vec<T>` backing. The banner at the top of this file is authoritative; the content below is preserved as audit record only.
+The sections below were written before the 2026-04-18 rename + `get`-unification sweep. They reference `nth` as the accessor and describe an earlier Sequential-alias encoding. **Both are REPLACED.** `nth` is retired — use `get` with an integer index, returning `:Option<wat::holon::HolonAST>` through the runtime's Rust `Vec<T>` backing. The banner at the top of this file is authoritative; the content below is preserved as audit record only.
 
 ---
 
@@ -95,15 +95,15 @@ Earlier drafts proposed Array as a macro alias for `Sequential` (the positional-
 A wat stdlib function that builds an integer-keyed Map from a list of Holons:
 
 ```scheme
-(:wat::core::define (:wat::std::Vec (items :Vec<holon::HolonAST>) -> :holon::HolonAST)
-  (:wat::algebra::Bundle
+(:wat::core::define (:wat::std::Vec (items :Vec<wat::holon::HolonAST>) -> :wat::holon::HolonAST)
+  (:wat::holon::Bundle
     (map-with-index
-      (:wat::core::lambda ((item :holon::HolonAST) (i :usize) -> :holon::HolonAST)
-        (:wat::algebra::Bind (:wat::algebra::Atom i) item))
+      (:wat::core::lambda ((item :wat::holon::HolonAST) (i :usize) -> :wat::holon::HolonAST)
+        (:wat::holon::Bind (:wat::holon::Atom i) item))
       items)))
 ```
 
-Expands at call time to: `(:wat::algebra::Bundle (:wat::core::vec (:wat::algebra::Bind (:wat::algebra::Atom 0) items[0]) (:wat::algebra::Bind (:wat::algebra::Atom 1) items[1]) ...))`. The integer at each position is the KEY atom; each item is bound to its index.
+Expands at call time to: `(:wat::holon::Bundle (:wat::core::vec (:wat::holon::Bind (:wat::holon::Atom 0) items[0]) (:wat::holon::Bind (:wat::holon::Atom 1) items[1]) ...))`. The integer at each position is the KEY atom; each item is bound to its index.
 
 ### Semantics
 
@@ -117,10 +117,10 @@ Expands at call time to: `(:wat::algebra::Bundle (:wat::core::vec (:wat::algebra
   (:wat::std::Vec (:wat::core::vec apple banana cherry date)))
 
 ;; fruits' AST is structurally:
-;;   (:wat::algebra::Bundle (:wat::core::vec (:wat::algebra::Bind (:wat::algebra::Atom 0) apple)
-;;                 (:wat::algebra::Bind (:wat::algebra::Atom 1) banana)
-;;                 (:wat::algebra::Bind (:wat::algebra::Atom 2) cherry)
-;;                 (:wat::algebra::Bind (:wat::algebra::Atom 3) date)))
+;;   (:wat::holon::Bundle (:wat::core::vec (:wat::holon::Bind (:wat::holon::Atom 0) apple)
+;;                 (:wat::holon::Bind (:wat::holon::Atom 1) banana)
+;;                 (:wat::holon::Bind (:wat::holon::Atom 2) cherry)
+;;                 (:wat::holon::Bind (:wat::holon::Atom 3) date)))
 ```
 
 ### `nth` retired
@@ -128,11 +128,11 @@ Expands at call time to: `(:wat::algebra::Bundle (:wat::core::vec (:wat::algebra
 `nth` was redundant with the unified `get` introduced in the 2026-04-18 sweep. Use `get` directly:
 
 ```scheme
-(:wat::std::get my-vec 3)                 ;; returns :Option<holon::HolonAST>
+(:wat::std::get my-vec 3)                 ;; returns :Option<wat::holon::HolonAST>
 ;; equivalent to the old (:wat::std::nth my-vec 3)
 ```
 
-`get` with a `:usize` locator goes through the Vec's Rust `Vec<holon::HolonAST>` backing for O(1) indexing. Returns `(Some v)` at valid indices, `:None` out of range. Same signature as `get` on HashMap (hash lookup) and HashSet (hash membership). One name, three containers.
+`get` with a `:usize` locator goes through the Vec's Rust `Vec<wat::holon::HolonAST>` backing for O(1) indexing. Returns `(Some v)` at valid indices, `:None` out of range. Same signature as `get` on HashMap (hash lookup) and HashSet (hash membership). One name, three containers.
 
 ### Other operations
 
@@ -140,19 +140,19 @@ All expressible through the Map API:
 
 ```scheme
 ;; Append (cheap — new integer key is just count(arr))
-(:wat::core::define (:wat::std::append (arr :holon::HolonAST) (item :holon::HolonAST) -> :holon::HolonAST)
-  (assoc arr (:wat::algebra::Atom (:wat::std::count arr)) item))
+(:wat::core::define (:wat::std::append (arr :wat::holon::HolonAST) (item :wat::holon::HolonAST) -> :wat::holon::HolonAST)
+  (assoc arr (:wat::holon::Atom (:wat::std::count arr)) item))
 
 ;; Redefine at index (moderate — AST walk to find and replace)
-(:wat::core::define (:wat::std::set-at (arr :holon::HolonAST) (i :usize) (v :holon::HolonAST) -> :holon::HolonAST)
-  (assoc arr (:wat::algebra::Atom i) v))
+(:wat::core::define (:wat::std::set-at (arr :wat::holon::HolonAST) (i :usize) (v :wat::holon::HolonAST) -> :wat::holon::HolonAST)
+  (assoc arr (:wat::holon::Atom i) v))
 
 ;; Remove at index (moderate — AST walk to remove)
-(:wat::core::define (:wat::std::remove-at (arr :holon::HolonAST) (i :usize) -> :holon::HolonAST)
-  (dissoc arr (:wat::algebra::Atom i)))
+(:wat::core::define (:wat::std::remove-at (arr :wat::holon::HolonAST) (i :usize) -> :wat::holon::HolonAST)
+  (dissoc arr (:wat::holon::Atom i)))
 
 ;; Count
-(:wat::core::define (:wat::std::count (arr :holon::HolonAST) -> :usize)
+(:wat::core::define (:wat::std::count (arr :wat::holon::HolonAST) -> :usize)
   (map-count arr))                  ; number of Bind nodes in the Bundle
 ```
 
@@ -161,12 +161,12 @@ All expressible through the Map API:
 Inserting at position 0 requires **renumbering every existing entry** — each current key `i` becomes `i + 1`, then the new item gets key `0`. The identity of every existing binding changes (different key atom), so the old bindings are removed and new ones are added.
 
 ```scheme
-(:wat::core::define (:wat::std::cons-front (arr :holon::HolonAST) (item :holon::HolonAST) -> :holon::HolonAST)
+(:wat::core::define (:wat::std::cons-front (arr :wat::holon::HolonAST) (item :wat::holon::HolonAST) -> :wat::holon::HolonAST)
   (:wat::core::let ((n (:wat::std::count arr)))
     ;; Step 1: collect all existing items with their old keys
     ;; Step 2: rebuild the array with keys shifted by 1 and the new item at key 0
     (:wat::std::Vec (:wat::core::cons item
-                 (:wat::core::map (:wat::core::lambda ((i :usize) -> :holon::HolonAST) (:wat::std::get arr (:wat::algebra::Atom i)))
+                 (:wat::core::map (:wat::core::lambda ((i :usize) -> :wat::holon::HolonAST) (:wat::std::get arr (:wat::holon::Atom i)))
                       (range n))))))
 ```
 
@@ -176,7 +176,7 @@ Inserting at position 0 requires **renumbering every existing entry** — each c
 
 ### Why this is a runtime function, not a macro
 
-Array's argument is a `:Vec<holon::HolonAST>` — a runtime list, potentially unbounded. The macro expansion would need to iterate the list at parse time to generate `Bind(Atom 0, x_0)`, `Bind(Atom 1, x_1)`, etc. — but the list might be computed from runtime data. Macros run at parse time on the source AST only; they can't enumerate a runtime list.
+Array's argument is a `:Vec<wat::holon::HolonAST>` — a runtime list, potentially unbounded. The macro expansion would need to iterate the list at parse time to generate `Bind(Atom 0, x_0)`, `Bind(Atom 1, x_1)`, etc. — but the list might be computed from runtime data. Macros run at parse time on the source AST only; they can't enumerate a runtime list.
 
 So Array is a RUNTIME FUNCTION. It produces a Holon (a Bundle-of-Binds) at runtime from the given list. The Holon has exact AST structure; subsequent accesses walk that structure.
 
@@ -260,18 +260,18 @@ No. Array has one role ("integer-indexed collection"), one construction path, on
 ```scheme
 ;; wat/std/structures.wat (or similar)
 
-(:wat::core::define (:wat::std::Vec (items :Vec<holon::HolonAST>) -> :holon::HolonAST)
-  (:wat::algebra::Bundle
+(:wat::core::define (:wat::std::Vec (items :Vec<wat::holon::HolonAST>) -> :wat::holon::HolonAST)
+  (:wat::holon::Bundle
     (map-with-index
-      (:wat::core::lambda ((item :holon::HolonAST) (i :usize) -> :holon::HolonAST)
-        (:wat::algebra::Bind (:wat::algebra::Atom i) item))
+      (:wat::core::lambda ((item :wat::holon::HolonAST) (i :usize) -> :wat::holon::HolonAST)
+        (:wat::holon::Bind (:wat::holon::Atom i) item))
       items)))
 
-(:wat::core::define (:wat::std::nth (arr :holon::HolonAST) (i :usize) -> :Option<holon::HolonAST>)
-  (:wat::std::get arr (:wat::algebra::Atom i)))
+(:wat::core::define (:wat::std::nth (arr :wat::holon::HolonAST) (i :usize) -> :Option<wat::holon::HolonAST>)
+  (:wat::std::get arr (:wat::holon::Atom i)))
 
-(:wat::core::define (:wat::std::append (arr :holon::HolonAST) (item :holon::HolonAST) -> :holon::HolonAST)
-  (assoc arr (:wat::algebra::Atom (:wat::std::count arr)) item))
+(:wat::core::define (:wat::std::append (arr :wat::holon::HolonAST) (item :wat::holon::HolonAST) -> :wat::holon::HolonAST)
+  (assoc arr (:wat::holon::Atom (:wat::std::count arr)) item))
 ```
 
 Ships as wat code once `define`, `lambda`, Bundle/Bind/Atom/Map/get are in.

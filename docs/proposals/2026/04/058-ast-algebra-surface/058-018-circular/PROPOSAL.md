@@ -11,9 +11,9 @@
 
 Landed in wat-rs as a defmacro over Blend with two reserved basis atoms (`cos-basis`, `sin-basis`) and `(cos θ, sin θ)` weights.
 
-- **Source:** [`wat-rs/wat/std/Circular.wat`](https://github.com/watmin/wat-rs/blob/main/wat/std/Circular.wat)
-- **Tests:** [`wat-rs/wat-tests/std/Circular.wat`](https://github.com/watmin/wat-rs/blob/main/wat-tests/std/Circular.wat) — two deftests proving adjacent hours are near (Circular 0 24 vs Circular 23 24) and antipodal hours are far (Circular 0 24 vs Circular 12 24), both measured against the noise-floor discriminator.
-- **Shape:** `(:wat::std::Circular (value :AST<f64>) (period :AST<f64>) -> :AST<holon::HolonAST>)` → a let* that computes θ then blends `(Atom :cos-basis)` and `(Atom :sin-basis)` with `(cos θ, sin θ)` weights.
+- **Source:** [`wat-rs/wat/holon/Circular.wat`](https://github.com/watmin/wat-rs/blob/main/wat/holon/Circular.wat)
+- **Tests:** [`wat-rs/wat-tests/holon/Circular.wat`](https://github.com/watmin/wat-rs/blob/main/wat-tests/holon/Circular.wat) — two deftests proving adjacent hours are near (Circular 0 24 vs Circular 23 24) and antipodal hours are far (Circular 0 24 vs Circular 12 24), both measured against the noise-floor discriminator.
+- **Shape:** `(:wat::holon::Circular (value :AST<f64>) (period :AST<f64>) -> :AST<wat::holon::HolonAST>)` → a let* that computes θ then blends `(Atom :cos-basis)` and `(Atom :sin-basis)` with `(cos θ, sin θ)` weights.
 
 ### Divergences from the original spec
 
@@ -46,11 +46,11 @@ Same math, enforcement-correct wat. Documented inline in the stdlib file as "Dev
 **Macro expansion** (after Blend acceptance with Option B independent weights):
 
 ```scheme
-(:wat::core::defmacro (:wat::std::Circular (value :AST) (period :AST) -> :AST)
+(:wat::core::defmacro (:wat::holon::Circular (value :AST) (period :AST) -> :AST)
   `(:wat::core::let ((theta (:wat::core::* 2 :wat::std::math::pi
                                        (:wat::core::/ ,value ,period))))
-     (:wat::algebra::Blend (:wat::algebra::Atom :wat::std::circular-cos-basis)
-                          (:wat::algebra::Atom :wat::std::circular-sin-basis)
+     (:wat::holon::Blend (:wat::holon::Atom :wat::std::circular-cos-basis)
+                          (:wat::holon::Atom :wat::std::circular-sin-basis)
                           (:wat::std::math::cos theta)
                           (:wat::std::math::sin theta))))
 ```
@@ -89,12 +89,12 @@ With Blend as a pivotal core form (058-002) — and specifically Option B (two I
 ### Stdlib definition
 
 ```scheme
-(:wat::core::defmacro (:wat::std::Circular (value :AST) (period :AST) -> :AST)
+(:wat::core::defmacro (:wat::holon::Circular (value :AST) (period :AST) -> :AST)
   `(:wat::core::let* ((angle   (:wat::core::* 2 pi (:wat::core::/ ,value ,period)))
           (w-cos   (cos angle))                  ;; can be negative
           (w-sin   (sin angle)))                 ;; can be negative
-     (:wat::algebra::Blend (:wat::algebra::Atom :wat::std::circular-cos-basis)
-            (:wat::algebra::Atom :wat::std::circular-sin-basis)
+     (:wat::holon::Blend (:wat::holon::Atom :wat::std::circular-cos-basis)
+            (:wat::holon::Atom :wat::std::circular-sin-basis)
             w-cos
             w-sin)))
 ```
@@ -201,10 +201,10 @@ Delete the Circular encoder match arm (~15-20 lines). Macro expansion is handled
 **wat stdlib addition** — `wat/std/scalars.wat`:
 
 ```scheme
-(:wat::core::defmacro (:wat::std::Circular (low :AST) (high :AST) (value :AST) (scale :AST) -> :AST)
+(:wat::core::defmacro (:wat::holon::Circular (low :AST) (high :AST) (value :AST) (scale :AST) -> :AST)
   `(:wat::core::let* ((period (:wat::core::first ,scale))
           (angle (:wat::core::* 2 pi (:wat::core::/ ,value period))))
-     (:wat::algebra::Blend (:wat::algebra::Thermometer ,low dim) (:wat::algebra::Thermometer ,high dim) (cos angle) (sin angle))))
+     (:wat::holon::Blend (:wat::holon::Thermometer ,low dim) (:wat::holon::Thermometer ,high dim) (cos angle) (sin angle))))
 ```
 
 Registered at parse time (per 058-031-defmacro): every `(Circular ...)` invocation is rewritten to the canonical `let* + Blend-over-Thermometers` form before hashing.

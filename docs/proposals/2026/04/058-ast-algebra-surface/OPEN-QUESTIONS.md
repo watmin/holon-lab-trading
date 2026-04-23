@@ -23,14 +23,14 @@ Round 3 reviewers may reopen any of these decisions; the per-question reasoning 
 
 ## 058-001: Atom — ACCEPTED (parametric)
 
-**All questions in this section are RESOLVED.** Atom accepts into core as `:Atom<T>` — parametric over any serializable T (primitive, composite `:holon::HolonAST`, user-defined struct/enum/newtype). Substrate-level decision: without parametric Atom, programs cannot be atomized, which breaks FOUNDATION's "Programs ARE Holons" principle. See 058-001/PROPOSAL.md's ACCEPTED banner for the per-question reasoning, and FOUNDATION-CHANGELOG 2026-04-18 entry "Parametric polymorphism as substrate — programs ARE atoms, which demands it."
+**All questions in this section are RESOLVED.** Atom accepts into core as `:Atom<T>` — parametric over any serializable T (primitive, composite `:wat::holon::HolonAST`, user-defined struct/enum/newtype). Substrate-level decision: without parametric Atom, programs cannot be atomized, which breaks FOUNDATION's "Programs ARE Holons" principle. See 058-001/PROPOSAL.md's ACCEPTED banner for the per-question reasoning, and FOUNDATION-CHANGELOG 2026-04-18 entry "Parametric polymorphism as substrate — programs ARE atoms, which demands it."
 
 
 ---
 
 ## 058-002: Blend — ACCEPTED
 
-**All questions in this section are RESOLVED.** Blend enters algebra core as `(:wat::algebra::Blend a b w1 w2)` — two independent real-valued scalar weights (Option B), negative weights allowed, binary arity. See 058-002/PROPOSAL.md's ACCEPTED banner for the per-question reasoning, and FOUNDATION-CHANGELOG 2026-04-18 entry "Blend keystone closed." Designer review may still reopen in Round 3.
+**All questions in this section are RESOLVED.** Blend enters algebra core as `(:wat::holon::Blend a b w1 w2)` — two independent real-valued scalar weights (Option B), negative weights allowed, binary arity. See 058-002/PROPOSAL.md's ACCEPTED banner for the per-question reasoning, and FOUNDATION-CHANGELOG 2026-04-18 entry "Blend keystone closed." Designer review may still reopen in Round 3.
 
 
 ---
@@ -51,19 +51,19 @@ Round 3 reviewers may reopen any of these decisions; the per-question reasoning 
 
 ## 058-004: Difference — REJECTED
 
-**All questions in this section are MOOT.** 058-004 was rejected — same math as Subtract, no new pattern demonstrated; `:wat::std::Subtract` (058-019) is the canonical delta macro. See FOUNDATION-CHANGELOG for the rejection record. Designers need not opine.
+**All questions in this section are MOOT.** 058-004 was rejected — same math as Subtract, no new pattern demonstrated; `:wat::holon::Subtract` (058-019) is the canonical delta macro. See FOUNDATION-CHANGELOG for the rejection record. Designers need not opine.
 
 
 ---
 
 ## 058-005: Orthogonalize — ACCEPTED (reframed + renamed to Reject + Project)
 
-**All questions in this section are RESOLVED.** The Gram-Schmidt projection-removal operation ships as **two stdlib macros** over the widened Blend + new `:wat::algebra::dot` measurement primitive:
+**All questions in this section are RESOLVED.** The Gram-Schmidt projection-removal operation ships as **two stdlib macros** over the widened Blend + new `:wat::holon::dot` measurement primitive:
 
-- `(:wat::std::Reject x y)` — x with y's direction removed. The DDoS sidecar's core detection mechanism (primer line 277-289, Challenge 010 F1=1.000).
-- `(:wat::std::Project x y)` — x's component along y; complement, `= Subtract(x, Reject(x, y))`.
+- `(:wat::holon::Reject x y)` — x with y's direction removed. The DDoS sidecar's core detection mechanism (primer line 277-289, Challenge 010 F1=1.000).
+- `(:wat::holon::Project x y)` — x's component along y; complement, `= Subtract(x, Reject(x, y))`.
 
-Q1 (core vs stdlib) resolves stdlib — widened Blend absorbs the computed-coefficient case via `:wat::algebra::dot`. Q2 (ship Project) resolves YES — Project + Reject = x (Gram-Schmidt decomposition). Q3 (name) resolves Reject — aligns with primer, holon-rs, and challenge writeups. Q4/Q5 documentation notes landed in the proposal. **Algebra core shrinks 7 → 6.** See 058-005/PROPOSAL.md's ACCEPTED banner for per-question reasoning.
+Q1 (core vs stdlib) resolves stdlib — widened Blend absorbs the computed-coefficient case via `:wat::holon::dot`. Q2 (ship Project) resolves YES — Project + Reject = x (Gram-Schmidt decomposition). Q3 (name) resolves Reject — aligns with primer, holon-rs, and challenge writeups. Q4/Q5 documentation notes landed in the proposal. **Algebra core shrinks 7 → 6.** See 058-005/PROPOSAL.md's ACCEPTED banner for per-question reasoning.
 
 
 ---
@@ -151,7 +151,7 @@ Q1 (core vs stdlib) resolves stdlib — widened Blend absorbs the computed-coeff
 
 2. **Accessor variants.** `get` (with cleanup) vs `get-raw` (without). Both useful. Keep both with these names? Or use `get` for raw and `get-cleanup` for the cleanup variant? Recommendation: `get` is the common case (with cleanup); `get-raw` for the raw case.
 
-3. **Key type constraints.** — **RESOLVED.** Keys can be any `:holon::HolonAST` value. Typed Atom literals (058-001) include string/int/float/bool/keyword; composite ASTs (Bind, Bundle, etc.) also work as keys because `:holon::HolonAST` is the substrate's universal type. `:HashMap<K,V>` at declaration time pins the key type; runtime hash lookup (Rust `std::collections::HashMap`) handles any hashable key.
+3. **Key type constraints.** — **RESOLVED.** Keys can be any `:wat::holon::HolonAST` value. Typed Atom literals (058-001) include string/int/float/bool/keyword; composite ASTs (Bind, Bundle, etc.) also work as keys because `:wat::holon::HolonAST` is the substrate's universal type. `:HashMap<K,V>` at declaration time pins the key type; runtime hash lookup (Rust `std::collections::HashMap`) handles any hashable key.
 
 4. **Performance for large Maps.** Bundle's capacity is bounded (~d / ln(K) items for reliable cleanup). Maps with many keys exceed capacity and produce noisy retrieval. Document the capacity bound; stdlib could provide a `LargeMap` variant using partitioning if demand arises.
 
@@ -179,7 +179,7 @@ Q1 (core vs stdlib) resolves stdlib — widened Blend absorbs the computed-coeff
 
 ## 058-019: Subtract
 
-1. **Subtract vs Difference: keep both or unify?** — **RESOLVED.** 058-004 Difference REJECTED (no new pattern; same math as Subtract). Only `:wat::std::Subtract` exists. See FOUNDATION-CHANGELOG 2026-04-18 stdlib macro audit entry.
+1. **Subtract vs Difference: keep both or unify?** — **RESOLVED.** 058-004 Difference REJECTED (no new pattern; same math as Subtract). Only `:wat::holon::Subtract` exists. See FOUNDATION-CHANGELOG 2026-04-18 stdlib macro audit entry.
 
 2. **Naming: `Subtract` or `Remove`?** "Subtract" has mathematical connotations; "Remove" has more direct intent ("remove the noise"). Recommendation: keep `Subtract` — aligns with holon-rs's `subtract` function; readers recognize it.
 
@@ -193,7 +193,7 @@ Q1 (core vs stdlib) resolves stdlib — widened Blend absorbs the computed-coeff
 
 ## 058-020: Flip — REJECTED
 
-**All questions in this section are MOOT.** 058-020 was rejected for three reasons: (1) the primer's `flip` is single-arg elementwise negation, not the proposal's 2-arg Blend idiom — same name, different operation; (2) the `-2` weight is a tradition-matching convention, not an algebraic minimum (any weight `< -1` produces the same thresholded result); (3) no cited production use beyond unit tests. The operation is trivially expressible inline as `(:wat::algebra::Blend x y 1 -2)` when needed. See FOUNDATION-CHANGELOG 2026-04-18 entry and 058-020/PROPOSAL.md REJECTED banner. Designers need not opine.
+**All questions in this section are MOOT.** 058-020 was rejected for three reasons: (1) the primer's `flip` is single-arg elementwise negation, not the proposal's 2-arg Blend idiom — same name, different operation; (2) the `-2` weight is a tradition-matching convention, not an algebraic minimum (any weight `< -1` produces the same thresholded result); (3) no cited production use beyond unit tests. The operation is trivially expressible inline as `(:wat::holon::Blend x y 1 -2)` when needed. See FOUNDATION-CHANGELOG 2026-04-18 entry and 058-020/PROPOSAL.md REJECTED banner. Designers need not opine.
 
 
 ---
@@ -303,21 +303,21 @@ Bind, Permute, and Thermometer are affirmed core primitives already present in h
 
 ## 058-030: Types
 
-1. **Generics scope.** Is `:fn(args)->return` and `:Vec<T>` sufficient, or do we need variance, bounds (`T extends :holon::HolonAST`), or existentials? Recommendation: start minimal — just List and fn parametrics. Add more if stdlib needs emerge.
+1. **Generics scope.** Is `:fn(args)->return` and `:Vec<T>` sufficient, or do we need variance, bounds (`T extends :wat::holon::HolonAST`), or existentials? Recommendation: start minimal — just List and fn parametrics. Add more if stdlib needs emerge.
 
 2. **Type inference strength — RESOLVED 2026-04-19 to required typed let bindings.** Parameter types on `define`/`lambda` are required; let bindings are too. Every binding has shape `((name :Type) rhs)` — the typed form is mandatory, not optional. Reversal of the earlier "infer intermediates" recommendation after wat-rs slice 7b surfaced the trade-off: anonymous functions declare their constraints, and the discipline is cleanest when it applies uniformly. See FOUNDATION-CHANGELOG 2026-04-19 "Typed-let discipline" for reasoning.
 
-3. **Nominal vs. structural typing — RESOLVED 2026-04-18.** Nominal for `struct`/`enum`/`newtype`; structural for `typealias` (renamed from `deftype`). Four distinct head keywords, zero ambiguity at parse. `:is-a` removed; no nominal subtyping (polymorphism via enum wrapping, same as `:holon::HolonAST`).
+3. **Nominal vs. structural typing — RESOLVED 2026-04-18.** Nominal for `struct`/`enum`/`newtype`; structural for `typealias` (renamed from `deftype`). Four distinct head keywords, zero ambiguity at parse. `:is-a` removed; no nominal subtyping (polymorphism via enum wrapping, same as `:wat::holon::HolonAST`).
 
 4. **`:Any` usage.** Was considered, rejected. Heterogeneous data uses named `:Union<T,U,V>` types; generic containers use parametric `T`/`K`/`V`; atom literals use `:AtomLiteral`. Resolved in the 2026-04-18 type-grammar sweep.
 
 5. **Type promotion rules.** If a function takes `:f64` and you pass an `:i32`, does it auto-promote? Recommendation: no implicit promotion — explicit `(to-f64 int)` or similar. Matches Rust's strictness; prevents surprising behavior.
 
-6. **Error reporting.** Type errors need to point at the offending expression with a useful message. "Expected :holon::HolonAST, got :f64 at line X" is the minimum. Structured error types with source locations are part of the implementation.
+6. **Error reporting.** Type errors need to point at the offending expression with a useful message. "Expected :wat::holon::HolonAST, got :f64 at line X" is the minimum. Structured error types with source locations are part of the implementation.
 
 7. **Metadata on types.** `typealias` could accept documentation strings, constraints, validators. Worth including in the first version? Recommendation: start simple (just alias); add metadata if needed.
 
-8. **Subtype hierarchy — RESOLVED 2026-04-18.** No nominal subtyping. `:holon::HolonAST` is an ENUM with 9 variants (Atom, Bind, Bundle, etc.). Functions on `:holon::HolonAST` pattern-match to select variant. Same pattern as Rust's `match holon { HolonAST::Atom(lit) => ... }`. No `:is-a` keyword in the grammar.
+8. **Subtype hierarchy — RESOLVED 2026-04-18.** No nominal subtyping. `:wat::holon::HolonAST` is an ENUM with 9 variants (Atom, Bind, Bundle, etc.). Functions on `:wat::holon::HolonAST` pattern-match to select variant. Same pattern as Rust's `match holon { HolonAST::Atom(lit) => ... }`. No `:is-a` keyword in the grammar.
 
 9. **Dependency ordering.** Types depend on nothing; `define` and `lambda` depend on types. Resolution order: 058-030 (types) first, then 058-028 (define) and 058-029 (lambda).
 
@@ -374,9 +374,9 @@ Bind, Permute, and Thermometer are affirmed core primitives already present in h
 ### Theme: Dependency on 058-002 (Blend) resolution — RESOLVED (Blend ACCEPTED as Option B with negative weights)
 - ~~058-004 Q3~~ — Difference REJECTED; moot.
 - ~~058-008 Q4~~ — Linear REJECTED (identical to Thermometer); moot.
-- ~~058-015 Q4~~ — Amplify becomes `(:wat::algebra::Blend x y 1 s)`; stdlib macro unblocked.
-- ~~058-018 Q3~~ — Circular becomes `(:wat::algebra::Blend cos-basis sin-basis (cos θ) (sin θ))`; stdlib macro unblocked.
-- ~~058-019 Q4~~ — Subtract becomes `(:wat::algebra::Blend x y 1 -1)`; stdlib macro.
+- ~~058-015 Q4~~ — Amplify becomes `(:wat::holon::Blend x y 1 s)`; stdlib macro unblocked.
+- ~~058-018 Q3~~ — Circular becomes `(:wat::holon::Blend cos-basis sin-basis (cos θ) (sin θ))`; stdlib macro unblocked.
+- ~~058-019 Q4~~ — Subtract becomes `(:wat::holon::Blend x y 1 -1)`; stdlib macro.
 - ~~058-020 Q4~~ — Flip REJECTED; moot.
 - **Status:** Blend is ACCEPTED. All downstream stdlib macros are unblocked. Designer review may still reopen Blend in Round 3; the downstream cascade adapts to whatever final shape designers affirm.
 
@@ -417,7 +417,7 @@ The bareword-sweep agent flagged these as ambiguous — names left bare because 
 
 - **Math primitives** — `cos`, `sin`, `pi`, `log`, `ln` used inside Circular (058-018) and Log (058-017) macro expansions. **Decision:** these are used ONLY inside stdlib macros, so they live at `:wat::std::math::cos`, `:wat::std::math::sin`, `:wat::std::math::pi`, `:wat::std::math::log`, `:wat::std::math::ln`. Sub-proposal sweep pending (trivial; substitute at call sites).
 - **Substrate accessors derived from `:wat::config::dims`** — `noise-floor` (the `5/sqrt(d)` threshold) is the primary example. **Decision:** these become typed properties on `:wat::config`. `(:wat::config::noise-floor) -> :f64` is computed at freeze time from `:wat::config::dims` and exposed as a direct getter. The config struct grows a computed-field tier; setters set the independent fields (dims), computed fields are populated at freeze. FOUNDATION update pending.
-- **Algebra substrate operations** — `cosine`, `dot`, `encode`, `project`, `reject`, `anomalous-component`, `presence` appear bare in examples. **Decision:** these are algebra-level operations, so they live under `:wat::algebra::...` (e.g., `:wat::algebra::cosine`, `:wat::algebra::presence`). Distinct from `:wat::config::noise-floor` (which is a constant derived from dims) by the kind of value they return. Sub-proposal sweep pending.
+- **Algebra substrate operations** — `cosine`, `dot`, `encode`, `project`, `reject`, `anomalous-component`, `presence` appear bare in examples. **Decision:** these are algebra-level operations, so they live under `:wat::holon::...` (e.g., `:wat::holon::cosine`, `:wat::holon::presence`). Distinct from `:wat::config::noise-floor` (which is a constant derived from dims) by the kind of value they return. Sub-proposal sweep pending.
 - **Engram library operations** — `match-library`, `library-add!`, `entries` are app-level engram primitives. Not stdlib, not kernel — these live in the app's own keyword space (e.g., `:project::trading::engram/match`, `:project::trading::engram/add!`). The bang on `library-add!` is correct — the engram library mutates during learning, which is a program's private state behind a queue, not ambient state. Designers will see references to `entries` and `match-library` in examples; they are placeholder app-level ops.
 - **List combinators — RESOLVED.** The split between `:wat::core::` and `:wat::std::list::` is drawn along **Rust-direct correspondence**: core wraps single-method calls on Rust's `Iterator` / `Vec` / `&[T]`; stdlib wraps small compositions of those methods.
   - **`:wat::core::`** (single-method direct): `list`, `cons`, `first`, `second`, `rest`, `map`, `for-each`, `filter`, `fold`, `foldl`, `foldr`, `reduce`, `length`, `reverse`, `range`, `take`, `drop`, `empty?`. No `null?` — Rust has no null; wat follows. Each maps to a single Rust iterator method or equivalent (`xs.len()`, `xs.is_empty()`, `xs.iter().take(n)`, etc.).

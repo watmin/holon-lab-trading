@@ -8,7 +8,7 @@
 >
 > ```scheme
 > (:wat::core::defmacro (:my::vocab::Then (a :AST) (b :AST) -> :AST)
->   `(:wat::std::Sequential (:wat::core::vec ,a ,b)))
+>   `(:wat::holon::Sequential (:wat::core::vec ,a ,b)))
 > ```
 >
 > Same mechanics. Users' namespace. Project stdlib stays lean.
@@ -16,11 +16,11 @@
 > **Chain (058-012) was defined in terms of Then.** Post-rejection, Chain inlines the binary-Sequential pattern:
 >
 > ```scheme
-> (:wat::core::define (:wat::std::Chain (xs :Vec<holon::HolonAST>) -> :holon::HolonAST)
->   (:wat::algebra::Bundle
+> (:wat::core::define (:wat::std::Chain (xs :Vec<wat::holon::HolonAST>) -> :wat::holon::HolonAST)
+>   (:wat::holon::Bundle
 >     (pairwise-map
->       (:wat::core::lambda ((a :holon::HolonAST) (b :holon::HolonAST) -> :holon::HolonAST)
->         (:wat::std::Sequential (:wat::core::vec a b)))
+>       (:wat::core::lambda ((a :wat::holon::HolonAST) (b :wat::holon::HolonAST) -> :wat::holon::HolonAST)
+>         (:wat::holon::Sequential (:wat::core::vec a b)))
 >       xs)))
 > ```
 >
@@ -37,7 +37,7 @@ A wat stdlib macro (per 058-031-defmacro) that encodes "a, then b" — a DIRECTE
 
 ```scheme
 (:wat::core::defmacro (:wat::std::Then (a :AST) (b :AST) -> :AST)
-  `(:wat::algebra::Bundle (:wat::core::vec ,a (:wat::algebra::Permute ,b 1))))
+  `(:wat::holon::Bundle (:wat::core::vec ,a (:wat::holon::Permute ,b 1))))
 ```
 
 The first holon passes through unchanged; the second is permuted by one step. The bundled result is a vector whose structure encodes "a comes first, b comes after." The permutation makes `(Then a b)` categorically distinct from `(Then b a)` — order matters. Expansion happens at parse time, so `hash(AST)` sees only the canonical Bundle-over-Permute form.
@@ -73,7 +73,7 @@ Having a named Then lets Chain and Ngram write:
 
 ```scheme
 (:wat::core::defmacro (:wat::std::Chain (holons :AST) -> :AST)
-  `(:wat::algebra::Bundle (pairwise-map :wat::std::Then ,holons)))
+  `(:wat::holon::Bundle (pairwise-map :wat::std::Then ,holons)))
 ```
 
 Rather than inlining the permutation logic in each. Because `Then` is itself a macro, the expansion recurses — nested macros expand in turn until only algebra-core operations remain.
@@ -163,7 +163,7 @@ Yes — `(Bundle (list a (Permute b 1)))`. Named form is for reader clarity.
 ```scheme
 ;; wat/std/sequences.wat (or similar)
 (:wat::core::defmacro (:wat::std::Then (a :AST) (b :AST) -> :AST)
-  `(:wat::algebra::Bundle (:wat::core::vec ,a (:wat::algebra::Permute ,b 1))))
+  `(:wat::holon::Bundle (:wat::core::vec ,a (:wat::holon::Permute ,b 1))))
 ```
 
 Registration is parse-time (per 058-031-defmacro): every `(Then ...)` invocation is rewritten to the canonical Bundle-over-Permute form before hashing.

@@ -13,13 +13,13 @@
 
 Landed in wat-rs as a three-arg defmacro over Blend.
 
-- **Source:** [`wat-rs/wat/std/Amplify.wat`](https://github.com/watmin/wat-rs/blob/main/wat/std/Amplify.wat)
-- **Shape:** `(:wat::std::Amplify (x :AST<holon::HolonAST>) (y :AST<holon::HolonAST>) (s :AST<f64>) -> :AST<holon::HolonAST>)` → `` `(:wat::algebra::Blend ,x ,y 1.0 ,s) ``
-- **Tests:** indirect — exercised via Subtract + Reject/Project (all Blend-over-stdlib forms share the Blend primitive's coverage). No dedicated `wat-tests/std/Amplify.wat` yet; add when a concrete caller demands it.
+- **Source:** [`wat-rs/wat/holon/Amplify.wat`](https://github.com/watmin/wat-rs/blob/main/wat/holon/Amplify.wat)
+- **Shape:** `(:wat::holon::Amplify (x :AST<wat::holon::HolonAST>) (y :AST<wat::holon::HolonAST>) (s :AST<f64>) -> :AST<wat::holon::HolonAST>)` → `` `(:wat::holon::Blend ,x ,y 1.0 ,s) ``
+- **Tests:** indirect — exercised via Subtract + Reject/Project (all Blend-over-stdlib forms share the Blend primitive's coverage). No dedicated `wat-tests/holon/Amplify.wat` yet; add when a concrete caller demands it.
 
 ### What this inscription does NOT add
 
-- **No dedicated test file** — Amplify's semantics reduce to Blend's, already covered by `wat-tests/std/Subtract.wat`'s presence-vs-noise-floor discriminator pattern.
+- **No dedicated test file** — Amplify's semantics reduce to Blend's, already covered by `wat-tests/holon/Subtract.wat`'s presence-vs-noise-floor discriminator pattern.
 
 ---
 
@@ -28,9 +28,9 @@ Landed in wat-rs as a three-arg defmacro over Blend.
 A wat stdlib macro (per 058-031-defmacro) that scales the contribution of `y` in a blend with `x`:
 
 ```scheme
-(:wat::core::defmacro (:wat::std::Amplify (x :AST) (y :AST) (s :AST) -> :AST)
-  `(:wat::algebra::Blend ,x ,y 1 ,s))
-;; Expands at parse time to: (:wat::algebra::Blend x y 1 s)
+(:wat::core::defmacro (:wat::holon::Amplify (x :AST) (y :AST) (s :AST) -> :AST)
+  `(:wat::holon::Blend ,x ,y 1 ,s))
+;; Expands at parse time to: (:wat::holon::Blend x y 1 s)
 ;; which computes: threshold(1·x + s·y) — boost component y in x by factor s
 ```
 
@@ -63,13 +63,13 @@ Amplify frames the operation as "take `x` as the anchor, scale `y`'s emphasis by
 Vocab modules that want to emphasize a detected pattern in a noisy observation can write:
 
 ```scheme
-(:wat::std::Amplify observation pattern 3)   ; triple the pattern's weight
+(:wat::holon::Amplify observation pattern 3)   ; triple the pattern's weight
 ```
 
 Rather than:
 
 ```scheme
-(:wat::algebra::Blend observation pattern 1 3)   ; mechanically equivalent
+(:wat::holon::Blend observation pattern 1 3)   ; mechanically equivalent
 ```
 
 The first reads as intent. The second reads as mechanics.
@@ -94,8 +94,8 @@ Different idioms, same underlying primitive.
 **1. Trivial expansion.**
 
 ```scheme
-(:wat::core::defmacro (:wat::std::Amplify (x :AST) (y :AST) (s :AST) -> :AST)
-  `(:wat::algebra::Blend ,x ,y 1 ,s))
+(:wat::core::defmacro (:wat::holon::Amplify (x :AST) (y :AST) (s :AST) -> :AST)
+  `(:wat::holon::Blend ,x ,y 1 ,s))
 ```
 
 One-line expansion. Three tokens replaced by three tokens (`Amplify x y s` ≈ `Blend x y 1 s`). Is the name earning its place for a one-token "savings"?
@@ -117,13 +117,13 @@ Three redundancies. Each specific value collapses to a more-specific name.
 Alternative: extend Blend's interface to accept "amplify" as a keyword-ish convention:
 
 ```scheme
-(:wat::algebra::Blend x y :amplify 2)  ; syntactic sugar for weights (1, 2)
+(:wat::holon::Blend x y :amplify 2)  ; syntactic sugar for weights (1, 2)
 ```
 
 Or make Bundle variadic with weights:
 
 ```scheme
-(:wat::algebra::Bundle (:wat::core::vec x y) :weights (:wat::core::vec 1 2))
+(:wat::holon::Bundle (:wat::core::vec x y) :weights (:wat::core::vec 1 2))
 ```
 
 **Counter:** both alternatives complicate core interfaces. Keeping Amplify as a stdlib form preserves Blend's clean 4-arg signature and keeps the naming explicit. Stringly-typed keyword dispatch is WORSE than a named wrapper.
@@ -177,8 +177,8 @@ Yes — `(Blend x y 1 s)`. Named form earns its place via reader clarity.
 **wat stdlib addition** — `wat/std/blends.wat`:
 
 ```scheme
-(:wat::core::defmacro (:wat::std::Amplify (x :AST) (y :AST) (s :AST) -> :AST)
-  `(:wat::algebra::Blend ,x ,y 1 ,s))
+(:wat::core::defmacro (:wat::holon::Amplify (x :AST) (y :AST) (s :AST) -> :AST)
+  `(:wat::holon::Blend ,x ,y 1 ,s))
 ```
 
 Registered at parse time (per 058-031-defmacro): every `(Amplify x y s)` invocation is rewritten to `(Blend x y 1 s)` before hashing.

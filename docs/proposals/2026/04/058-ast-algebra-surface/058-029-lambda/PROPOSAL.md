@@ -75,11 +75,11 @@ Three positions:
 
 ```scheme
 ;; An anonymous function that doubles a Holon's emphasis against another:
-(:wat::core::lambda ((x :holon::HolonAST) (y :holon::HolonAST) -> :holon::HolonAST)
-  (:wat::std::Amplify x y 2))
+(:wat::core::lambda ((x :wat::holon::HolonAST) (y :wat::holon::HolonAST) -> :wat::holon::HolonAST)
+  (:wat::holon::Amplify x y 2))
 
 ;; Used inside map:
-(:wat::core::map (:wat::core::lambda ((t :holon::HolonAST) -> :holon::HolonAST) (:wat::algebra::Permute t 1))
+(:wat::core::map (:wat::core::lambda ((t :wat::holon::HolonAST) -> :wat::holon::HolonAST) (:wat::holon::Permute t 1))
      my-holons)
 
 ;; Stored in a local variable (but still anonymous — no symbol-table entry):
@@ -122,7 +122,7 @@ Stdlib forms like `map`, `reduce`, `filter` take functions as arguments:
   ...)
 
 ;; Call site with an inline lambda:
-(:wat::core::map (:wat::core::lambda ((t :holon::HolonAST) -> :holon::HolonAST) (:wat::algebra::Permute t 1))
+(:wat::core::map (:wat::core::lambda ((t :wat::holon::HolonAST) -> :wat::holon::HolonAST) (:wat::holon::Permute t 1))
      (:wat::core::vec a b c d))
 ```
 
@@ -134,11 +134,11 @@ The wat type system includes `:fn(args)->return` as a type (per 058-030-types). 
 
 ```scheme
 ;; Awkward — you must add a named helper to stdlib:
-(:wat::core::define (:internal::my-shift (t :holon::HolonAST) -> :holon::HolonAST) (:wat::algebra::Permute t 1))
+(:wat::core::define (:internal::my-shift (t :wat::holon::HolonAST) -> :wat::holon::HolonAST) (:wat::holon::Permute t 1))
 (:wat::core::map :internal::my-shift (:wat::core::vec a b c))
 
 ;; Clean — pass the function directly:
-(:wat::core::map (:wat::core::lambda ((t :holon::HolonAST) -> :holon::HolonAST) (:wat::algebra::Permute t 1)) (:wat::core::vec a b c))
+(:wat::core::map (:wat::core::lambda ((t :wat::holon::HolonAST) -> :wat::holon::HolonAST) (:wat::holon::Permute t 1)) (:wat::core::vec a b c))
 ```
 
 The second form is load-bearing for any language that treats functions as values.
@@ -148,9 +148,9 @@ The second form is load-bearing for any language that treats functions as values
 Lambdas capture their enclosing lexical scope, including references to the static symbol table:
 
 ```scheme
-(:wat::core::define (:wat::std::amplify-all (xs :Vec<holon::HolonAST>) (reference :holon::HolonAST) (factor :f64) -> :Vec<holon::HolonAST>)
-  (:wat::core::map (:wat::core::lambda ((x :holon::HolonAST) -> :holon::HolonAST)
-         (:wat::std::Amplify x reference factor))    ; references `reference` and `factor` from enclosing scope
+(:wat::core::define (:wat::std::amplify-all (xs :Vec<wat::holon::HolonAST>) (reference :wat::holon::HolonAST) (factor :f64) -> :Vec<wat::holon::HolonAST>)
+  (:wat::core::map (:wat::core::lambda ((x :wat::holon::HolonAST) -> :wat::holon::HolonAST)
+         (:wat::holon::Amplify x reference factor))    ; references `reference` and `factor` from enclosing scope
        xs))
 ```
 
@@ -199,9 +199,9 @@ Having both as separate primitives lets the evaluator handle them independently.
 Inside a larger function, lambdas let you factor out small transformations without polluting the global symbol table:
 
 ```scheme
-(:wat::core::define (:my::complex-analysis (data :holon::HolonAST) -> :holon::HolonAST)
-  (:wat::core::let ((extract-signal (:wat::core::lambda ((d :holon::HolonAST) -> :holon::HolonAST) (:wat::algebra::Orthogonalize d noise)))
-        (amplify-signal (:wat::core::lambda ((s :holon::HolonAST) -> :holon::HolonAST) (:wat::std::Amplify s reference 2))))
+(:wat::core::define (:my::complex-analysis (data :wat::holon::HolonAST) -> :wat::holon::HolonAST)
+  (:wat::core::let ((extract-signal (:wat::core::lambda ((d :wat::holon::HolonAST) -> :wat::holon::HolonAST) (:wat::holon::Orthogonalize d noise)))
+        (amplify-signal (:wat::core::lambda ((s :wat::holon::HolonAST) -> :wat::holon::HolonAST) (:wat::holon::Amplify s reference 2))))
     (amplify-signal (extract-signal data))))
 ```
 
@@ -227,7 +227,7 @@ Capturing lexical scope is non-trivial. The evaluator must:
 **3. Type annotations on small lambdas feel verbose.**
 
 ```scheme
-(map (lambda ((t :holon::HolonAST) -> :holon::HolonAST) (Permute t 1)) xs)
+(map (lambda ((t :wat::holon::HolonAST) -> :wat::holon::HolonAST) (Permute t 1)) xs)
 ```
 
 vs. Clojure's:

@@ -12,7 +12,7 @@
 >
 > ```scheme
 > (:wat::core::defmacro (:my::vocab::Unbind (c :AST) (k :AST) -> :AST)
->   `(:wat::algebra::Bind ,c ,k))
+>   `(:wat::holon::Bind ,c ,k))
 > ```
 >
 > Same mechanics. Users' namespace. Project stdlib stays lean.
@@ -64,7 +64,7 @@ A wat stdlib macro (per 058-031-defmacro) that represents the INVERSE of a Bind 
 
 ```scheme
 (:wat::core::defmacro (:wat::std::Unbind (c :AST) (k :AST) -> :AST)
-  `(:wat::algebra::Bind ,c ,k))
+  `(:wat::holon::Bind ,c ,k))
 ```
 
 Identical math to Bind. The ONLY distinction is reader intent at source: Unbind communicates "I am decoding, extracting, recovering" rather than "I am binding, composing, encoding." Expansion happens at parse time, so `hash((Unbind c k)) = hash((Bind c k))` — the alias-collision concern from Beckman's finding #4 does not apply.
@@ -85,10 +85,10 @@ Typical usage:
 ```scheme
 ;; Encoding: bind each key to its value, bundle them
 (:wat::core::define :my::app::record
-  (:wat::algebra::Bundle (:wat::core::vec
-    (:wat::algebra::Bind :color red)
-    (:wat::algebra::Bind :shape circle)
-    (:wat::algebra::Bind :size large))))
+  (:wat::holon::Bundle (:wat::core::vec
+    (:wat::holon::Bind :color red)
+    (:wat::holon::Bind :shape circle)
+    (:wat::holon::Bind :size large))))
 
 ;; Decoding: unbind by a known key, cleanup against candidate values
 (:wat::core::define :my::app::recovered-color
@@ -130,7 +130,7 @@ Versus:
 
 ```scheme
 (:wat::core::define (:wat::std::get map-holon key candidates)
-  (cleanup (:wat::algebra::Bind map-holon key) candidates))  ; semantically confusing
+  (cleanup (:wat::holon::Bind map-holon key) candidates))  ; semantically confusing
 ```
 
 The first reads as "to get from a map, unbind the key and clean up." The second reads as "to get, bind the key to the map?" — which is backwards from the intent.
@@ -210,7 +210,7 @@ Yes — `(Bind c k)`. Named macro earns its place via reader clarity; the source
 
 ```scheme
 (:wat::core::defmacro (:wat::std::Unbind (c :AST) (k :AST) -> :AST)
-  `(:wat::algebra::Bind ,c ,k))
+  `(:wat::holon::Bind ,c ,k))
 ```
 
 Registered at parse time (per 058-031-defmacro): every `(Unbind c k)` invocation is rewritten to `(Bind c k)` before hashing.

@@ -7,9 +7,9 @@
 
 ---
 
-## INSCRIPTION — 2026-04-19 — Capacity-guard cascade: return type becomes `:Result<holon::HolonAST, :wat::algebra::CapacityExceeded>`
+## INSCRIPTION — 2026-04-19 — Capacity-guard cascade: return type becomes `:Result<wat::holon::HolonAST, :wat::holon::CapacityExceeded>`
 
-Bundle's return type changed during the capacity-guard arc (session 2026-04-19). The shipped implementation — wat-rs commit `e63e428` — returns `:Result<holon::HolonAST, :wat::algebra::CapacityExceeded>`, not the bare `:holon::HolonAST` this proposal originally locked. The "List-Argument Signature" lock remains unchanged: Bundle still takes exactly one `:Vec<holon::HolonAST>` argument. What changed is the return type.
+Bundle's return type changed during the capacity-guard arc (session 2026-04-19). The shipped implementation — wat-rs commit `e63e428` — returns `:Result<wat::holon::HolonAST, :wat::holon::CapacityExceeded>`, not the bare `:wat::holon::HolonAST` this proposal originally locked. The "List-Argument Signature" lock remains unchanged: Bundle still takes exactly one `:Vec<wat::holon::HolonAST>` argument. What changed is the return type.
 
 ### Why the Result wrap
 
@@ -27,11 +27,11 @@ FOUNDATION's "Dimensionality" section used Kanerva's `d / (2·ln K)` with an inf
 
 Every stdlib macro that expands to a Bundle now inherits the Result wrap:
 
-- `:wat::std::Ngram` — return type is now `:AST<Result<holon::HolonAST, wat::algebra::CapacityExceeded>>`.
-- `:wat::std::Bigram` — same (expands to `:wat::std::Ngram 2 ...`).
-- `:wat::std::Trigram` — same (expands to `:wat::std::Ngram 3 ...`).
+- `:wat::holon::Ngram` — return type is now `:AST<Result<wat::holon::HolonAST, wat::holon::CapacityExceeded>>`.
+- `:wat::holon::Bigram` — same (expands to `:wat::holon::Ngram 2 ...`).
+- `:wat::holon::Trigram` — same (expands to `:wat::holon::Ngram 3 ...`).
 - `:wat::std::HashMap`, `:wat::std::HashSet`, `:wat::std::Vec` — checker schemes updated when the constructor dispatchers route through Bundle (not all of them do today; tracked).
-- `:wat::std::Reject`, `:wat::std::Project` — these use Blend, not Bundle; unaffected.
+- `:wat::holon::Reject`, `:wat::holon::Project` — these use Blend, not Bundle; unaffected.
 
 Callers of any Result-returning stdlib form either match or `try` at the call site.
 
@@ -40,27 +40,27 @@ Callers of any Result-returning stdlib form either match or `try` at the call si
 Per 058-030 amendment (struct runtime inscription 2026-04-19), the algebra gains a built-in struct:
 
 ```scheme
-(:wat::core::struct :wat::algebra::CapacityExceeded
+(:wat::core::struct :wat::holon::CapacityExceeded
   (cost   :i64)
   (budget :i64))
 ```
 
-Fields match the struct's field declaration order: `cost` is what the Bundle was asked to hold; `budget` is what the substrate could hold. The auto-generated `:wat::algebra::CapacityExceeded/cost` and `/budget` accessors read each field. Registered in `TypeEnv::with_builtins` — wat-rs's self-trust path for declaring its own `:wat::*` types.
+Fields match the struct's field declaration order: `cost` is what the Bundle was asked to hold; `budget` is what the substrate could hold. The auto-generated `:wat::holon::CapacityExceeded/cost` and `/budget` accessors read each field. Registered in `TypeEnv::with_builtins` — wat-rs's self-trust path for declaring its own `:wat::*` types.
 
 ### The canonical usage pattern
 
 ```scheme
-(:wat::core::define (:app::build (items :Vec<holon::HolonAST>)
-                                 -> :Result<holon::HolonAST, wat::algebra::CapacityExceeded>)
-  (Ok (:wat::core::try (:wat::algebra::Bundle items))))
+(:wat::core::define (:app::build (items :Vec<wat::holon::HolonAST>)
+                                 -> :Result<wat::holon::HolonAST, wat::holon::CapacityExceeded>)
+  (Ok (:wat::core::try (:wat::holon::Bundle items))))
 
 (:wat::core::define (:user::main -> :i64)
   (:wat::core::match (:app::build huge-list)
     ((Ok _) 0)
     ((Err e)
       (:wat::core::i64::-
-        (:wat::algebra::CapacityExceeded/cost e)
-        (:wat::algebra::CapacityExceeded/budget e)))))
+        (:wat::holon::CapacityExceeded/cost e)
+        (:wat::holon::CapacityExceeded/budget e)))))
 ```
 
 ### Implementation Reference
@@ -82,13 +82,13 @@ Fields match the struct's field declaration order: `cost` is what the Bundle was
 Clarify and lock `Bundle`'s signature as taking a single LIST argument (not variadic).
 
 ```scheme
-(:wat::algebra::Bundle list-of-holons)    ; one argument — a list
+(:wat::holon::Bundle list-of-holons)    ; one argument — a list
 ```
 
 Not:
 
 ```scheme
-(:wat::algebra::Bundle a b c d)             ; variadic
+(:wat::holon::Bundle a b c d)             ; variadic
 ```
 
 ## Current Ambiguity
@@ -117,13 +117,13 @@ List-taking is the natural Lisp form for any operation over a variable number of
 
 ```scheme
 ;; Composes with map:
-(:wat::algebra::Bundle (:wat::core::map some-encoder raw-values))
+(:wat::holon::Bundle (:wat::core::map some-encoder raw-values))
 
 ;; Composes with filter:
-(:wat::algebra::Bundle (:wat::core::filter proven? candidates))
+(:wat::holon::Bundle (:wat::core::filter proven? candidates))
 
 ;; Explicit list when needed:
-(:wat::algebra::Bundle (:wat::core::vec a b c))
+(:wat::holon::Bundle (:wat::core::vec a b c))
 ```
 
 Variadic Bundle forces `(apply Bundle (some-list))` at every indirection. The list-taking form composes cleanly without `apply`.

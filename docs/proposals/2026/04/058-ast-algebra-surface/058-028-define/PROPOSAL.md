@@ -71,8 +71,8 @@ Four positions:
 ### Example
 
 ```scheme
-(:wat::core::define (:wat::std::Difference (a :holon::HolonAST) (b :holon::HolonAST) -> :holon::HolonAST)
-  (:wat::algebra::Blend a b 1 -1))
+(:wat::core::define (:wat::std::Difference (a :wat::holon::HolonAST) (b :wat::holon::HolonAST) -> :wat::holon::HolonAST)
+  (:wat::holon::Blend a b 1 -1))
 ```
 
 Readable as: "define the function `:wat::std::Difference`, which takes two Holons named `a` and `b` and returns a Holon, by evaluating `(Blend a b 1 -1)`."
@@ -106,9 +106,9 @@ Registered by name in the startup symbol table. After startup completes, the sym
 Every stdlib proposal in 058 uses `define` in its expansion:
 
 ```scheme
-(:wat::core::define (:wat::std::Difference a b) (:wat::algebra::Blend a b 1 -1))
-(:wat::core::define (:wat::std::Concurrent xs) (:wat::algebra::Bundle xs))
-(:wat::core::define (:wat::std::Chain xs) (:wat::algebra::Bundle (pairwise-map :wat::std::Then xs)))
+(:wat::core::define (:wat::std::Difference a b) (:wat::holon::Blend a b 1 -1))
+(:wat::core::define (:wat::std::Concurrent xs) (:wat::holon::Bundle xs))
+(:wat::core::define (:wat::std::Chain xs) (:wat::holon::Bundle (pairwise-map :wat::std::Then xs)))
 ```
 
 Without a `define` primitive in the wat language, these are theoretical compositions, not runnable definitions.
@@ -164,17 +164,17 @@ With `define` available:
 
 ```
 wat/std/blends.wat:
-  (define (:wat::std::Difference (a :holon::HolonAST) (b :holon::HolonAST) -> :holon::HolonAST)
+  (define (:wat::std::Difference (a :wat::holon::HolonAST) (b :wat::holon::HolonAST) -> :wat::holon::HolonAST)
     (Blend a b 1 -1))
-  (define (:wat::std::Amplify (x :holon::HolonAST) (y :holon::HolonAST) (s :f64) -> :holon::HolonAST)
+  (define (:wat::holon::Amplify (x :wat::holon::HolonAST) (y :wat::holon::HolonAST) (s :f64) -> :wat::holon::HolonAST)
     (Blend x y 1 s))
-  (define (:wat::std::Subtract (x :holon::HolonAST) (y :holon::HolonAST) -> :holon::HolonAST)
+  (define (:wat::holon::Subtract (x :wat::holon::HolonAST) (y :wat::holon::HolonAST) -> :wat::holon::HolonAST)
     (Blend x y 1 -1))
 
 wat/std/sequences.wat:
-  (define (:wat::std::Then (a :holon::HolonAST) (b :holon::HolonAST) -> :holon::HolonAST)
+  (define (:wat::std::Then (a :wat::holon::HolonAST) (b :wat::holon::HolonAST) -> :wat::holon::HolonAST)
     (Bundle (list a (Permute b 1))))
-  (define (:wat::std::Chain (holons :Vec<holon::HolonAST>) -> :holon::HolonAST)
+  (define (:wat::std::Chain (holons :Vec<wat::holon::HolonAST>) -> :wat::holon::HolonAST)
     (Bundle (pairwise-map :wat::std::Then holons)))
 ```
 
@@ -196,7 +196,7 @@ Nothing prevents a user from writing `(define (:wat::std::Difference ...) ...)` 
 
 **3. Generic types.**
 
-This proposal uses concrete types (`:holon::HolonAST`, `:Atom`, `:f64`). For higher-order stdlib (`map`, `reduce`, `filter`), generics are needed: `(define (:wat::std::map (f :fn(T)->U) (xs :Vec<T>) -> :Vec<U>) ...)`.
+This proposal uses concrete types (`:wat::holon::HolonAST`, `:Atom`, `:f64`). For higher-order stdlib (`map`, `reduce`, `filter`), generics are needed: `(define (:wat::std::map (f :fn(T)->U) (xs :Vec<T>) -> :Vec<U>) ...)`.
 
 **Counter:** generics are part of 058-030-types. This proposal uses concrete types initially; generics layer on without changing `define`'s shape.
 
@@ -286,8 +286,8 @@ Once `define` is implemented (alongside `lambda` per 058-029 and types per 058-0
 7. **First wat program.** From BOOK's "The first program" section:
 
    ```scheme
-   (:wat::core::define (:watmin::hello-world (name :Atom) -> :holon::HolonAST)
-     (:wat::std::Sequential (:wat::core::vec (:wat::algebra::Atom "hello") name)))
+   (:wat::core::define (:watmin::hello-world (name :Atom) -> :wat::holon::HolonAST)
+     (:wat::holon::Sequential (:wat::core::vec (:wat::holon::Atom "hello") name)))
    ```
 
    This proposal specifies the `define` that makes that program runnable. The first program's execution waits on this proposal's implementation plus 058-029 and 058-030.

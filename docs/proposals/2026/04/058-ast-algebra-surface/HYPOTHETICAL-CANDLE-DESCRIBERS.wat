@@ -35,7 +35,7 @@
 ;; ------------------------------------------------------------
 
 ;; Doji — open and close are nearly equal.
-(define (:demo::desc::doji (c :demo::market/Candle) -> :holon::HolonAST)
+(define (:demo::desc::doji (c :demo::market/Candle) -> :wat::holon::HolonAST)
   (if (< (abs (- (:open c) (:close c)))
          (* 0.001 (:close c)))
       (Sequential
@@ -45,7 +45,7 @@
       (Atom :null)))
 
 ;; Hammer — long lower wick, small body near the high.
-(define (:demo::desc::hammer (c :demo::market/Candle) -> :holon::HolonAST)
+(define (:demo::desc::hammer (c :demo::market/Candle) -> :wat::holon::HolonAST)
   (let ((body       (abs (- (:open c) (:close c))))
         (lower-wick (- (min (:open c) (:close c)) (:low c))))
     (if (> lower-wick (* 2 body))
@@ -57,7 +57,7 @@
         (Atom :null))))
 
 ;; Strong bullish — close noticeably above open, high volume.
-(define (:demo::desc::strong-bullish (c :demo::market/Candle) -> :holon::HolonAST)
+(define (:demo::desc::strong-bullish (c :demo::market/Candle) -> :wat::holon::HolonAST)
   (if (and (> (:close c) (* 1.02 (:open c)))
            (> (:volume c) 1000))
       (Sequential
@@ -70,7 +70,7 @@
       (Atom :null)))
 
 ;; Quiet day — tight body, low volume.
-(define (:demo::desc::quiet-day (c :demo::market/Candle) -> :holon::HolonAST)
+(define (:demo::desc::quiet-day (c :demo::market/Candle) -> :wat::holon::HolonAST)
   (if (and (< (abs (- (:open c) (:close c)))
               (* 0.005 (:close c)))
            (< (:volume c) 100))
@@ -87,7 +87,7 @@
 ;; measure describers against.
 ;; ------------------------------------------------------------
 
-(define (:demo::encode-candle (c :demo::market/Candle) -> :holon::HolonAST)
+(define (:demo::encode-candle (c :demo::market/Candle) -> :wat::holon::HolonAST)
   (Sequential
     (list (Bind (Atom :open)   (Thermometer (:open c)   0 100))
           (Bind (Atom :high)   (Thermometer (:high c)   0 100))
@@ -101,7 +101,7 @@
 ;; returned something other than (Atom :null).
 ;; ------------------------------------------------------------
 
-(define (:demo::alive? (t :holon::HolonAST) -> :bool)
+(define (:demo::alive? (t :wat::holon::HolonAST) -> :bool)
   (not (equal-ast? t (Atom :null))))
 
 
@@ -115,8 +115,8 @@
 ;; cache serves repeated lookups.
 ;; ------------------------------------------------------------
 
-(define (:demo::score (describer-output :holon::HolonAST)
-                     (candle-holon     :holon::HolonAST)
+(define (:demo::score (describer-output :wat::holon::HolonAST)
+                     (candle-holon     :wat::holon::HolonAST)
                      -> :f64)
   (if (:demo::alive? describer-output)
       (cosine (encode describer-output)
