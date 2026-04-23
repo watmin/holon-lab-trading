@@ -88,9 +88,19 @@ Source: `archived/pre-wat-native/src/encoding/`.
 - `rhythm.rs` (200L) — builds rhythm ASTs from a candle window.
 - `scale_tracker.rs` (142L) — tracks scale changes across windows.
 
-**Forcing function.** This is where VSA primitives first become necessary. Resolve the `wat-holon` question before opening Phase 3.
+**`wat-holon` question resolved.** No sibling crate needed. `wat-rs` ships `:wat::holon::*` (arc 022) — Atom, Bind, Bundle, Blend, Permute, Thermometer, cosine, dot, presence?, plus the ten wat-written idioms (Amplify, Subtract, Reject, Project, Sequential, Ngram, Bigram, Trigram, Log, Circular). That surface covers the archive's `ThoughtASTKind` variants. `Linear` maps to `Thermometer(value, -scale, scale)` (058-008 Linear REJECTED as redundant).
 
-**Status: foggy.**
+**3.1** — **Shipped 2026-04-22** (`33170ad`). `:trading::encoding::round-to-2` — one-line wrap of arc 019's `:wat::core::f64::round` primitive. Fixed digit-count at 2 per archive's `round_to(v, 2)` convention.
+
+**3.2** — **Shipped 2026-04-22** (`ecb847b`). `:trading::encoding::ScaleTracker` — learned-scale EMA tracker. `/fresh`, `/update`, `/scale`, plus `/COVERAGE` + `/FLOOR` constants. Values-up: `update` returns a new tracker. Five tests green via the manual `run-sandboxed-ast` pattern (bypasses deftest's `:None`-scope hermetic sandbox).
+
+**3.3** — **Shipped 2026-04-22**. `:trading::encoding::scaled-linear` — convenience helper that looks up a per-atom-name tracker, updates it, and returns a `Bind(Atom(name), Thermometer(value, -scale, scale))` fact with the updated `HashMap<String, ScaleTracker>`. Values-up: returns `(HolonAST, updated-scales)` tuple. Forcing function for `:wat::core::assoc` (arc 020) — HashMap put without which every values-up `HashMap` caller would be stuck. Four tests green. Archive's `Linear { value, scale }` maps cleanly to `Thermometer(value, -scale, scale)` — symmetric bounds around zero, width 2·scale.
+
+**3.4** — **Next.** `:trading::encoding::rhythm` — build rhythm ASTs from a candle window. Source: `archived/pre-wat-native/src/encoding/rhythm.rs` (200L). Uses `:wat::holon::Bundle` of `:wat::holon::Trigram` — wat's existing idioms cover this directly. Watch for the `sqrt(dims)` capacity budget (058-003 INSCRIPTION + BOOK Chapter 11). **Status: obvious in shape.**
+
+**3.5** — **Foggy.** `:trading::encoding::thought_encoder` (ThoughtAST, ThoughtASTKind, composition cache) + `:trading::encoding::encode` (dispatcher over vocab). Both depend on Phase 2 (vocab), which is still unstarted. Opens once vocab has a shape to dispatch over.
+
+**Status: 3.1–3.3 shipped; 3.4 ready; 3.5 foggy.**
 
 ### Phase 4 — Learning (Reckoner + OnlineSubspace)
 
