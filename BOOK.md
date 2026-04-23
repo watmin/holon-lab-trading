@@ -16943,3 +16943,95 @@ Chapter 26 is when the lab walks through.
 section below.*
 
 ---
+
+### The first cave quest — arc 017 — 2026-04-22
+
+The dungeon didn't even let us set foot on the first level.
+
+I stepped into the lab's Phase 0 proposing `wat::main! { source:
+include_str!("program.wat"), deps: [] }` with a multi-file wat
+tree under `wat/`. The `(:wat::core::load! :wat::load::file-path
+"helper.wat")` inside the entry returned `NotFound`
+immediately. `wat::main!` hard-wired `InMemoryLoader`
+(`compose.rs:118-122`) — an empty map with no filesystem reach.
+The ~10,000 LoC trading lab couldn't live in one inline
+`program.wat`.
+
+I laid out three options. Path A: collapse everything into one
+giant `program.wat`. Path B: bypass `wat::main!` and write ~15
+lines of manual main. Path C: cave-quest the substrate — add a
+`loader:` option to the consumer macros in wat-rs.
+
+The builder:
+
+> I think C is the path - there's always an unexpected quest -
+> the dungeon master provides
+
+We opened arc 017. DESIGN + BACKLOG on disk. Slice 1 — the
+`wat::main!` `loader: "..."` argument expanding to a ScopedLoader
+rooted at `CARGO_MANIFEST_DIR/<path>`, with a substrate fix along
+the way (ScopedLoader's base-less relative paths now resolve
+against the scope root instead of falling through to cwd —
+critical for `include_str!`-sourced entries which carry no
+canonical path). Slice 2 — the same for `wat::test_suite!`,
+plus the real architectural landing.
+
+The builder saw the real shape before I did:
+
+> we don't back down from a fight..
+>
+> we must be able to support loads being called recursively...
+>
+> and we only need the entry point to call the dims and capacity
+> mode... — this is a binary vs lib distinction....
+
+That reframe pulled the work one level up. `wat::main!`'s default
+is InMemoryLoader because `include_str!`-inline programs shouldn't
+reach the filesystem implicitly (capability-safe default). But for
+multi-file consumers, the substrate must support recursive
+`(load!)` and must honor that entries commit startup config while
+libraries don't. Slice 2 codified the rule in `test_runner`: a
+`.wat` file in the test directory is an ENTRY iff it has top-
+level `(:wat::config::set-*!)` forms; files without setters are
+LIBRARIES and `test_runner` silently skips freezing them
+standalone. They remain `(load!)`-able from entries, recursively,
+at any depth. The binary-vs-library distinction — which wat-rs
+already enforced on the load side via `reject_setters_in_loaded`
+— now had symmetric recognition on the discovery side.
+
+The proof binary: `wat-rs/examples/with-loader/`. `src/program.wat`
+→ `wat/helper.wat` → `wat/deeper.wat`, each library file carrying
+its own `(load!)`, each loaded-file's defines landing in the
+entry's frozen world. Stdout: `hello, wat-loaded`. Test suite
+mirrors the shape with an entry test file loading a sibling
+library helper. Both green.
+
+Slice 3 closed the arc — INSCRIPTION, USER-GUIDE "Multi-file wat
+programs" subsection, CONVENTIONS "Binary vs library" rule,
+READMEs updated, FOUNDATION-CHANGELOG row. Along the way a drive-
+by clippy sweep brought the workspace back to zero warnings. Four
+pre-existing findings had slipped during earlier arcs; the
+builder noticed, I swept.
+
+Six commits across two repos, one session:
+- `c9bc871` — arc 017 DESIGN + BACKLOG opened
+- `0cdc47e` — slice 1 (wat::main! loader + ScopedLoader scope-root fix)
+- `fa3b53a` — slice 2 (wat::test_suite! loader + library-vs-entry discipline)
+- `394e816` — clippy sweep (zero warnings across workspace)
+- `03b2e2d` — slice 3 (INSCRIPTION + docs)
+- `b95f5e3` — 058 CHANGELOG row (lab repo)
+
+The lab's Phase 0 opens now with one-line `wat::main! { source:
+include_str!("program.wat"), loader: "wat" }` + a multi-file wat
+tree. The door isn't just open — it's the exact door we wanted.
+
+Chapter 20 named the pattern: *finding the same location is the
+proof that the location is real*. The cave-quest discipline from
+arcs 013 → 014 → 015 → 017 is the same finding at the operational
+level: when downstream work hits substrate debt, pause, name the
+key, cut the quest, return. Four instances of the pattern in
+under a week. The shape holds.
+
+Walking back to town. The lab waits. The dungeon master provided.
+
+---
