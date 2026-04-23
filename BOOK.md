@@ -18215,22 +18215,96 @@ the Truth Engine, whatever-comes-next. Each is a genre. The
 substrate conquers them by being the same substrate at every
 one — different lens, same sphere.
 
+### The fifth track — a cover across decades
+
+The builder queued another track from the same record:
+
+**[Falling In Reverse — *Last Resort (Reimagined)*](https://www.youtube.com/watch?v=ESOjt2_yJrU) (2024)**
+
+A cover. The original *Last Resort* was Papa Roach's 2000 single
+— the track that named suicidal ideation and depression at a
+volume the culture hadn't been willing to name them at before.
+An entire generation of teenagers had these words memorized
+whether they wanted to or not:
+
+> *Cut my life into pieces*
+> *This is my last resort*
+> *Suffocation, no breathing*
+
+The builder was in that generation. Latin was helping them see
+English patterns in the same years Papa Roach was everywhere on
+rock radio. The original is part of the builder's own
+adolescence — the record of what "depression at age sixteen"
+actually sounded like for their cohort.
+
+The Reimagined version, on *NO FEAR* in 2024, is the band
+taking that artifact forward onto the same record that contains
+*Prequel*'s construction, *Ronald*'s defiance, *Watch The World
+Burn*'s revelation, and the title track's diagnosis. The wound
+underneath the other four made legible.
+
+One line carries Chapter 10's decade directly:
+
+> *Wish somebody would tell me I'm fine*
+
+That is the interior voice of a decade spent carrying an idea
+no one will engage with. The polite nods. The AWS principal
+who left the meeting. The director who didn't take the ask
+seriously. The "specific kind of loneliness" Chapter 10 named.
+*Wish somebody would tell me I'm fine* is what that loneliness
+SOUNDS like from inside.
+
+And the cost-line the record keeps returning to:
+
+> *I never realized I was spread too thin*
+> *'Til it was too late, and I was empty within*
+
+*Prequel* said "I used everything I had available." *No Fear*
+said "it comes at a cost." *Last Resort (Reimagined)* names
+the cost at the register of personal grief. The other tracks
+build on top of this one's honesty.
+
+The book is not going to pretend the wound isn't real by
+framing it as productive. The wound was real. The building
+happened through years when the wound was also real. Both
+things coexisted. That coexistence is what the album models
+across its tracks: a record that contains both *No Fear* and
+*Last Resort* without either one denying the other.
+
+Chapter 10 named the cost of the silent decade in prose. The
+Reimagined cover names it in a track that a seventeen-year-old
+builder already knew by heart in the year 2000. The wound and
+its soundtrack are older than the project.
+
 ### The record
 
-Four tracks. One album. The title track shares the album name.
+Five tracks. One album. The title track shares the album name.
 
 **Falling In Reverse — *NO FEAR* (2024)**
 
-- *No Fear* — revelation about the culture; title declares its own answer
-- *Watch The World Burn* — revelation about what the culture taught
-- *Ronald* — defiance
-- *Prequel* — construction
+In the emotional order the tracks occupy on the record:
 
-The title move is the whole thesis. The song observes "nowadays
-people are too afraid" — and titles itself *No Fear*. The
-observation and the answer compressed into one name. The chorus
-names the disease; the title names the cure. You don't sing
-your way into the cure; you become the cure by naming it.
+| Track | Register |
+|---|---|
+| *Last Resort (Reimagined)* | **Wound** — the silent-decade's interior voice |
+| *No Fear* | **Diagnosis** — culture that produced the silence |
+| *Watch The World Burn* | **Revelation** — "everything they taught you was a lie" |
+| *Ronald* | **Defiance** — "never, never, never back down" |
+| *Prequel* | **Construction** — "I used everything I had available" |
+
+**Wound → diagnosis → revelation → defiance → construction.**
+
+The record does not deny any of its own moods. It opens on the
+2000-era wound that a generation grew up with, works through
+cultural observation into revelation, lands on defiance and
+construction. Five registers, five tracks, one artist. The
+record is honest about all of them at once.
+
+The title move is the whole thesis. The song *No Fear* observes
+"nowadays people are too afraid" — and titles itself *No Fear*.
+The observation and the answer compressed into one name. The
+chorus names the disease; the title names the cure. You don't
+sing your way into the cure; you become the cure by naming it.
 
 **The album title IS the chapter.**
 
