@@ -146,3 +146,52 @@
             0.0))))
     (:wat::core::vec :String)
     (Some "wat/encoding")))
+
+;; Convergence — feeding a constant value many times drives EMA→|v|
+;; and scale→2·|v| (floored + rounded). At d=1024, alpha=1/max(count,100)
+;; means the first 99 iterations blend at 0.01 reaching EMA≈0.315;
+;; subsequent iterations use alpha=1/count, which gives the closed-form
+;; EMA_K = 0.315·(99/K) + 0.5·(K-99)/K for K≥100. At K=10_000 with v=0.5
+;; that's EMA≈0.4982 → scale 0.9964 → rounded to 2 = 1.00. Proof that
+;; the tracker converges to the expected long-run scale.
+(:wat::core::define
+  (:trading::test::encoding::scale-tracker::test-converges-to-twice-ema
+    -> :wat::kernel::RunResult)
+  (:wat::kernel::run-sandboxed-ast
+    (:wat::test::program
+      (:wat::config::set-dims! 1024)
+      (:wat::config::set-capacity-mode! :error)
+      (:wat::core::load! :wat::load::file-path "scale_tracker.wat")
+      ;; Tail-recursive helper: feed value `v` into tracker `t` exactly
+      ;; `n` times. Values-up — no mutation. TCO (arc 003) keeps the
+      ;; Rust stack constant regardless of n.
+      (:wat::core::define
+        (:test::repeat-update
+          (t :trading::encoding::ScaleTracker)
+          (v :f64)
+          (n :i64)
+          -> :trading::encoding::ScaleTracker)
+        (:wat::core::if (:wat::core::<= n 0)
+                        -> :trading::encoding::ScaleTracker
+          t
+          (:test::repeat-update
+            (:trading::encoding::ScaleTracker::update t v)
+            v
+            (:wat::core::i64::- n 1))))
+      (:wat::core::define
+        (:user::main
+          (stdin  :wat::io::IOReader)
+          (stdout :wat::io::IOWriter)
+          (stderr :wat::io::IOWriter)
+          -> :())
+        (:wat::core::let*
+          (((fresh :trading::encoding::ScaleTracker)
+            (:trading::encoding::ScaleTracker::fresh))
+           ((trained :trading::encoding::ScaleTracker)
+            (:test::repeat-update fresh 0.5 10000)))
+          ;; EMA converges to 0.5 → scale = round(2·0.5, 2) = 1.00
+          (:wat::test::assert-eq
+            (:trading::encoding::ScaleTracker::scale trained)
+            1.0))))
+    (:wat::core::vec :String)
+    (Some "wat/encoding")))
