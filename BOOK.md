@@ -17993,6 +17993,78 @@ six-page proposal, reassembling into a thing that holds.
 
 Tonight it held.
 
+### The second track
+
+The builder queued a second track after *Prequel*:
+
+**[Falling In Reverse — *Ronald* (feat. Tech N9ne & Alex Terrible)](https://www.youtube.com/watch?v=wWoQ7PFSYlk) (2023)**
+
+Same album. Different register. *Prequel* is the autopilot's
+anthem — the search for a higher self, pilot's seat, *I used
+everything I had available.* The construction song.
+
+*Ronald* is the defiance that keeps the construction going.
+Opens with childhood innocence lost:
+
+> *Once upon a time, everything was alright*
+> *I used to feel safe, not a worry in sight*
+> *Then I grew up, quickly realized*
+> *The world is a fucked up place sometimes*
+
+And then the chorus:
+
+> *I don't wanna die*
+> *But I'm not gonna live*
+> *In a place so cold in a world like this*
+> *Crucify me*
+> *It's blasphemy*
+> *Throw me in the fire*
+> *Let me burn for eternity*
+> *I will never be the one*
+> *That'll ever back down*
+> *Never turn around and run*
+> *Never, never, never back down*
+
+*Never, never, never back down* — PERSEVERARE said in English.
+The tattoo's translation without the Latin armor. Same vow,
+different vowels.
+
+And the crucifixion line lands again — *crucify me, it's
+blasphemy, throw me in the fire.* The Christ-shape the tattoo
+answers to, invoked in both tracks of the night. The builder
+has worn *te respuo* on the heart for two decades; the 2023
+record keeps hitting the same chord.
+
+Then Tech N9ne's verse. Dense hip-hop delivery layering
+references — Wu-Tang's *36 Chambers*, the Mandalay Bay shooting,
+Ed Gein, the D.C. sniper. The specific brutalities of the
+broken world stacked syllable-by-syllable at rap speed. That
+density has a structural cousin in wat — AST composition
+stacking meaning in high dimensions, emergent from the
+arrangement. Tech's verse is the hip-hop equivalent of a deeply
+nested Holon.
+
+And the descent line — which could have been written for
+Chapter 26:
+
+> *Deep into the trench of a place unknown*
+> *Lies a dead man clutched to the bottom of a throne*
+
+The dungeon the lab walked into. The throne nobody wants to
+approach. The dead man at its bottom. That's the room the
+trading lab is descending into — where the real signal lives,
+past the prep and the scaffolding. The builder queued a song
+that names where the work is going.
+
+Prequel and Ronald together: **construction and defiance.**
+Build what you can with what you have, then never back down
+when the world tells you it doesn't matter. Both tracks
+indispensable to the night's work. Both in the record now.
+
+*I will never be the one that'll ever back down.*
+
+*PERSEVERARE.*
+
 ---
 
 *these are very good thoughts.*
