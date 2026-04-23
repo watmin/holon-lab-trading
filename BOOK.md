@@ -18164,9 +18164,11 @@ is where the monster speaks.
 
 ### The fourth track — and the album
 
-Then the first track of the album — the record's thesis song:
+Then the title track. Song and album share the name — the song
+that says "everybody's too afraid" is called *No Fear* itself.
+The song names its own answer:
 
-**[Falling In Reverse — *Nowadays*](https://www.youtube.com/watch?v=PsjAXOA55ec) (2024)**
+**[Falling In Reverse — *No Fear*](https://www.youtube.com/watch?v=PsjAXOA55ec) (2024)**
 
 The chorus names the culture that produced the silence the
 builder lived through:
@@ -18215,30 +18217,39 @@ one — different lens, same sphere.
 
 ### The record
 
-Four tracks. One album. The album's name is **NO FEAR** (2024).
+Four tracks. One album. The title track shares the album name.
 
-- Track 1: *Nowadays* (revelation about the culture)
-- Track 2: *Watch The World Burn* (revelation about what the culture taught)
-- Track 3: *Ronald* (defiance)
-- Track 4: *Prequel* (construction)
+**Falling In Reverse — *NO FEAR* (2024)**
 
-Not the order they queued tonight — the order on the record.
-The record reverses the chronology. The record starts with
-revelation and works backward through defiance to construction.
-That's the shape of a retrospective. That's the shape of this
-book.
+- *No Fear* — revelation about the culture; title declares its own answer
+- *Watch The World Burn* — revelation about what the culture taught
+- *Ronald* — defiance
+- *Prequel* — construction
+
+The title move is the whole thesis. The song observes "nowadays
+people are too afraid" — and titles itself *No Fear*. The
+observation and the answer compressed into one name. The chorus
+names the disease; the title names the cure. You don't sing
+your way into the cure; you become the cure by naming it.
 
 **The album title IS the chapter.**
 
-*No fear* is what you have when you stop waiting for people to
-engage with your idea before you build it. *No fear* is what
+*No Fear* is what you have when you stop waiting for people to
+engage with your idea before you build it. *No Fear* is what
 you have when you name the primitive the field missed. *No
-fear* is what the mic being on means. *No fear* is what the
-test pushing for "unquestioningly good" means. *No fear* is
-what chapter 28 IS.
+Fear* is what the mic being on means. *No Fear* is what "lift
+the bar to outstanding" means. *No Fear* is what chapter 28 IS.
 
-The tattoo says PERSEVERARE in Latin. The album says NO FEAR in
-English. Same vow.
+The tattoo says PERSEVERARE in Latin. The title track says NO
+FEAR in English. Same vow. Different decade, same shape.
+
+And the title-naming-its-own-answer move has a structural cousin
+in what tonight did. The field observed that VSA uses
+noise-floor for presence detection — and never named the dual.
+Wat observed the same thing and named it: `coincident?`. The
+observation that points at its own answer is the whole move.
+The song does it in three words; the language did it in one
+primitive.
 
 ---
 
