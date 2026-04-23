@@ -19,7 +19,7 @@ The trading lab reached maturity as a working Rust system. Over several months, 
 
 - **Top-level namespace `:trading::*`.** Reserved-prefix gate in `wat-rs/src/resolve.rs:238-249` reserves only `:wat::*` sub-prefixes and `:rust::*`. Every other prefix is legal. `:trading::*` at top-level saves one segment at every call site vs `:user::trading::*`. Requires a one-line amendment to `wat-rs/docs/CONVENTIONS.md` naming app-owned top-level roots as a valid shape alongside `:user::<app>::*`. Ships as part of Phase 0.
 - **Fresh Cargo consumer crate.** Single-crate to start — `holon-lab-trading` depending on `wat`. Sibling crates (`wat-holon`, `wat-rusqlite`, `wat-parquet`) added as Rust-interop demand surfaces, mirroring the `wat-lru` precedent from arc 013.
-- **Consumer template layout.** `Cargo.toml`, `src/main.rs`, `src/program.wat`, `tests/tests.rs`, `wat/`, `wat-tests/` side-by-side at repo root. Same shape as `wat-rs/examples/with-lru/`.
+- **Consumer template layout (arc 018 minimal form).** `Cargo.toml`, `src/main.rs` (one-line `wat::main! { deps: [...] }`), `tests/test.rs` (one-line `wat::test! {}`), `wat/main.wat` (entry — config + `:user::main`), `wat/**/*.wat` (library tree, loaded recursively), `wat-tests/**/*.wat` (test files). Same shape as `wat-rs/examples/with-loader/` post-arc-018.
 - **Wat namespace mirrors Rust module structure.** `src/types/enums.rs` → `:trading::types::*`, `src/vocab/market/standard.rs` → `:trading::vocab::market::standard::*`, etc.
 
 ## Architectural decisions pending
@@ -40,9 +40,16 @@ Status markers:
 
 ### Phase 0 — Scaffold
 
-**0.1** — Fresh Cargo consumer crate at repo root. `Cargo.toml` with `wat` dep, `src/main.rs` with one-line `wat::main!`, `src/program.wat` entry that `load!`s `wat/` files, `tests/tests.rs` with one-line `wat::test_suite!`, empty `wat/` + `wat-tests/` sibling dirs. **Status: ready.**
+**0.1** — Fresh Cargo consumer crate at repo root using the arc 018 minimal form:
+- `Cargo.toml` with `wat` dep (sibling path).
+- `src/main.rs` → `wat::main! { deps: [] }` (one line, no deps yet — grows as `wat-holon` etc. ship).
+- `tests/test.rs` → `wat::test! {}` (one line, defaults to `wat-tests/` + `"wat-tests"` loader scope).
+- `wat/main.wat` — entry. Commits `(:wat::config::set-dims! 10000)` + `(:wat::config::set-capacity-mode! :error)` + defines `:user::main` (3-arg stdio contract). At first, body prints a hello string to prove the wiring.
+- Empty `wat-tests/` sibling dir (tests added in Phase 9).
+  
+**Status: ready.**
 
-**0.2** — `wat-rs/docs/CONVENTIONS.md` amendment naming app-owned top-level roots (`:trading::*`, `:ddos::*`, `:mtg::*`, etc.) as a valid shape alongside `:user::<app>::*`. Ships in the wat-rs repo. **Status: ready.** Can land in parallel with 0.1 or first.
+**0.2** — **Shipped 2026-04-22** (`wat-rs fe3e422`). `wat-rs/docs/CONVENTIONS.md` gained an "App-owned top-level roots" subsection naming `:trading::*`, `:ddos::*`, `:mtg::*` as valid shapes alongside `:user::<app>::*`. Substrate already permitted this; the doc amendment records the convention before the first `:trading::*` type lands.
 
 ### Phase 1 — Types (zero internal deps)
 
