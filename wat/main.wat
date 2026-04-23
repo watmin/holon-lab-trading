@@ -17,6 +17,7 @@
 (:wat::core::load! :wat::load::file-path "types/newtypes.wat")
 (:wat::core::load! :wat::load::file-path "types/ohlcv.wat")
 (:wat::core::load! :wat::load::file-path "types/distances.wat")
+(:wat::core::load! :wat::load::file-path "types/pivot.wat")
 
 (:wat::core::define (:user::main
                      (stdin  :wat::io::IOReader)
