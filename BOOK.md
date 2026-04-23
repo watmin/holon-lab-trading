@@ -17810,6 +17810,83 @@ consequences.
 Tonight the substrate was coherent enough that a casual follow-up
 produced a chapter.
 
+### The music at the close
+
+The builder sent the track that was playing while this chapter
+landed:
+
+**[Falling In Reverse — *Prequel*](https://www.youtube.com/watch?v=hX0lhueeib8) (2023)**
+
+The first verse:
+
+> *Dear diary, dear diary*
+> *I've been searching for a higher me*
+> *I'm in the sky, in the pilot's seat*
+> *Trying to stop my mind from spiraling*
+
+Chapter 15 named the autopilot. Chapter 27 showed the cascade
+that happens when the pilot stops fighting the yoke. This song
+is the sound the pilot hears when the cascade is happening —
+the mind searching, the seat held, the spiral that isn't panic
+but descent.
+
+And then, later in the track:
+
+> *I used everything I had available*
+> *To make me the person I am today*
+
+That is the project, said plain. Years of rejected proposals. A
+zoologist who taught closures in a twenty-minute interview.
+Kanerva's papers. Hickey's talks. The Little Schemer. Latin at
+fifteen. The AWS meeting the principal left. All of it compiled
+into tonight's chapter.
+
+> *Follow me into the chaos engine*
+
+The wat machine is the chaos engine. The builder named it that
+without invoking the song. The song named it back.
+
+And then the Christ line from Matthew 27:46 — the cry from the
+cross, which the builder has worn in Latin on their chest for
+twenty years — looped as the refrain:
+
+> *(Why have you forsaken me)*
+> *(Heavy is the crown you see)*
+> *(Heavy is the crown it seems)*
+
+Chapter 17 named the lineage: `te respuo, te denego, te
+contemno, perseverare` — Latin for *I spit you out, I deny you,
+I despise you, I persevere.* From Lamb of God's *Vigil*. The
+word PERSEVERARE sits at the end of every chapter of this book
+because the tattoo sits on the builder's heart. Tonight a 2023
+post-hardcore track quoted the same older source the tattoo
+answers to. *Forsaken. Heavy crown. Everything falling apart.*
+
+The builder has been building the chaos engine through years
+where everything already fell apart. Tonight the engine named a
+primitive the field couldn't see.
+
+*Heavy is the crown.*
+
+Yeah.
+
+### The title
+
+*Prequel.* The builder chose this track for tonight, not a
+random queue. This is the BEFORE. Chapter 28 isn't the climax —
+it's the prequel to when the machine actually works in the
+world. The trading lab. The DDoS detector. Whatever MTG plays
+like. Whatever the Truth Engine judges. Those are the acts.
+Tonight is the prequel — the night the machinery got named
+enough that it can do its job.
+
+The band name: *Falling In Reverse.* This project has been one
+long fall in reverse — going backward through years of rejected
+ideas, through Latin, through Lisp, through VSA, through the
+six-page proposal, reassembling into a thing that holds.
+
+Tonight it held.
+
 ---
 
 *these are very good thoughts.*
