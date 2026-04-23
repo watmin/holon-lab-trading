@@ -18164,11 +18164,12 @@ is where the monster speaks.
 
 ### The fourth track — and the album
 
-Then the title track. Song and album share the name — the song
-that says "everybody's too afraid" is called *No Fear* itself.
-The song names its own answer:
+Then the fourth track:
 
-**[Falling In Reverse — *No Fear*](https://www.youtube.com/watch?v=PsjAXOA55ec) (2024)**
+**[Falling In Reverse — *NO FEAR*](https://www.youtube.com/watch?v=PsjAXOA55ec) (Popular Monster, 2024)**
+
+The song that says "everybody's too afraid" titles itself *NO
+FEAR* — all caps — and names its own answer.
 
 The chorus names the culture that produced the silence the
 builder lived through:
@@ -18237,11 +18238,11 @@ rock radio. The original is part of the builder's own
 adolescence — the record of what "depression at age sixteen"
 actually sounded like for their cohort.
 
-The Reimagined version, on *NO FEAR* in 2024, is the band
-taking that artifact forward onto the same record that contains
-*Prequel*'s construction, *Ronald*'s defiance, *Watch The World
-Burn*'s revelation, and the title track's diagnosis. The wound
-underneath the other four made legible.
+The Reimagined version, on *Popular Monster* in 2024, is the
+band taking that artifact forward onto the same record that
+contains *Prequel*'s construction, *Ronald*'s defiance, *Watch
+The World Burn*'s revelation, and *NO FEAR*'s cultural
+diagnosis. The wound underneath the other four made legible.
 
 One line carries Chapter 10's decade directly:
 
@@ -18259,7 +18260,7 @@ And the cost-line the record keeps returning to:
 > *I never realized I was spread too thin*
 > *'Til it was too late, and I was empty within*
 
-*Prequel* said "I used everything I had available." *No Fear*
+*Prequel* said "I used everything I had available." *NO FEAR*
 said "it comes at a cost." *Last Resort (Reimagined)* names
 the cost at the register of personal grief. The other tracks
 build on top of this one's honesty.
@@ -18268,7 +18269,7 @@ The book is not going to pretend the wound isn't real by
 framing it as productive. The wound was real. The building
 happened through years when the wound was also real. Both
 things coexisted. That coexistence is what the album models
-across its tracks: a record that contains both *No Fear* and
+across its tracks: a record that contains both *NO FEAR* and
 *Last Resort* without either one denying the other.
 
 Chapter 10 named the cost of the silent decade in prose. The
@@ -18276,54 +18277,120 @@ Reimagined cover names it in a track that a seventeen-year-old
 builder already knew by heart in the year 2000. The wound and
 its soundtrack are older than the project.
 
+### The sixth track — and the album's name
+
+One more track from the same record. The one the album is
+*titled after:*
+
+**[Falling In Reverse — *Popular Monster*](https://www.youtube.com/watch?v=jakpo7tj7Qw) (Popular Monster, 2024)**
+
+Album name and title track share the word. *Popular Monster* is
+the thing the whole record is about — the monster *Watch The
+World Burn* said couldn't be controlled any longer, named
+directly in the song and carried as the record's title.
+
+Opening:
+
+> *I battle with depression but the question still remains*
+> *Is this post-traumatic stressin' or am I suppressing rage*
+
+The album doesn't describe the monster from outside. It speaks
+from inside. The condition is the narrator. Not "this person
+struggles" — "I am this." *I'm a liar, I'm a cheater, I'm a
+non-believer / I'm a popular, popular monster.*
+
+The phrase itself names the paradox the builder has been living.
+The wat machine is PUBLIC now — code on GitHub, arcs documented,
+BOOK on disk, commits pushed every few hours. The work is
+visible. *Popular.* But the interior state that drove the
+work through years of silence doesn't vanish when the work
+becomes visible. The monster doesn't leave just because it
+finally has an audience.
+
+And the line that echoes the chapter's own content:
+
+> *Every wall that I knock down is just a wall that I replace*
+> *I'm in a race against myself*
+
+Chapter 28 shipped six things the night the chapter was written
+— coincident?, middle_width function, σ ceiling, native
+granularity, QM parallel, measurement epistemology. Walls
+knocked down. And then arc 024 landed on top, with its own
+validity check, fork helper, setter-order convention, function-
+defaults sweep across 55 files. More walls. More walls replaced.
+The race is real.
+
+And the Christ-cry, said differently than the other tracks:
+
+> *Where the fuck is your god now?*
+
+*Prequel* quoted Matthew 27:46: *why have you forsaken me.*
+*Ronald* said *crucify me, throw me in the fire.* *Popular
+Monster* answers both — accusatory, specific, alone. The forsaken
+voice grown old enough to demand accountability back. The
+tattoo's Latin *te respuo* (I spit you out) in English, thirty
+years later.
+
 ### The record
 
-Five tracks. One album. The title track shares the album name.
+Six tracks. One album.
 
-**Falling In Reverse — *NO FEAR* (2024)**
+**Falling In Reverse — *Popular Monster* (2024)**
 
 In the emotional order the tracks occupy on the record:
 
 | Track | Register |
 |---|---|
 | *Last Resort (Reimagined)* | **Wound** — the silent-decade's interior voice |
-| *No Fear* | **Diagnosis** — culture that produced the silence |
+| *NO FEAR* | **Diagnosis** — culture that produced the silence |
 | *Watch The World Burn* | **Revelation** — "everything they taught you was a lie" |
 | *Ronald* | **Defiance** — "never, never, never back down" |
 | *Prequel* | **Construction** — "I used everything I had available" |
+| *Popular Monster* | **Naming** — "I'm a popular, popular monster" |
 
-**Wound → diagnosis → revelation → defiance → construction.**
+**Wound → diagnosis → revelation → defiance → construction → naming.**
 
-The record does not deny any of its own moods. It opens on the
-2000-era wound that a generation grew up with, works through
-cultural observation into revelation, lands on defiance and
-construction. Five registers, five tracks, one artist. The
-record is honest about all of them at once.
+The record ends on the act the book keeps naming as the
+load-bearing move: *naming the thing.* The wound is named. The
+cure is named. The revelation is named. The defiance is named.
+The construction is named. The MONSTER carrying the whole arc
+— **named directly**, and with the album titled after it.
 
-The title move is the whole thesis. The song *No Fear* observes
-"nowadays people are too afraid" — and titles itself *No Fear*.
-The observation and the answer compressed into one name. The
-chorus names the disease; the title names the cure. You don't
-sing your way into the cure; you become the cure by naming it.
+That's the thesis. Five tracks approach the monster from
+different angles; the sixth looks straight at it and says the
+word.
 
 **The album title IS the chapter.**
 
-*No Fear* is what you have when you stop waiting for people to
-engage with your idea before you build it. *No Fear* is what
-you have when you name the primitive the field missed. *No
-Fear* is what the mic being on means. *No Fear* is what "lift
-the bar to outstanding" means. *No Fear* is what chapter 28 IS.
+Chapter 28's whole thesis is that *naming is constitutive* —
+presence? becomes usable when it has a name; coincident? becomes
+usable when it has a name; the middle_width function becomes
+reasonable-about when it has a name; the 1σ native granularity
+becomes a substrate property when it has a name. The algebra's
+potentials crystallize into facts only by being named.
 
-The tattoo says PERSEVERARE in Latin. The title track says NO
-FEAR in English. Same vow. Different decade, same shape.
+The builder's arc is the same. The silent-decade monster was
+private. Chapter 7 named the strange loop. Chapter 10 named
+Datamancer. Chapter 17 named the lineage. Chapter 23 named the
+severance. Chapter 27 named coincident?. Chapter 28 named five
+more. *Popular Monster* — the track titled after the condition
+— names the WHOLE CONDITION the way the book has been naming
+its pieces one at a time.
+
+The tattoo says PERSEVERARE in Latin. The record's title says
+*Popular Monster* in English. One is the vow; the other is the
+thing the vow is for.
 
 And the title-naming-its-own-answer move has a structural cousin
 in what tonight did. The field observed that VSA uses
 noise-floor for presence detection — and never named the dual.
-Wat observed the same thing and named it: `coincident?`. The
+Wat observed the same and named it: `coincident?`. The
 observation that points at its own answer is the whole move.
-The song does it in three words; the language did it in one
-primitive.
+The song does it in a phrase; the language did it in a
+primitive; the album does it in a title.
+
+Name the monster. Name the primitive. Name the chapter. Name
+the night.
 
 ---
 
