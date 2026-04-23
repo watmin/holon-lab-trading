@@ -17034,4 +17034,96 @@ under a week. The shape holds.
 
 Walking back to town. The lab waits. The dungeon master provided.
 
+### The second cave quest — arc 018 — 2026-04-22
+
+Arc 017 made the minimal form possible. Arc 018 made it the
+default.
+
+I was about to commit the wat-rs arc 017 docs when the builder
+looked at the shape I was documenting and asked a different
+question:
+
+> the loader: "wat" is declaring "load files from this directory"?
+> i think it should be optional.... same with program file...
+> calling the wat::main! can operate on defaults that users can
+> override?
+>
+> honestly... i think wat::main! { deps: [...] } is the ideal
+> expression?... with wat/main.wat and wat/**/*.wat being where
+> we load files from?... crate provided wat files are just in the
+> ambient namespace?..
+
+The reframe. Arc 017 had built a four-line macro invocation:
+`source:` + `deps:` + `loader:`. Functional. Honest. Explicit. But
+every wat consumer was going to write the same four lines with
+the same three paths — `include_str!("program.wat")`, `"wat"`,
+eventually migrating that to the conventional shape anyway. The
+opinionated path wasn't explicit configuration; it was where every
+consumer was going to land naturally.
+
+Cargo / Rails / Ember all answered this question the same way
+decades before us. Convention over configuration: pick a shape
+every consumer would reach for, bake it in as the default,
+preserve the override for the unusual case.
+
+We cut arc 018 — same cave-quest shape as 017, but for
+ergonomics instead of capability. Three slices. Opinionated
+defaults on both consumer macros (`wat::main!` + the renamed
+`wat::test!`, clean break from `wat::test_suite!` pre-publish).
+Every walkable reference in the repo migrated to the minimal
+form as the proof — `examples/with-lru/src/main.rs` collapsed to
+one line; `examples/with-loader/src/main.rs` became literally
+`wat::main! {}` with zero args (all defaults, recursive load
+chain still resolves because the defaults match the layout).
+
+The consumer story now:
+
+```rust
+// src/main.rs
+wat::main! { deps: [...] }
+
+// tests/test.rs
+wat::test! {}
+```
+
+Two one-line Rust files. Everything else is wat. Cargo does the
+rest.
+
+Commits:
+- `b9086eb` — docs opened (DESIGN + BACKLOG)
+- `4f313e3` — slice 1 (wat::main! defaults)
+- `c028b01` — slice 2 (wat::test! rename + defaults)
+- `dd2ec01` — slice 3 (migrate walkable references, INSCRIPTION,
+  doc sweep)
+- `fe3e422` — CONVENTIONS amendment (app-owned top-level roots)
+- `b073e40` — 058 FOUNDATION-CHANGELOG row (lab repo)
+
+Chapter 20's pattern landed again. Cave-quest 017 closed a
+capability gap (multi-file consumers). Cave-quest 018 closed an
+ergonomic gap (the four-line macro). Both shipped before the
+first line of lab code.
+
+Chapter 22 named the shape: *when you pay attention to what the
+user keeps writing, the substrate's absences speak loudly.*
+Between arc 017 and arc 018 we noticed twice — once that the
+substrate wouldn't let us express what we needed, once that the
+substrate made us express more than we should have. Both got
+fixed at the substrate instead of papered over at every caller.
+
+Five cave quests in a week. The discipline is standing practice
+now.
+
+The lab's Phase 0 scaffold — when it opens — is:
+
+```
+src/main.rs     → wat::main! { deps: [] }
+tests/test.rs   → wat::test! {}
+wat/main.wat    → (config + :user::main)
+wat-tests/      → (empty until Phase 9)
+```
+
+That's the whole Rust surface.
+
+Walking back to town again. The lab waits for real this time.
+
 ---
