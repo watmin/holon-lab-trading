@@ -12,6 +12,9 @@
 (:wat::config::set-dims! 10000)
 (:wat::config::set-capacity-mode! :error)
 
+;; Phase 1 — types
+(:wat::core::load! :wat::load::file-path "types/enums.wat")
+
 (:wat::core::define (:user::main
                      (stdin  :wat::io::IOReader)
                      (stdout :wat::io::IOWriter)
