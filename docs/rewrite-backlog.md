@@ -55,19 +55,21 @@ Status markers:
 
 All source files: `archived/pre-wat-native/src/types/`.
 
-**1.1** — `:trading::types::*` enums, from `enums.rs` (260L). 8 sum types: `Side`, `Direction`, `Outcome`, `TradePhase`, `Prediction`, `ScalarEncoding`, `MarketLens`, `RegimeLens`. Target: `wat/types/enums.wat`. **Status: ready.**
+**Dependency reorder from original listing.** The initial survey put pivot at 1.7 and candle at 1.5; deeper read of candle.rs showed it references pivot's `PhaseLabel` / `PhaseDirection` / `PhaseRecord`. Actual dependency order: pivot before candle. Log_entry moves out of Phase 1 because it references `holon::kernel::vector::Vector` — not reachable from wat until a `wat-holon` sibling crate ships (Phase 3 territory).
 
-**1.2** — `:trading::types::*` newtypes, from `newtypes.rs` (149L). `TradeId`, `Price`, `Amount` as single-field wat structs (wat has no newtype sugar per 058-030; single-field struct is the idiom). Target: `wat/types/newtypes.wat`. **Status: obvious in shape.**
+**1.1** — **Shipped 2026-04-22** (`3390206`). `:trading::types::*` enums from `enums.rs` (260L). 8 sum types: `Side`, `Direction`, `Outcome`, `TradePhase`, `Prediction`, `ScalarEncoding`, `MarketLens` (11 variants), `RegimeLens`. Tagged variants (Prediction, ScalarEncoding) land with field types via wat's `(variant-name (field :Type) ...)` shape.
 
-**1.3** — `:trading::types::Ohlcv` + `:trading::types::Asset`, from `ohlcv.rs` (119L). Target: `wat/types/ohlcv.wat`. **Status: obvious in shape.**
+**1.2** — **Shipped 2026-04-22** (`09e7c4d`). `:trading::types::{TradeId,Price,Amount}` from `newtypes.rs` (149L) via `(:wat::core::newtype :name :Inner)` — wat's built-in nominal wrapper. **Correction on prior backlog note**: earlier entry claimed "wat has no newtype sugar per 058-030"; that was wrong — wat ships `:wat::core::newtype` directly.
 
-**1.4** — `:trading::types::Distances`, from `distances.rs` (46L). Target: `wat/types/distances.wat`. **Status: obvious in shape.**
+**1.3** — **Shipped 2026-04-22** (`5a60286`). `:trading::types::{Asset,Ohlcv}` from `ohlcv.rs` (119L). First cross-file type reference (Ohlcv's source-asset / target-asset fields reference Asset).
 
-**1.5** — `:trading::types::Candle`, from `candle.rs` (243L). Roughly 90 enriched-indicator fields. **Sub-fog 1.5a:** confirm no substrate limit on struct field count; likely fine but worth verifying before writing. Target: `wat/types/candle.wat`. **Status: obvious in shape.**
+**1.4** — **Shipped 2026-04-22** (`9c44860`). `:trading::types::{Distances,Levels}` from `distances.rs` (46L). Levels references the Price newtype from 1.2. The Rust `Distances::to_levels(price, side) -> Levels` conversion stays in the archive; it ships with its Phase 5 callers (treasury / simulation).
 
-**1.6** — `:trading::types::LogEntry`, from `log_entry.rs` (240L). Seven variants, each carrying data — wat's enum-with-data form per 058-030. Target: `wat/types/log_entry.wat`. **Status: obvious in shape.**
+**1.5** — **Shipped 2026-04-22** (`267c84a`). `:trading::types::{PhaseLabel,PhaseDirection,PhaseRecord}` from `pivot.rs` (432L). Only the three value types; `PhaseState` streaming state machine + its step / close_phase / begin_phase logic ships in Phase 5 on IndicatorBank where its callers live. Sub-fog 1.7a (from original listing — state-machine expressiveness in wat) defers to Phase 5.
 
-**1.7** — `:trading::types::PhaseState` + `:trading::types::PhaseRecord`, from `pivot.rs` (432L). Streaming phase labeler (valley / peak / transition via ATR smoothing), Proposal 049. First non-trivial port — pure state-machine logic, substantive function bodies. **Sub-fog 1.7a:** verify wat's `let*` + tail-recursion handles the state machine cleanly, or surface substrate features as needed. Target: `wat/types/pivot.wat`. **Status: foggy until 1.1–1.6 land.**
+**1.6** — **Shipped 2026-04-22** (`dd32fda`). `:trading::types::Candle` from `candle.rs` (243L). 73 fields (identity + raw OHLCV + 60+ indicator scalars + 5 time scalars + 4 phase-labeler fields). Sub-fog 1.5a (struct field-count limit) **resolved** — the substrate freezes a 73-field struct cleanly. Indicator values stay `:f64` bare per the archive's `rune:forge(bare-type)` note.
+
+**1.7** — **DEFERRED to Phase 3+** (was `:trading::types::LogEntry` from `log_entry.rs` (240L)). LogEntry references `holon::kernel::vector::Vector` in its `ProposalSubmitted.composed_thought` field; `Vector` isn't `#[wat_dispatch]`'d in wat-rs today. Ships with the `wat-holon` sibling crate in Phase 3.
 
 ### Phase 2 — Vocabulary (pure functions over types)
 
