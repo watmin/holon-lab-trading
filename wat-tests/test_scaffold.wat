@@ -12,6 +12,6 @@
 (:wat::config::set-dims! 1024)
 (:wat::config::set-capacity-mode! :error)
 
-(:wat::test::deftest :trading::test::test-scaffold-is-alive :error 1024
+(:wat::test::deftest :trading::test::test-scaffold-is-alive
   ()
   (:wat::test::assert-eq (:wat::core::i64::+ 1 1) 2))

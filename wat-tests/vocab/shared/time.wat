@@ -15,11 +15,12 @@
 ;;    produce NON-coincident hour-facts (Circular's angular encoding
 ;;    distinguishes opposite points on the 24-period sphere).
 ;;
-;; Uses :wat::test::make-deftest to configure :deftest once —
-;; :error mode, dims 1024, plus the single load that pulls the entire
-;; dep chain via the types' self-loads. Every test below is just
-;; name + body. (Arcs 029 + 030 shipped the nested-quasiquote and
-;; macroexpand substrate that made this shape work.)
+;; Uses :wat::test::make-deftest to configure :deftest once — the
+;; single load that pulls the entire dep chain via the types'
+;; self-loads. Every test below is just name + body. Dims and
+;; capacity-mode inherit from the file preamble above via arc 031's
+;; sandbox-inherits-config path. (Arcs 029 + 030 shipped the nested-
+;; quasiquote and macroexpand substrate that made this shape work.)
 
 (:wat::config::set-capacity-mode! :error)
 (:wat::config::set-dims! 1024)
@@ -29,7 +30,7 @@
 ;;     → wat/types/ohlcv.wat + wat/types/pivot.wat
 ;; resolves to one parse per file via canonical-path dedup
 ;; (arc 027 slice 1).
-(:wat::test::make-deftest :deftest :error 1024
+(:wat::test::make-deftest :deftest
   ((:wat::load-file! "wat/vocab/shared/time.wat")))
 
 ;; ─── 1. encode-time-facts returns 5 ───────────────────────────────
