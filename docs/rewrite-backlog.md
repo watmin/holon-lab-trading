@@ -75,9 +75,11 @@ All source files: `archived/pre-wat-native/src/types/`.
 
 Roughly 11 submodules under `archived/pre-wat-native/src/vocab/{market,exit,broker,shared}/`. Each is pure `encode_*_facts` functions that take a `Candle` and produce `ThoughtAST` fragments.
 
-**Status: 2.1 shipped; rest foggy, open per-module.**
+**Status: 2.1 + 2.2 shipped; rest foggy, open per-module.**
 
 **2.1 — Shipped 2026-04-23** (lab arc 001, `docs/arc/2026/04/001-vocab-opening/`). `:trading::vocab::shared::time::*` — port of `vocab/shared/time.rs` (113L). Two defines (`encode-time-facts` + `time-facts`), two file-private helpers (`circ`, `named-bind`). Rounding rationale captured: per-site `(f64::round val 0)` is cache-key quantization (proposals 057 + 033); for time, integer quantization is the honest granularity. **Design refinement surfaced:** vocab functions take the specific Candle sub-struct (here `:trading::types::Candle::Time`), not the full Candle. Matches `candle.wat`'s own header comment. Pattern established for all subsequent vocab modules. First lab-repo arc — adopted the wat-rs arc discipline (DESIGN + BACKLOG + INSCRIPTION). Six outstanding tests green on first pass, 19 → 25 lab wat tests.
+
+**2.2 — Shipped 2026-04-23** (lab arc 002, `docs/arc/2026/04/002-exit-time-vocab/`). `:trading::vocab::exit::time::*` — port of `vocab/exit/time.rs` (76L). One define (`encode-exit-time-facts`) — 2 leaf binds (hour + day-of-week). Strict subset of shared/time for exit observers. **Shared helpers extracted:** `wat/vocab/shared/helpers.wat` now owns `:trading::vocab::shared::circ` + `:trading::vocab::shared::named-bind`, migrated from arc 001's file-private defines. Closes arc 001's deferred "extract when second caller surfaces" note. Every future vocab module loads `shared/helpers.wat` for the pair. Arc-001 template carried over cleanly; zero substrate gaps. Four outstanding tests green on first pass, 25 → 29 lab wat tests.
 
 **Remaining vocab modules (each its own lab arc as it lands):**
 

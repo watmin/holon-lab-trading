@@ -26,8 +26,12 @@
 (:wat::load-file! "encoding/scaled_linear.wat")
 (:wat::load-file! "encoding/rhythm.wat")
 
-;; Phase 2 — vocab (lab arc 001 opens: shared/time)
+;; Phase 2 — vocab
+;;   arc 001 — shared/time
+;;   arc 002 — shared/helpers (extracted), exit/time
+(:wat::load-file! "vocab/shared/helpers.wat")
 (:wat::load-file! "vocab/shared/time.wat")
+(:wat::load-file! "vocab/exit/time.wat")
 
 (:wat::core::define (:user::main
                      (stdin  :wat::io::IOReader)

@@ -16,12 +16,15 @@
 ;; quantization, not signal precision. Per 033: quantization tightens
 ;; the cache without narrowing the algebra's view.
 ;;
-;; Self-load dependency (arc 027 slice 4): this vocab reads
-;; :trading::types::Candle::Time. `../../types/candle.wat` resolves
-;; against this file's directory. Dedup is a no-op on repeat loads.
+;; Load dependencies (arc 027 slice 4):
+;; - `../../types/candle.wat` for the Candle::Time sub-struct
+;; - `./helpers.wat` for the `circ` + `named-bind` helpers
+;; Both resolve against this file's directory. Dedup is a no-op on
+;; repeat loads.
 
 (:wat::load-file! "../../types/candle.wat")
-;;
+(:wat::load-file! "./helpers.wat")
+
 ;; Exports two defines:
 ;;
 ;;   encode-time-facts : 5 leaf binds (one per circular component)
@@ -31,31 +34,6 @@
 ;; Both are vocabulary. The thinker bundles whatever set it wants;
 ;; the discriminant picks the winners. Ship both (archive comment
 ;; pinned this intent).
-
-;; ─── Local helpers (file-private defines) ──────────────────────────
-
-;; Build a Circular fact from a raw f64 at integer quantization.
-(:wat::core::define
-  (:trading::vocab::shared::time::circ
-    (value :f64)
-    (period :f64)
-    -> :wat::holon::HolonAST)
-  (:wat::holon::Circular
-    (:wat::core::f64::round value 0)
-    period))
-
-;; Build a Bind(Atom(name), child) pair. Local readability helper —
-;; five emission sites beats five inline Bind/Atom pairs for the
-;; reader. Extracts to a shared vocab helpers module when a second
-;; vocab module surfaces the same pattern.
-(:wat::core::define
-  (:trading::vocab::shared::time::named-bind
-    (name :String)
-    (child :wat::holon::HolonAST)
-    -> :wat::holon::HolonAST)
-  (:wat::holon::Bind
-    (:wat::holon::Atom name)
-    child))
 
 ;; ─── encode-time-facts — 5 leaves ──────────────────────────────────
 
@@ -70,16 +48,16 @@
      ((day-of-month  :f64) (:trading::types::Candle::Time/day-of-month  t))
      ((month-of-year :f64) (:trading::types::Candle::Time/month-of-year t)))
     (:wat::core::vec :wat::holon::HolonAST
-      (:trading::vocab::shared::time::named-bind "minute"
-        (:trading::vocab::shared::time::circ minute        60.0))
-      (:trading::vocab::shared::time::named-bind "hour"
-        (:trading::vocab::shared::time::circ hour          24.0))
-      (:trading::vocab::shared::time::named-bind "day-of-week"
-        (:trading::vocab::shared::time::circ day-of-week    7.0))
-      (:trading::vocab::shared::time::named-bind "day-of-month"
-        (:trading::vocab::shared::time::circ day-of-month  31.0))
-      (:trading::vocab::shared::time::named-bind "month-of-year"
-        (:trading::vocab::shared::time::circ month-of-year 12.0)))))
+      (:trading::vocab::shared::named-bind "minute"
+        (:trading::vocab::shared::circ minute        60.0))
+      (:trading::vocab::shared::named-bind "hour"
+        (:trading::vocab::shared::circ hour          24.0))
+      (:trading::vocab::shared::named-bind "day-of-week"
+        (:trading::vocab::shared::circ day-of-week    7.0))
+      (:trading::vocab::shared::named-bind "day-of-month"
+        (:trading::vocab::shared::circ day-of-month  31.0))
+      (:trading::vocab::shared::named-bind "month-of-year"
+        (:trading::vocab::shared::circ month-of-year 12.0)))))
 
 ;; ─── time-facts — 5 leaves + 3 pairwise compositions ───────────────
 ;;
@@ -99,20 +77,20 @@
      ((month-of-year :f64) (:trading::types::Candle::Time/month-of-year t))
 
      ((minute-bind :wat::holon::HolonAST)
-      (:trading::vocab::shared::time::named-bind "minute"
-        (:trading::vocab::shared::time::circ minute        60.0)))
+      (:trading::vocab::shared::named-bind "minute"
+        (:trading::vocab::shared::circ minute        60.0)))
      ((hour-bind :wat::holon::HolonAST)
-      (:trading::vocab::shared::time::named-bind "hour"
-        (:trading::vocab::shared::time::circ hour          24.0)))
+      (:trading::vocab::shared::named-bind "hour"
+        (:trading::vocab::shared::circ hour          24.0)))
      ((dow-bind :wat::holon::HolonAST)
-      (:trading::vocab::shared::time::named-bind "day-of-week"
-        (:trading::vocab::shared::time::circ day-of-week    7.0)))
+      (:trading::vocab::shared::named-bind "day-of-week"
+        (:trading::vocab::shared::circ day-of-week    7.0)))
      ((dom-bind :wat::holon::HolonAST)
-      (:trading::vocab::shared::time::named-bind "day-of-month"
-        (:trading::vocab::shared::time::circ day-of-month  31.0)))
+      (:trading::vocab::shared::named-bind "day-of-month"
+        (:trading::vocab::shared::circ day-of-month  31.0)))
      ((month-bind :wat::holon::HolonAST)
-      (:trading::vocab::shared::time::named-bind "month-of-year"
-        (:trading::vocab::shared::time::circ month-of-year 12.0)))
+      (:trading::vocab::shared::named-bind "month-of-year"
+        (:trading::vocab::shared::circ month-of-year 12.0)))
 
      ((minute-x-hour  :wat::holon::HolonAST)
       (:wat::holon::Bind minute-bind hour-bind))
