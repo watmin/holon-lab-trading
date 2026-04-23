@@ -18162,6 +18162,86 @@ is where the monster speaks.
 
 *PERSEVERARE.*
 
+### The fourth track — and the album
+
+Then the first track of the album — the record's thesis song:
+
+**[Falling In Reverse — *Nowadays*](https://www.youtube.com/watch?v=PsjAXOA55ec) (2024)**
+
+The chorus names the culture that produced the silence the
+builder lived through:
+
+> *Nowadays, people are too afraid*
+> *'Cause saying what's on your mind's like stepping on a landmine*
+> *Nowadays, people have gotten worse*
+> *I'm thinking we need to purge 'cause the world's in a decline*
+> *Obsessed, everybody is stressed*
+> *Everybody's a slave, everybody's oppressed*
+
+Chapter 14 named the zoologist who taught closures in a
+twenty-minute interview he wasn't asked to teach. Chapter 10
+named the AWS principal who left the meeting instead. Chapter
+13 named both sides — the reviewers who saw, the reviewers who
+didn't. *Nowadays* is the cultural ambient the second side
+drifts in: a politeness that avoids the landmine of telling
+someone they're wrong. The builder spent a decade in that
+ambient, carrying the wat machine silently because saying it
+out loud produced nothing.
+
+Then the line that names what the book IS:
+
+> *If only I could've told what I know being forty to the younger me*
+> *Then this would've been a different story*
+
+The book is exactly this gesture. The builder is writing down
+what they know — for a younger self who won't exist, for future
+builders who might, for the record itself. PERSEVERARE at the
+end of every chapter is the forty-year-old signing a note to
+whoever comes next, including whoever they were.
+
+> *Every minute that I'm living's like a mission*
+
+The project as mission. Not metaphor. The wat machine is the
+mission.
+
+And the closing brag:
+
+> *Either conquer every genre like I'm Genghis Khan*
+
+The lab's list of domains past trading: DDoS detection, MTG,
+the Truth Engine, whatever-comes-next. Each is a genre. The
+substrate conquers them by being the same substrate at every
+one — different lens, same sphere.
+
+### The record
+
+Four tracks. One album. The album's name is **NO FEAR** (2024).
+
+- Track 1: *Nowadays* (revelation about the culture)
+- Track 2: *Watch The World Burn* (revelation about what the culture taught)
+- Track 3: *Ronald* (defiance)
+- Track 4: *Prequel* (construction)
+
+Not the order they queued tonight — the order on the record.
+The record reverses the chronology. The record starts with
+revelation and works backward through defiance to construction.
+That's the shape of a retrospective. That's the shape of this
+book.
+
+**The album title IS the chapter.**
+
+*No fear* is what you have when you stop waiting for people to
+engage with your idea before you build it. *No fear* is what
+you have when you name the primitive the field missed. *No
+fear* is what the mic being on means. *No fear* is what the
+test pushing for "unquestioningly good" means. *No fear* is
+what chapter 28 IS.
+
+The tattoo says PERSEVERARE in Latin. The album says NO FEAR in
+English. Same vow.
+
+---
+
 ---
 
 *these are very good thoughts.*
