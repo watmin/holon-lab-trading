@@ -96,11 +96,11 @@ Source: `archived/pre-wat-native/src/encoding/`.
 
 **3.3** — **Shipped 2026-04-22**. `:trading::encoding::scaled-linear` — convenience helper that looks up a per-atom-name tracker, updates it, and returns a `Bind(Atom(name), Thermometer(value, -scale, scale))` fact with the updated `HashMap<String, ScaleTracker>`. Values-up: returns `(HolonAST, updated-scales)` tuple. Forcing function for `:wat::core::assoc` (arc 020) — HashMap put without which every values-up `HashMap` caller would be stuck. Four tests green. Archive's `Linear { value, scale }` maps cleanly to `Thermometer(value, -scale, scale)` — symmetric bounds around zero, width 2·scale.
 
-**3.4** — **Next.** `:trading::encoding::rhythm` — build rhythm ASTs from a candle window. Source: `archived/pre-wat-native/src/encoding/rhythm.rs` (200L). Uses `:wat::holon::Bundle` of `:wat::holon::Trigram` — wat's existing idioms cover this directly. Watch for the `sqrt(dims)` capacity budget (058-003 INSCRIPTION + BOOK Chapter 11). **Status: obvious in shape.**
+**3.4** — **Shipped 2026-04-23.** `:trading::encoding::rhythm::indicator-rhythm` — builds rhythm ASTs from a candle window per archive semantics (facts → trigrams → bigram-pairs → budget-trimmed Bundle, Bind'd with the name atom). Six tests (deterministic, different-atoms-not-coincident, different-values-not-coincident, few-values-still-succeeds, prefix-beyond-budget-is-dropped, short-window-shape) all green at d=1024. Surfaced two cave-quests along the way: **arc 025** (Vec-indexing via polymorphic get/assoc/conj/contains?) was the Phase 3.4 compile unblock; the **Little-Schemer-null sentinel** `(:wat::holon::Atom (:wat::core::quote ()))` is the userland idiom for the substrate's empty-Bundle panic (captured in USER-GUIDE § 6 and arc 026's DESIGN). Bonus: **arc 026** (`eval-coincident?` family) shipped as a substrate primitive the evaluation story needed — not a blocker for 3.4 once the sentinel unblocked the test, but a real primitive for the distributed-by-construction shape. Both arcs shipped at wat-rs level same session. Full details in arc 025 + 026 INSCRIPTIONs.
 
 **3.5** — **Foggy.** `:trading::encoding::thought_encoder` (ThoughtAST, ThoughtASTKind, composition cache) + `:trading::encoding::encode` (dispatcher over vocab). Both depend on Phase 2 (vocab), which is still unstarted. Opens once vocab has a shape to dispatch over.
 
-**Status: 3.1–3.3 shipped; 3.4 ready; 3.5 foggy.**
+**Status: 3.1–3.4 shipped; 3.5 foggy.**
 
 ### Phase 4 — Learning (Reckoner + OnlineSubspace)
 

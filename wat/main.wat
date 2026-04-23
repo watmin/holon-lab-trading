@@ -24,6 +24,7 @@
 (:wat::core::load! :wat::load::file-path "encoding/round.wat")
 (:wat::core::load! :wat::load::file-path "encoding/scale_tracker.wat")
 (:wat::core::load! :wat::load::file-path "encoding/scaled_linear.wat")
+(:wat::core::load! :wat::load::file-path "encoding/rhythm.wat")
 
 (:wat::core::define (:user::main
                      (stdin  :wat::io::IOReader)

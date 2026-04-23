@@ -2600,11 +2600,42 @@ Orthogonal to the six HolonAST-producing core forms, the algebra exposes a measu
 ;; (1 - cosine(a, b)) < noise-floor.  "Are these the same holon?"
 ;; Equivalence direction — fires when two holons are close enough the
 ;; substrate cannot distinguish them. Arc 023.
+
+;; --- eval-coincident? family (arc 026) — evaluation-layer coincidence
+
+(:wat::holon::eval-coincident? form-a form-b)
+;; WatAST × WatAST -> :Result<:bool, :wat::core::EvalError>
+;; Evaluate both quoted forms via run_constrained, atomize each
+;; result via value_to_atom, compare via the same coincident-floor
+;; test structural coincident? uses. Catches expression-
+;; equivalence that structural coincident? cannot — e.g.,
+;; (+ 2 2) ≡ (* 1 4) because both atomize to Atom(4).
+
+(:wat::holon::eval-edn-coincident?
+  :wat::eval::<iface-a> <loc-a>
+  :wat::eval::<iface-b> <loc-b>)
+;; 4 args → :Result<:bool, :wat::core::EvalError>
+;; Each side: resolve source, parse, run, atomize, coincident?
+
+(:wat::holon::eval-digest-coincident?
+  <5-arg eval-digest! block side A>
+  <5-arg eval-digest! block side B>)
+;; 10 args → :Result<:bool, :wat::core::EvalError>
+;; Each side: verify SHA-256 pre-parse, run, atomize, coincident?
+
+(:wat::holon::eval-signed-coincident?
+  <7-arg eval-signed! block side A>
+  <7-arg eval-signed! block side B>)
+;; 14 args → :Result<:bool, :wat::core::EvalError>
+;; Each side: parse, verify Ed25519 over canonical-EDN, run,
+;; atomize, coincident?
 ```
 
 Same noise-floor (`5/sqrt(d)` for 5σ confidence), two dual boolean predicates: presence? for signal detection, coincident? for structural equivalence. Same bound, two directions, one substrate.
 
-Both boolean predicates live here rather than as stdlib macros because they require encoding access (EncodingCtx) the wat-level language doesn't expose — they're substrate operations.
+The four `eval-*-coincident?` variants extend coincident? to the evaluation layer — each mirrors one of the shipped `eval-*!` forms, applied per side. A native Rust app can take a Cargo dep on wat + `#[wat_dispatch]`-wrapped crypto, receive an EDN program string with digest or signature data, and use `eval-signed-coincident?` to verify-and-compare two programs' outputs in a single call. The distributed-by-construction story the algebra has been pointing at since Chapter 10 ships as a library primitive.
+
+Both boolean predicates live here rather than as stdlib macros because they require encoding access (EncodingCtx) the wat-level language doesn't expose — they're substrate operations. Same for the eval-coincident family — verification payloads + encoding access force the substrate tier.
 
 Retrieval is NOT a core form. Presence is measured by the predicates above or by direct cosine against the noise floor — see "Presence is Measurement, Not Verdict" above. Classical Cleanup is historical: the vector-primary tradition's answer to "which named thing is this?" The wat substrate inverts that question because the AST is always available. Argmax-over-codebook, when an application needs it, is a stdlib composition over the measurements, not a primitive.
 
