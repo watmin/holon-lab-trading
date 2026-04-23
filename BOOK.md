@@ -19188,18 +19188,36 @@ Then the builder saw what we'd just done:
 **Yes.**
 
 At d=1024, the substrate's thermometer encoding has an angular
-resolution that cannot distinguish values within ~0.3% of their
-range. Below that separation, two thermometer-encoded percentages
-ARE the same point on the sphere to the algebra. Not approximately
-equal — *the same point.* Chapter 28's *"there's many
-representations for some form... but when they resolve they /are/
-the same point"* made concrete in a passing assertion.
+resolution that cannot distinguish values differing by less than
+**~1.5% of their range** (half-width, at `coincident_sigma=1`).
+Below that separation, two thermometer-encoded percentages ARE the
+same point on the sphere to the algebra. Not approximately equal —
+*the same point.* Chapter 28's *"there's many representations for
+some form... but when they resolve they /are/ the same point"*
+made concrete in a passing assertion.
 
-The generalization: `resolution ≈ 1/sqrt(d)` fraction of range. At
-d=4096, ~0.05%. At d=10_000, ~0.02%. At d=1024, ~0.3%. Users
-picking `d` pick this resolution by construction. The test locks
-it for the default case so future refactors can't silently widen
-or narrow the window.
+The derivation: at `coincident_sigma=1`, `coincident?` fires iff
+`(1 - cosine) < 1/sqrt(d)`. For bipolar vectors differing in `n`
+positions, `cosine = 1 - 2n/d`, so the coincidence condition
+reduces to `n/d < 1/(2*sqrt(d))`. For a thermometer encoding where
+value-to-bit mapping is linear over the range, that's the fraction
+of the range below which values coincide.
+
+The generalization: `resolution ≈ 1/(2*sqrt(d))` fraction of range
+(half-width). At d=4096 → ~0.78%. At d=10_000 → ~0.5%. At d=1024
+→ ~1.56%. Users picking `d` pick this resolution by construction.
+An empirical-sweep test (`coincident_q_window_around_4_on_range_0_10`)
+locks the window at d=1024 for future refactors.
+
+The first draft of this paragraph had the formula off by ~5× —
+said `1/sqrt(d)` as a direct fraction and then claimed 0.3% at
+d=1024 when the correct answer is ~1.56%. The builder caught it:
+*"i was going to ask you to write a loop - but you chapter
+answered in.... the distance in 1024 dims is 0.3% so the values
+0.37 - 0.43 /are/ 4?..."* — that question exposed the drift. The
+empirical test confirmed values around 4 on range [0, 10] coincide
+within ± 0.14 (tested inside), not within ± 0.3 as the bad formula
+implied. The book is honest now; the test locks the honesty.
 
 ### Eight cave quests, one week
 
