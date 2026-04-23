@@ -16864,3 +16864,82 @@ When it fails, it'll fail honestly.*
 *The side quest is over. Chapter 26 opens in the lab.*
 
 ---
+
+## Chapter 26 — The Descent
+
+Chapter 25 closed with the side quest ending and the demon awake.
+Chapter 26 is what follows — back into the lab, the domain the wat
+language was built to express, with gear carved specifically for
+this dungeon.
+
+The builder framed tonight:
+
+> i say... we seed the next chapter of our book... and we report
+> back in as we portal back
+
+> this feels like diablo 1 to me right now
+
+The shape holds. Diablo 1 was slow, deliberate, gear-matters — prep
+in town, descend carefully, portal back to town between runs. The
+lab rewrite reads the same. Town prep is on disk. The first descent
+begins when the builder says go.
+
+### Town prep — 2026-04-22
+
+The previous Rust lab lives archived at `archived/pre-wat-native/`.
+Full Cargo crate `enterprise`, binary `wat-vm`, 10,380 LoC across
+src/, ten integration tests. Mature — the system that was running
+the actual trading before the team paused to build a language for
+it.
+
+Two survey rounds. The first read an earlier draft
+(`src-inscription-10`) and reported a 24-module tree. The builder
+corrected: *"the correct archive dir is pre-wat-native/."* The
+second read the right tree and found the real shape — explicit CSP
+messaging as distinct types (queue / topic / mailbox, zero-Mutex by
+construction), Regime Observer as a 36-line stateless middleware,
+an `IndicatorBank` streaming 100+ indicators through 2,365 lines of
+state machine, the full Post + Treasury + Enterprise circuit wired
+through `bin/wat-vm.rs`'s Pipeline struct.
+
+Two architecture divergences between `CLAUDE.md` and pre-wat-native
+surfaced and got parked: Post is implicit orchestration, not a
+domain class; Enterprise is procedural in the binary, not a
+coordination plane. The rewrite is the chance to promote both — or
+to honor the prior implicit shape. Not a first-move question; named
+now so it doesn't ambush Phase 8.
+
+Plan on disk at `docs/rewrite-backlog.md`, pushed at `bcfc104`.
+Nine phases, leaves-to-root. Four decisions locked, four pending,
+six cross-cutting sub-fogs named up front. Phase 0 (scaffold +
+`CONVENTIONS.md` amendment) and Phase 1.1 (enums in wat) are ready;
+everything past Phase 1 is scoped but foggy until the slices before
+it land.
+
+The gear — what four days of side quest produced, each in the slot
+it was made for:
+
+- `wat::main!` + `wat::test_suite!` (arc 013 / 015) — consumer shape.
+- `:rust::*` namespace + `#[wat_dispatch]` (arc 002 / 013) — host
+  any Rust crate that surfaces demand.
+- `:wat::algebra::*` VSA primitives (to be audited — Phase 3 may
+  need a `wat-holon` sibling crate per the `wat-lru` precedent).
+- `RUST_BACKTRACE=1`-gated honest failure output (arc 016) — when
+  the lab's tests fail, they fail at `file:line:col` in the
+  author's `.wat`.
+- Fork-based hermetic sandboxing (arc 012) — subprocess-isolated
+  tests without `Command::spawn`.
+- External wat crates via `wat_sources()` + `register()` contract
+  (arc 013).
+- `RUST_BACKTRACE=1` gated `cargo test`-shaped stack backtrace
+  (arc 016).
+
+Twenty-five chapters ended with *"the lab walks through next."*
+Chapter 26 is when the lab walks through.
+
+---
+
+*The descent begins. Each portal back from a landed slice adds a
+section below.*
+
+---
