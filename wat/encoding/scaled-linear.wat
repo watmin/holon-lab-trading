@@ -18,6 +18,14 @@
 ;; repeated observations of nearly-equal values produce identical
 ;; cache keys (archive convention for hot-path encoding).
 
+;; Self-load deps per arc 027's types-self-load pattern.
+;; scaled-linear uses round-to-2 (round.wat) + ScaleTracker
+;; (scale-tracker.wat). Prior omission was a latent bug; any caller
+;; that didn't already have round.wat loaded saw UnknownFunction
+;; at runtime. Fixed in arc 005.
+(:wat::load-file! "./round.wat")
+(:wat::load-file! "./scale-tracker.wat")
+
 ;; :trading::encoding::ScaleEmission — arc 004. Typealias for
 ;; scaled-linear's return shape: a holon paired with the updated
 ;; Scales. Values-up carries the tuple forward through subsequent

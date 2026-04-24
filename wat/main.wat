@@ -29,9 +29,11 @@
 ;; Phase 2 — vocab
 ;;   arc 001 — shared/time
 ;;   arc 002 — shared/helpers (extracted), exit/time
+;;   arc 005 — market/oscillators
 (:wat::load-file! "vocab/shared/helpers.wat")
 (:wat::load-file! "vocab/shared/time.wat")
 (:wat::load-file! "vocab/exit/time.wat")
+(:wat::load-file! "vocab/market/oscillators.wat")
 
 (:wat::core::define (:user::main
                      (stdin  :wat::io::IOReader)
