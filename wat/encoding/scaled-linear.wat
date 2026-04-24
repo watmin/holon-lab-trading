@@ -36,6 +36,20 @@
   :trading::encoding::ScaleEmission
   :(wat::holon::HolonAST,trading::encoding::Scales))
 
+;; :trading::encoding::VocabEmission — arc 006. The bulk-form
+;; sibling of ScaleEmission: what a full vocab function returns.
+;; Multiple holons + the Scales after all scaled-linear threading.
+;; Named when arc 006 (divergence) became the second caller to
+;; emit the shape (arc 005's oscillators was the first).
+;;
+;; Relationship:
+;;   ScaleEmission  = one scaled-linear call's output
+;;   VocabEmission  = one vocab function's output (composes many
+;;                    ScaleEmissions into one per-candle emission)
+(:wat::core::typealias
+  :trading::encoding::VocabEmission
+  :(wat::holon::Holons,trading::encoding::Scales))
+
 (:wat::core::define
   (:trading::encoding::scaled-linear
     (name :String)

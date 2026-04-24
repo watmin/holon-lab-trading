@@ -33,7 +33,7 @@
     (m :trading::types::Candle::Momentum)
     (r :trading::types::Candle::RateOfChange)
     (scales :trading::encoding::Scales)
-    -> :(wat::holon::Holons,trading::encoding::Scales))
+    -> :trading::encoding::VocabEmission)
   (:wat::core::let*
     ;; Extract + normalize the four bounded scalars.
     (((rsi :f64)

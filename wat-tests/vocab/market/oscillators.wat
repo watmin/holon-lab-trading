@@ -58,7 +58,7 @@
       (:test::fresh-momentum 55.0 -30.0 50.0 60.0))
      ((r :trading::types::Candle::RateOfChange)
       (:test::fresh-roc 0.01 0.03 0.06 0.12))
-     ((emission :(wat::holon::Holons,trading::encoding::Scales))
+     ((emission :trading::encoding::VocabEmission)
       (:trading::vocab::market::oscillators::encode-oscillators-holons
         m r (:test::empty-scales)))
      ((holons :wat::holon::Holons) (:wat::core::first emission)))
@@ -78,7 +78,7 @@
       (:test::fresh-momentum 55.0 -30.0 50.0 60.0))
      ((r :trading::types::Candle::RateOfChange)
       (:test::fresh-roc 0.01 0.03 0.06 0.12))
-     ((emission :(wat::holon::Holons,trading::encoding::Scales))
+     ((emission :trading::encoding::VocabEmission)
       (:trading::vocab::market::oscillators::encode-oscillators-holons
         m r (:test::empty-scales)))
      ((holons :wat::holon::Holons) (:wat::core::first emission))
@@ -113,7 +113,7 @@
       (:test::fresh-momentum 55.0 -30.0 50.0 60.0))
      ((r :trading::types::Candle::RateOfChange)
       (:test::fresh-roc 0.05 0.03 0.06 0.12))  ;; roc-1 = 0.05
-     ((emission :(wat::holon::Holons,trading::encoding::Scales))
+     ((emission :trading::encoding::VocabEmission)
       (:trading::vocab::market::oscillators::encode-oscillators-holons
         m r (:test::empty-scales)))
      ((holons :wat::holon::Holons) (:wat::core::first emission))
@@ -141,7 +141,7 @@
       (:test::fresh-momentum 55.0 -30.0 50.0 60.0))
      ((r :trading::types::Candle::RateOfChange)
       (:test::fresh-roc 0.01 0.03 0.06 0.12))
-     ((emission :(wat::holon::Holons,trading::encoding::Scales))
+     ((emission :trading::encoding::VocabEmission)
       (:trading::vocab::market::oscillators::encode-oscillators-holons
         m r (:test::empty-scales)))
      ((updated :trading::encoding::Scales) (:wat::core::second emission))
@@ -175,10 +175,10 @@
      ((rb :trading::types::Candle::RateOfChange)
       (:test::fresh-roc  0.20 0.0 0.0 0.0))
 
-     ((ea :(wat::holon::Holons,trading::encoding::Scales))
+     ((ea :trading::encoding::VocabEmission)
       (:trading::vocab::market::oscillators::encode-oscillators-holons
         m ra (:test::empty-scales)))
-     ((eb :(wat::holon::Holons,trading::encoding::Scales))
+     ((eb :trading::encoding::VocabEmission)
       (:trading::vocab::market::oscillators::encode-oscillators-holons
         m rb (:test::empty-scales)))
      ((ha :wat::holon::Holons) (:wat::core::first ea))
