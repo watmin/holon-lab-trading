@@ -132,7 +132,9 @@ Source: `archived/pre-wat-native/src/encoding/`.
 
 **3.5** — **Foggy.** `:trading::encoding::thought_encoder` (ThoughtAST, ThoughtASTKind, composition cache) + `:trading::encoding::encode` (dispatcher over vocab). Both depend on Phase 2 (vocab), which is still unstarted. Opens once vocab has a shape to dispatch over.
 
-**Status: 3.1–3.4 shipped; 3.5 foggy.**
+**3.3+ (arc 012) — Shipped 2026-04-23** (lab arc 012, `docs/arc/2026/04/012-geometric-bucketing/`). Substrate amendment to `scaled-linear`: replaces `round-to-2` value quantization with **geometric bucketing at `scale × noise-floor` width**. Each atom gets a cache-key grid matched to the substrate's actual discrimination resolution — `2√d` distinguishable positions per atom (200 at d=10k). Cave-quested from arc 011's scale-precision conversation; the builder's "Venn diagrams that are cache friendly" insight named the rule. Observation program `explore-bucket.wat` confirmed the math across large/medium/small scale regimes — round-to-2 over-splits for scale > 0.32 (cache misses with no gain) and under-splits for scale < 0.32 (cache hits hiding substrate-distinguishable differences). **Option B defensive fallback** in `::bucket`: if bucket-width ≤ 0, return value unchanged — absorbs the pre-existing `ScaleTracker::scale` quirk (`round(0.001, 2) = 0.00`) without changing observable behavior. Five new unit tests for the bucket function; all 67 prior lab tests pass unchanged (bucketing at mature scales shifts Thermometer inputs by less than noise-floor, so hand-built expecteds still coincide). 67 → 72 lab wat tests. Flagged follow-ups: scale-formula fix (separate arc), arc 013 (bidirectional cache via SimHash — formalizes the `Atom(integer)` family as an LSH anchor basis; BOOK Chapter 36 names the unification). Full INSCRIPTION + DESIGN + observation program on disk.
+
+**Status: 3.1–3.4 shipped + 3.3 substrate amendment (arc 012 bucketing); 3.5 foggy.**
 
 ### Phase 4 — Learning (Reckoner + OnlineSubspace)
 

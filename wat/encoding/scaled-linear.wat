@@ -14,9 +14,20 @@
 ;; caller threads the returned `(fact, updated-scales)` tuple
 ;; through subsequent calls.
 ;;
-;; Value is rounded to 2 decimals before entering the fact so
-;; repeated observations of nearly-equal values produce identical
-;; cache keys (archive convention for hot-path encoding).
+;; Value is **geometrically bucketed** before entering the fact —
+;; arc 012's rule replaces round-to-2 at this site. Bucket width is
+;; `scale × noise-floor`, the atom's natural substrate-discrimination
+;; resolution. Cache keys now correspond to noise-floor shells:
+;; values within one bucket encode identically (true cache hit),
+;; values across buckets encode distinctly (respects substrate's
+;; actual discrimination capacity).
+;;
+;; The pre-arc-012 round-to-2 had two failure modes: over-splitting
+;; for large-scale atoms (distinct cache keys for substrate-
+;; equivalent values) and under-splitting for small-scale atoms
+;; (one key spanning multiple distinguishable shells). Geometric
+;; bucketing fixes both by deriving the quantization from the
+;; atom's scale.
 
 ;; Self-load deps per arc 027's types-self-load pattern.
 ;; scaled-linear uses round-to-2 (round.wat) + ScaleTracker
@@ -68,12 +79,12 @@
       (:trading::encoding::ScaleTracker::scale updated-tracker))
      ((neg-scale :f64)
       (:wat::core::f64::- 0.0 scale))
-     ((rounded-value :f64)
-      (:trading::encoding::round-to-2 value))
+     ((bucketed-value :f64)
+      (:trading::encoding::ScaleTracker::bucket value scale))
      ((fact :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom name)
-        (:wat::holon::Thermometer rounded-value neg-scale scale)))
+        (:wat::holon::Thermometer bucketed-value neg-scale scale)))
      ((updated-scales :trading::encoding::Scales)
       (:wat::core::assoc scales name updated-tracker)))
     (:wat::core::tuple fact updated-scales)))

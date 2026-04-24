@@ -20,6 +20,8 @@
 ;;   :trading::encoding::ScaleTracker::fresh -> ScaleTracker
 ;;   :trading::encoding::ScaleTracker::update tracker value -> ScaleTracker
 ;;   :trading::encoding::ScaleTracker::scale tracker -> f64
+;;   :trading::encoding::ScaleTracker::bucket-width scale -> f64   (arc 012)
+;;   :trading::encoding::ScaleTracker::bucket value scale -> f64   (arc 012)
 
 (:wat::core::struct :trading::encoding::ScaleTracker
   (ema-abs :f64)
@@ -81,6 +83,15 @@
     (:trading::encoding::ScaleTracker/new new-ema new-count)))
 
 ;; Scale — 2 × EMA, floored at 0.001, rounded to 2 decimals.
+;;
+;; NOTE: the floor/round ordering here is historically load-bearing.
+;; The round-after-floor sequence means `round-to-2(0.001) = 0.00`
+;; can emit a zero scale for fresh trackers with zero EMA. The
+;; existing test suite expects this behavior (arc 008's scale-
+;; collision footnote exploits the 0.00-vs-0.02 difference between
+;; small and large first-call values). Arc 012 defers fixing this
+;; and guards against zero-scale division in `::bucket` instead —
+;; a separate `ScaleTracker::scale` revision is its own future arc.
 (:wat::core::define
   (:trading::encoding::ScaleTracker::scale
     (tracker :trading::encoding::ScaleTracker)
@@ -95,3 +106,50 @@
         raw
         (:trading::encoding::ScaleTracker::FLOOR))))
     (:wat::core::f64::round floored 2)))
+
+;; bucket-width — the value-space discrimination resolution for an
+;; atom at its current scale. Arc 012: `scale × noise-floor` is the
+;; minimum |v1 − v2| the substrate can distinguish via Thermometer
+;; encoding at the current dimension. Values within one bucket-width
+;; of each other are substrate-equivalent; encoding them to the same
+;; bucket produces identical Thermometer outputs → cache hits that
+;; represent true equivalences.
+(:wat::core::define
+  (:trading::encoding::ScaleTracker::bucket-width
+    (scale :f64)
+    -> :f64)
+  (:wat::core::f64::* scale (:wat::config::noise-floor)))
+
+;; bucket — round `value` to the nearest multiple of bucket-width.
+;; Arc 012's geometric bucketing rule. Replaces blind `round-to-2`
+;; at the scaled-linear encoding site: each atom gets a quantization
+;; grid matched to its own learned scale.
+;;
+;; Safety property: two values that bucket to the same output are
+;; guaranteed substrate-coincident. The converse is not perfect
+;; (boundary artifact: coincident pairs on opposite sides of a
+;; bucket edge bucket separately) — that's a missed cache
+;; optimization, not a correctness issue.
+;;
+;; Zero-scale fallback: the existing `ScaleTracker::scale` formula
+;; has a known quirk where `round(raw, 2)` can emit 0.0 for fresh
+;; trackers observing sub-0.05 magnitudes (violating its own FLOOR
+;; invariant). Bucketing requires non-zero scale; when scale is
+;; zero the function returns value unchanged. Degenerate-scale
+;; atoms fall through to the Thermometer with their raw value —
+;; matches the pre-arc-012 behavior at those callsites. Flagged
+;; as a separate scale-formula bug; arc 012 does not fix it here.
+(:wat::core::define
+  (:trading::encoding::ScaleTracker::bucket
+    (value :f64)
+    (scale :f64)
+    -> :f64)
+  (:wat::core::let*
+    (((bw :f64) (:trading::encoding::ScaleTracker::bucket-width scale))
+     ((degenerate :bool)
+      (:wat::core::<= bw 0.0)))
+    (:wat::core::if degenerate -> :f64
+      value
+      (:wat::core::let*
+        (((idx :f64) (:wat::core::f64::round (:wat::core::f64::/ value bw) 0)))
+        (:wat::core::f64::* idx bw)))))

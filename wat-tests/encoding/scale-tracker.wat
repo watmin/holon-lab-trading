@@ -105,3 +105,56 @@
     (:wat::test::assert-eq
       (:trading::encoding::ScaleTracker::scale trained)
       1.0)))
+
+;; ─── arc 012 — geometric bucketing ──────────────────────────────
+
+;; bucket-width = scale × noise-floor. At d=1024, noise-floor = 1/32
+;; = 0.03125. So scale=1.0 → bucket-width = 0.03125. scale=0.5 →
+;; bucket-width = 0.015625.
+(:deftest :trading::test::encoding::scale-tracker::test-bucket-width-matches-scale-times-noise-floor
+  (:wat::core::let*
+    (((bw-at-1 :f64) (:trading::encoding::ScaleTracker::bucket-width 1.0))
+     ((bw-at-half :f64) (:trading::encoding::ScaleTracker::bucket-width 0.5))
+     ((nf :f64) (:wat::config::noise-floor)))
+    (:wat::test::assert-eq
+      bw-at-1
+      nf)))
+
+;; Two values inside the same bucket get snapped to the same output.
+;; At scale=1.0, bucket-width=0.03125. Values 0.50 and 0.51 differ by
+;; 0.01 — well within one bucket — and snap to the same representative.
+(:deftest :trading::test::encoding::scale-tracker::test-values-in-same-bucket-snap-identical
+  (:wat::core::let*
+    (((a :f64) (:trading::encoding::ScaleTracker::bucket 0.50 1.0))
+     ((b :f64) (:trading::encoding::ScaleTracker::bucket 0.51 1.0)))
+    (:wat::test::assert-eq a b)))
+
+;; Values across bucket boundaries snap to different outputs.
+;; At scale=1.0, bucket-width=0.03125. Values 0.50 and 0.58 differ by
+;; 0.08 — crosses multiple buckets — so their snapped representatives
+;; differ.
+(:deftest :trading::test::encoding::scale-tracker::test-values-across-buckets-differ
+  (:wat::core::let*
+    (((a :f64) (:trading::encoding::ScaleTracker::bucket 0.50 1.0))
+     ((b :f64) (:trading::encoding::ScaleTracker::bucket 0.58 1.0))
+     ((different :bool)
+      (:wat::core::not (:wat::core::= a b))))
+    (:wat::test::assert-eq different true)))
+
+;; Bucketing is idempotent — running it twice gives the same result.
+;; bucket(bucket(V, s), s) == bucket(V, s). Critical for cache-key
+;; stability under repeated lookup.
+(:deftest :trading::test::encoding::scale-tracker::test-bucket-idempotent
+  (:wat::core::let*
+    (((once :f64) (:trading::encoding::ScaleTracker::bucket 0.51 1.0))
+     ((twice :f64) (:trading::encoding::ScaleTracker::bucket once 1.0)))
+    (:wat::test::assert-eq once twice)))
+
+;; Zero-scale fallback — Option B. When scale is 0, bucket-width is 0,
+;; bucket returns value unchanged (defensive against the pre-arc-012
+;; ScaleTracker::scale formula quirk that can emit 0.00 for fresh
+;; trackers with zero EMA).
+(:deftest :trading::test::encoding::scale-tracker::test-bucket-zero-scale-returns-value
+  (:wat::core::let*
+    (((result :f64) (:trading::encoding::ScaleTracker::bucket 0.42 0.0)))
+    (:wat::test::assert-eq result 0.42)))
