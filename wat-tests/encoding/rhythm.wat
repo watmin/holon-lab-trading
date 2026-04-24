@@ -7,8 +7,6 @@
 ;; shape. Outer preamble commits dims + capacity-mode once; sandbox
 ;; inherits.
 
-(:wat::config::set-capacity-mode! :error)
-(:wat::config::set-dims! 1024)
 
 (:wat::test::make-deftest :deftest
   ((:wat::load-file! "wat/encoding/rhythm.wat")))

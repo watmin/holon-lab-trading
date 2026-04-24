@@ -9,8 +9,6 @@
 ;; inherits. Default-prelude loads scaled-linear + its deps and a
 ;; tail-recursive helper used by the accumulation test.
 
-(:wat::config::set-capacity-mode! :error)
-(:wat::config::set-dims! 1024)
 
 (:wat::test::make-deftest :deftest
   ((:wat::load-file! "wat/encoding/round.wat")

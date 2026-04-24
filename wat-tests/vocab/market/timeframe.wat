@@ -5,8 +5,6 @@
 ;; caller. First cross-sub-struct compute (tf-5m-1h-align uses
 ;; fields from both sub-structs).
 
-(:wat::config::set-capacity-mode! :error)
-(:wat::config::set-dims! 1024)
 
 (:wat::test::make-deftest :deftest
   ((:wat::load-file! "wat/vocab/market/timeframe.wat")

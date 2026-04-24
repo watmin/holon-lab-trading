@@ -4,8 +4,6 @@
 ;; cross-sub-struct module — inherits arc 008's signature rule
 ;; without rederivation. Adds one test for the inline clamp.
 
-(:wat::config::set-capacity-mode! :error)
-(:wat::config::set-dims! 1024)
 
 (:wat::test::make-deftest :deftest
   ((:wat::load-file! "wat/vocab/market/stochastic.wat")

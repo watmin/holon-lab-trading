@@ -22,8 +22,6 @@
 ;; sandbox-inherits-config path. (Arcs 029 + 030 shipped the nested-
 ;; quasiquote and macroexpand substrate that made this shape work.)
 
-(:wat::config::set-capacity-mode! :error)
-(:wat::config::set-dims! 1024)
 
 ;; Configure :deftest for this file. The load chain:
 ;;   wat/vocab/shared/time.wat → wat/types/candle.wat

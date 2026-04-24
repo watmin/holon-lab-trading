@@ -17,8 +17,6 @@
 ;; path. One-load default-prelude pulls the full dep chain via the
 ;; types' self-loads.
 
-(:wat::config::set-capacity-mode! :error)
-(:wat::config::set-dims! 1024)
 
 (:wat::test::make-deftest :deftest
   ((:wat::load-file! "wat/vocab/exit/time.wat")))

@@ -8,8 +8,6 @@
 ;; inherits. Default-prelude loads the module plus a tail-recursive
 ;; helper used by the convergence test.
 
-(:wat::config::set-capacity-mode! :error)
-(:wat::config::set-dims! 1024)
 
 (:wat::test::make-deftest :deftest
   ((:wat::load-file! "wat/encoding/scale-tracker.wat")

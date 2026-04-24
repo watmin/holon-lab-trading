@@ -9,8 +9,6 @@
 ;; Replaced in Phase 9 with the real integration-test ports from
 ;; `archived/pre-wat-native/tests/`.
 
-(:wat::config::set-dims! 1024)
-(:wat::config::set-capacity-mode! :error)
 
 (:wat::test::deftest :trading::test::test-scaffold-is-alive
   ()

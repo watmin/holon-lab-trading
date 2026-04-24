@@ -9,8 +9,6 @@
 ;;
 ;; See `docs/rewrite-backlog.md` for the leaves-to-root build order.
 
-(:wat::config::set-dims! 10000)
-(:wat::config::set-capacity-mode! :error)
 
 ;; Phase 1 — types
 (:wat::load-file! "types/enums.wat")

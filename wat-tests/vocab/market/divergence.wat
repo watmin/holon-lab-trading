@@ -6,8 +6,6 @@
 ;; emission truth table (none / bull-only / bear-only / both) plus
 ;; shape + no-scales-pollution claims.
 
-(:wat::config::set-capacity-mode! :error)
-(:wat::config::set-dims! 1024)
 
 (:wat::test::make-deftest :deftest
   ((:wat::load-file! "wat/vocab/market/divergence.wat")

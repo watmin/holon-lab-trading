@@ -5,8 +5,6 @@
 ;; subtraction math), scales accumulation, and distinguishability
 ;; across distinct input candles.
 
-(:wat::config::set-capacity-mode! :error)
-(:wat::config::set-dims! 1024)
 
 (:wat::test::make-deftest :deftest
   ((:wat::load-file! "wat/vocab/market/fibonacci.wat")

@@ -6,8 +6,6 @@
 ;; module — exercises the signature rule from task #49:
 ;; alphabetical-by-type parameter order.
 
-(:wat::config::set-capacity-mode! :error)
-(:wat::config::set-dims! 1024)
 
 (:wat::test::make-deftest :deftest
   ((:wat::load-file! "wat/vocab/market/persistence.wat")

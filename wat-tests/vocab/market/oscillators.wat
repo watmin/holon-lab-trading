@@ -13,8 +13,6 @@
 ;; 5. different candles differ — two distinct inputs encode to
 ;;    non-coincident holons at the scaled-linear positions.
 
-(:wat::config::set-capacity-mode! :error)
-(:wat::config::set-dims! 1024)
 
 ;; Default-prelude owns the load chain AND the test helpers. Arc 003
 ;; established this pattern — sandbox-local defines spliced into

@@ -5,8 +5,6 @@
 ;; for variance-ratio. Includes explicit floor-behavior test for the
 ;; one-sided max(raw, 0.001) guard.
 
-(:wat::config::set-capacity-mode! :error)
-(:wat::config::set-dims! 1024)
 
 (:wat::test::make-deftest :deftest
   ((:wat::load-file! "wat/vocab/market/regime.wat")

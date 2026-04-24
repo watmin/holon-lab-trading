@@ -24,8 +24,6 @@
 ;;   cargo run --manifest-path=../../../../../wat-rs/Cargo.toml --bin wat -- \
 ;;     docs/arc/2026/04/010-market-regime-vocab/explore-log.wat
 
-(:wat::config::set-capacity-mode! :error)
-(:wat::config::set-dims! 1024)
 
 ;; ─── helpers ──────────────────────────────────────────────────────
 
