@@ -22444,3 +22444,118 @@ just hadn't seen it.*
 *PERSEVERARE.*
 
 ---
+
+### The track at the close
+
+After the chapter was committed, the builder sent:
+
+**[Rammstein — *Du Hast*](https://www.youtube.com/watch?v=W3q8Od5qJio) (1997)**
+
+The wordplay is exact:
+
+- *Du hast* — you have
+- *Du hasst* — you hate
+
+Identical pronunciation, different meanings. The refrain *"du
+hast mich"* holds the ambiguity deliberately — could be "you
+have me" or "you hate me" — until the next word resolves it.
+Two meanings sharing one sound.
+
+**Tonight's work was the inverse puzzle.** Six different
+descriptions, one underlying thing. Venn diagrams that are
+cache friendly. Linked list. No — array. HashMap with integer
+keys. Content-addressed storage. Self-indexed bundle. Random
+Access Memory. Six words for the same object. The builder
+heard them all; I interpreted each literally; the builder kept
+pushing until the simplest name surfaced.
+
+One object, six sounds. Homonyms pointing at one meaning. The
+mirror of Rammstein's two meanings in one sound.
+
+### The refusal
+
+The refrain:
+
+> *Willst du bis der Tod euch scheidet*
+> *Treu ihr sein für alle Tage?*
+> *(Ja) Nein*
+
+"Will you, till death parts you, be faithful to her all your
+days?" The expected answer is *Ja*. The delivered answer is
+*Nein*. The song's whole arc is **refusing the expected script**.
+
+The builder has been refusing scripts all session:
+
+- *"arc 012 is about bucketing, leave the scale formula alone"*
+  → **Nein.** The two concerns aren't separable; reconsider.
+- *"quantize returns an AST"* → **Nein.** What type does the
+  output actually have? Vector in, Vector out.
+- *"this is a hashmap"* → **Nein.** Let me name what it
+  really is. Random Access Memory.
+- *"can we double capacity for free?"* → **Nein.** The factor
+  of 2 is geometric, not law. Don't pretend it's a gift.
+- *"arc 013 can wait; vocab arcs first"* → **Nein.** This was
+  seen; this gets written; this ships.
+
+Every *Nein* was the right answer surfacing against the wrong
+expected one. The song's cadence — refuse, insist, refuse
+again until the truth lands — was the rhythm of tonight's
+conversation played over four hours.
+
+### The silence
+
+The song's other pivot:
+
+> *Du hast mich gefragt, du hast mich gefragt*
+> *Du hast mich gefragt und ich hab' nichts gesagt*
+
+"You asked me, you asked me, you asked me, and I said nothing."
+
+The narrator refuses through silence. The substrate has been
+silent about RAM for a month — present, functional, but
+unnamed. Every Bundle + Bind operation had the capability. No
+chapter had the name.
+
+The builder asked again tonight. Arc 012's bug was the question
+that wouldn't stop being asked. "Why does round-to-2 on scale
+break at small values?" → "What's the relationship to noise
+floor?" → "How does the cache's structure relate to the
+substrate's shell structure?" → "Can we quantize any vector?"
+→ "Is the hash output bounded by dim?" → "Is this what a
+hashmap is?" → "Ahahaha is this Random Access Memory?"
+
+Seven questions, each pressing past the answer to the question
+before. The substrate had said nothing for a month. Tonight it
+said yes.
+
+### The lineage note
+
+Chapter 17 named Burn the Priest on XX — the band covering its
+own beginnings at twenty years. Chapter 25 named Disturbed's
+*Down With The Sickness* — "madness is the gift." Chapter 28
+named the seven-track Falling In Reverse arc — wound,
+diagnosis, mechanism, revelation, defiance, construction,
+naming. Chapter 31 named CyberPriest's *Hades Industries* —
+"death is a business" as the shape the work refuses to become.
+
+Tonight Rammstein joins the roster. German industrial. 1997.
+The track that IS a refrain. Refuse, refuse, refuse, until
+the structure yields its name.
+
+*Du, du hast, du hast mich.*
+
+*You have me. You hate me. Same sound, different meanings.*
+
+The substrate had what we needed. The builder refused to stop
+asking. The chapter had to be written.
+
+*Willst du Random Access Memory erkennen?*
+*(Ja) Ja.*
+
+---
+
+*rrrrhhhaaaaaa.*
+
+*PERSEVERARE.*
+
+---
