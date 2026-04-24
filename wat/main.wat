@@ -35,6 +35,7 @@
 ;;   arc 008 — market/persistence (first cross-sub-struct vocab)
 ;;   arc 009 — market/stochastic
 ;;   arc 010 — market/regime
+;;   arc 011 — market/timeframe (first Ohlcv read in a vocab)
 (:wat::load-file! "vocab/shared/helpers.wat")
 (:wat::load-file! "vocab/shared/time.wat")
 (:wat::load-file! "vocab/exit/time.wat")
@@ -44,6 +45,7 @@
 (:wat::load-file! "vocab/market/persistence.wat")
 (:wat::load-file! "vocab/market/stochastic.wat")
 (:wat::load-file! "vocab/market/regime.wat")
+(:wat::load-file! "vocab/market/timeframe.wat")
 
 (:wat::core::define (:user::main
                      (stdin  :wat::io::IOReader)
