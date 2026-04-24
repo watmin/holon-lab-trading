@@ -1,12 +1,12 @@
-;; wat-tests/encoding/scaled_linear.wat — Phase 3.3 tests.
+;; wat-tests/encoding/scaled-linear.wat — Phase 3.3 tests.
 ;;
 ;; Tests :trading::encoding::scaled-linear against
-;; wat/encoding/scaled_linear.wat. scaled-linear threads a
+;; wat/encoding/scaled-linear.wat. scaled-linear threads a
 ;; HashMap<String, ScaleTracker> values-up through encoding calls.
 ;;
 ;; Arc 003 retrofit: uses arc 031's make-deftest + inherited-config
 ;; shape. Outer preamble commits dims + capacity-mode once; sandbox
-;; inherits. Default-prelude loads scaled_linear + its deps and a
+;; inherits. Default-prelude loads scaled-linear + its deps and a
 ;; tail-recursive helper used by the accumulation test.
 
 (:wat::config::set-capacity-mode! :error)
@@ -14,8 +14,8 @@
 
 (:wat::test::make-deftest :deftest
   ((:wat::load-file! "wat/encoding/round.wat")
-   (:wat::load-file! "wat/encoding/scale_tracker.wat")
-   (:wat::load-file! "wat/encoding/scaled_linear.wat")
+   (:wat::load-file! "wat/encoding/scale-tracker.wat")
+   (:wat::load-file! "wat/encoding/scaled-linear.wat")
    (:wat::core::define
      (:test::repeat-scaled-linear
        (name :String)

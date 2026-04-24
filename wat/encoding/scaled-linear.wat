@@ -1,4 +1,4 @@
-;; wat/encoding/scaled_linear.wat — Phase 3.3 (2026-04-22).
+;; wat/encoding/scaled-linear.wat — Phase 3.3 (2026-04-22).
 ;;
 ;; Port of archived/pre-wat-native/src/encoding/scale_tracker.rs's
 ;; `scaled_linear` convenience — updates the named tracker, reads

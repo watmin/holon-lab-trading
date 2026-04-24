@@ -22,8 +22,8 @@
 
 ;; Phase 3 — encoding helpers
 (:wat::load-file! "encoding/round.wat")
-(:wat::load-file! "encoding/scale_tracker.wat")
-(:wat::load-file! "encoding/scaled_linear.wat")
+(:wat::load-file! "encoding/scale-tracker.wat")
+(:wat::load-file! "encoding/scaled-linear.wat")
 (:wat::load-file! "encoding/rhythm.wat")
 
 ;; Phase 2 — vocab

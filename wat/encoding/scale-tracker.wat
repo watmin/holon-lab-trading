@@ -1,4 +1,4 @@
-;; wat/encoding/scale_tracker.wat — Phase 3.2 (2026-04-22).
+;; wat/encoding/scale-tracker.wat — Phase 3.2 (2026-04-22).
 ;;
 ;; Port of archived/pre-wat-native/src/encoding/scale_tracker.rs's
 ;; `ScaleTracker` — learned scale for Linear atoms. EMA of absolute

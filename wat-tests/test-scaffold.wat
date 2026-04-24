@@ -1,4 +1,4 @@
-;; wat-tests/test_scaffold.wat — Phase 0 placeholder.
+;; wat-tests/test-scaffold.wat — Phase 0 placeholder.
 ;;
 ;; Proves the `wat::test! {}` minimal form wires end-to-end + that
 ;; a `:trading::*`-namespaced `test-*` define registers cleanly

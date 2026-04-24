@@ -1,7 +1,7 @@
-;; wat-tests/encoding/scale_tracker.wat — Phase 3.2 tests.
+;; wat-tests/encoding/scale-tracker.wat — Phase 3.2 tests.
 ;;
 ;; Tests :trading::encoding::ScaleTracker (::fresh, ::update, ::scale)
-;; against its source at wat/encoding/scale_tracker.wat.
+;; against its source at wat/encoding/scale-tracker.wat.
 ;;
 ;; Arc 003 retrofit: uses arc 031's make-deftest + inherited-config
 ;; shape. Outer preamble commits dims + capacity-mode once; sandbox
@@ -12,7 +12,7 @@
 (:wat::config::set-dims! 1024)
 
 (:wat::test::make-deftest :deftest
-  ((:wat::load-file! "wat/encoding/scale_tracker.wat")
+  ((:wat::load-file! "wat/encoding/scale-tracker.wat")
    (:wat::core::define
      (:test::repeat-update
        (t :trading::encoding::ScaleTracker)
