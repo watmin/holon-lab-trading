@@ -32,12 +32,14 @@
 ;;   arc 005 — market/oscillators
 ;;   arc 006 — market/divergence
 ;;   arc 007 — market/fibonacci
+;;   arc 008 — market/persistence (first cross-sub-struct vocab)
 (:wat::load-file! "vocab/shared/helpers.wat")
 (:wat::load-file! "vocab/shared/time.wat")
 (:wat::load-file! "vocab/exit/time.wat")
 (:wat::load-file! "vocab/market/oscillators.wat")
 (:wat::load-file! "vocab/market/divergence.wat")
 (:wat::load-file! "vocab/market/fibonacci.wat")
+(:wat::load-file! "vocab/market/persistence.wat")
 
 (:wat::core::define (:user::main
                      (stdin  :wat::io::IOReader)
