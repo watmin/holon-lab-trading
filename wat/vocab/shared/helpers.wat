@@ -17,7 +17,7 @@
 ;;
 ;; Round the value to the nearest integer, then Circular-encode it
 ;; against the component's period. Used by every vocab module that
-;; emits circular facts (time, exit-time, any future calendar
+;; emits circular holons (time, exit-time, any future calendar
 ;; vocabulary).
 ;;
 ;; Rounding rationale: per proposal 057's RESOLUTION, round_to at
@@ -36,7 +36,7 @@
 ;; ─── named-bind — Bind(Atom(name), child) pair ─────────────────────
 ;;
 ;; Readability helper — emission sites read cleaner than inline
-;; Bind + Atom pairs. Single emission path for name-tagged facts
+;; Bind + Atom pairs. Single emission path for name-tagged holons
 ;; across every vocab module.
 (:wat::core::define
   (:trading::vocab::shared::named-bind

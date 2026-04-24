@@ -25,6 +25,15 @@
   (ema-abs :f64)
   (count   :i64))
 
+;; :trading::encoding::Scales — arc 004. Typealias for the
+;; per-indicator-name ScaleTracker registry. scaled-linear and
+;; future values-up encoding helpers thread this map values-up.
+;; Named via /gaze — plural of the domain concept. Archive's Rust
+;; variable is `scales: HashMap<String, ScaleTracker>`.
+(:wat::core::typealias
+  :trading::encoding::Scales
+  :HashMap<String,trading::encoding::ScaleTracker>)
+
 ;; Named constant — coverage multiplier. 2.0 ≈ 89% for a roughly
 ;; Gaussian distribution. Archive's `SCALE_COVERAGE`.
 (:wat::core::define

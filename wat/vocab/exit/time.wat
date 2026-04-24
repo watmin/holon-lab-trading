@@ -14,12 +14,12 @@
 (:wat::load-file! "../../types/candle.wat")
 (:wat::load-file! "../shared/helpers.wat")
 
-;; ─── encode-exit-time-facts — 2 leaves ─────────────────────────────
+;; ─── encode-exit-time-holons — 2 leaves ─────────────────────────────
 
 (:wat::core::define
-  (:trading::vocab::exit::time::encode-exit-time-facts
+  (:trading::vocab::exit::time::encode-exit-time-holons
     (t :trading::types::Candle::Time)
-    -> :Vec<wat::holon::HolonAST>)
+    -> :wat::holon::Holons)
   (:wat::core::let*
     (((hour        :f64) (:trading::types::Candle::Time/hour        t))
      ((day-of-week :f64) (:trading::types::Candle::Time/day-of-week t)))

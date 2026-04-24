@@ -18,12 +18,22 @@
 ;; repeated observations of nearly-equal values produce identical
 ;; cache keys (archive convention for hot-path encoding).
 
+;; :trading::encoding::ScaleEmission — arc 004. Typealias for
+;; scaled-linear's return shape: a holon paired with the updated
+;; Scales. Values-up carries the tuple forward through subsequent
+;; encoding calls. Named via /gaze — "an emission that updated
+;; the scales" — the tuple IS the dual product of fact-emission
+;; and scale-threading.
+(:wat::core::typealias
+  :trading::encoding::ScaleEmission
+  :(wat::holon::HolonAST,trading::encoding::Scales))
+
 (:wat::core::define
   (:trading::encoding::scaled-linear
     (name :String)
     (value :f64)
-    (scales :HashMap<String,trading::encoding::ScaleTracker>)
-    -> :(wat::holon::HolonAST,HashMap<String,trading::encoding::ScaleTracker>))
+    (scales :trading::encoding::Scales)
+    -> :trading::encoding::ScaleEmission)
   (:wat::core::let*
     (((prev :trading::encoding::ScaleTracker)
       (:wat::core::match (:wat::core::get scales name)
@@ -42,6 +52,6 @@
       (:wat::holon::Bind
         (:wat::holon::Atom name)
         (:wat::holon::Thermometer rounded-value neg-scale scale)))
-     ((updated-scales :HashMap<String,trading::encoding::ScaleTracker>)
+     ((updated-scales :trading::encoding::Scales)
       (:wat::core::assoc scales name updated-tracker)))
     (:wat::core::tuple fact updated-scales)))

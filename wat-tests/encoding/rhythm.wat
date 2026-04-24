@@ -119,9 +119,9 @@
       (:wat::holon::coincident? h-up h-dn)
       false)))
 
-;; ─── Budget truncation — prefix values beyond max-facts are dropped
+;; ─── Budget truncation — prefix values beyond max-holons are dropped
 ;;
-;; At d=1024, budget = sqrt(1024) = 32, max-facts = 35. A long
+;; At d=1024, budget = sqrt(1024) = 32, max-holons = 35. A long
 ;; window and the last-35-element slice of it should produce
 ;; coincident rhythms — the prefix was trimmed identically by step
 ;; 1 of the algorithm.

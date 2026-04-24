@@ -27,20 +27,20 @@
 
 ;; Exports two defines:
 ;;
-;;   encode-time-facts : 5 leaf binds (one per circular component)
-;;   time-facts        : 5 leaves + 3 pairwise compositions
+;;   encode-time-holons : 5 leaf binds (one per circular component)
+;;   time-holons        : 5 leaves + 3 pairwise compositions
 ;;                       (minute × hour, hour × dow, dow × month)
 ;;
 ;; Both are vocabulary. The thinker bundles whatever set it wants;
 ;; the discriminant picks the winners. Ship both (archive comment
 ;; pinned this intent).
 
-;; ─── encode-time-facts — 5 leaves ──────────────────────────────────
+;; ─── encode-time-holons — 5 leaves ──────────────────────────────────
 
 (:wat::core::define
-  (:trading::vocab::shared::time::encode-time-facts
+  (:trading::vocab::shared::time::encode-time-holons
     (t :trading::types::Candle::Time)
-    -> :Vec<wat::holon::HolonAST>)
+    -> :wat::holon::Holons)
   (:wat::core::let*
     (((minute        :f64) (:trading::types::Candle::Time/minute        t))
      ((hour          :f64) (:trading::types::Candle::Time/hour          t))
@@ -59,16 +59,16 @@
       (:trading::vocab::shared::named-bind "month-of-year"
         (:trading::vocab::shared::circ month-of-year 12.0)))))
 
-;; ─── time-facts — 5 leaves + 3 pairwise compositions ───────────────
+;; ─── time-holons — 5 leaves + 3 pairwise compositions ───────────────
 ;;
 ;; The three compositions express "this pair matters together" — the
 ;; discriminant learns whether the composite carries signal the
 ;; individual leaves don't.
 
 (:wat::core::define
-  (:trading::vocab::shared::time::time-facts
+  (:trading::vocab::shared::time::time-holons
     (t :trading::types::Candle::Time)
-    -> :Vec<wat::holon::HolonAST>)
+    -> :wat::holon::Holons)
   (:wat::core::let*
     (((minute        :f64) (:trading::types::Candle::Time/minute        t))
      ((hour          :f64) (:trading::types::Candle::Time/hour          t))

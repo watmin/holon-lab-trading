@@ -3,16 +3,16 @@
 ;; Outstanding tests for :trading::vocab::shared::time — six claims
 ;; anchored in the module's responsibility:
 ;;
-;; 1. leaves count — encode-time-facts returns 5 facts.
-;; 2. composition count — time-facts returns 8 facts (5 leaves + 3 pairs).
+;; 1. leaves count — encode-time-holons returns 5 holons.
+;; 2. composition count — time-holons returns 8 holons (5 leaves + 3 pairs).
 ;; 3. leaf shape — fact[1] structurally coincides with a hand-built
 ;;    Bind(Atom("hour"), Circular(rounded-hour, 24.0)).
 ;; 4. composition shape — fact[5] (minute × hour) structurally
 ;;    coincides with hand-built Bind(minute-bind, hour-bind).
 ;; 5. rounding quantizes cache keys — candles with hour=14.7 and
-;;    hour=15.1 produce coincident hour-facts (both round to 15).
+;;    hour=15.1 produce coincident hour-holons (both round to 15).
 ;; 6. opposite clock points differ — candles with hour=6 and hour=18
-;;    produce NON-coincident hour-facts (Circular's angular encoding
+;;    produce NON-coincident hour-holons (Circular's angular encoding
 ;;    distinguishes opposite points on the 24-period sphere).
 ;;
 ;; Uses :wat::test::make-deftest to configure :deftest once — the
@@ -33,28 +33,28 @@
 (:wat::test::make-deftest :deftest
   ((:wat::load-file! "wat/vocab/shared/time.wat")))
 
-;; ─── 1. encode-time-facts returns 5 ───────────────────────────────
+;; ─── 1. encode-time-holons returns 5 ───────────────────────────────
 
-(:deftest :trading::test::vocab::shared::time::test-encode-time-facts-count
+(:deftest :trading::test::vocab::shared::time::test-encode-time-holons-count
   (:wat::core::let*
     (((t :trading::types::Candle::Time)
       (:trading::types::Candle::Time/new 30.0 14.0 3.0 15.0 6.0))
-     ((facts :Vec<wat::holon::HolonAST>)
-      (:trading::vocab::shared::time::encode-time-facts t)))
+     ((holons :wat::holon::Holons)
+      (:trading::vocab::shared::time::encode-time-holons t)))
     (:wat::test::assert-eq
-      (:wat::core::length facts)
+      (:wat::core::length holons)
       5)))
 
-;; ─── 2. time-facts returns 8 ──────────────────────────────────────
+;; ─── 2. time-holons returns 8 ──────────────────────────────────────
 
-(:deftest :trading::test::vocab::shared::time::test-time-facts-count
+(:deftest :trading::test::vocab::shared::time::test-time-holons-count
   (:wat::core::let*
     (((t :trading::types::Candle::Time)
       (:trading::types::Candle::Time/new 30.0 14.0 3.0 15.0 6.0))
-     ((facts :Vec<wat::holon::HolonAST>)
-      (:trading::vocab::shared::time::time-facts t)))
+     ((holons :wat::holon::Holons)
+      (:trading::vocab::shared::time::time-holons t)))
     (:wat::test::assert-eq
-      (:wat::core::length facts)
+      (:wat::core::length holons)
       8)))
 
 ;; ─── 3. hour fact coincides with hand-built shape ─────────────────
@@ -63,10 +63,10 @@
   (:wat::core::let*
     (((t :trading::types::Candle::Time)
       (:trading::types::Candle::Time/new 30.0 14.0 3.0 15.0 6.0))
-     ((facts :Vec<wat::holon::HolonAST>)
-      (:trading::vocab::shared::time::encode-time-facts t))
+     ((holons :wat::holon::Holons)
+      (:trading::vocab::shared::time::encode-time-holons t))
      ((actual :wat::holon::HolonAST)
-      (:wat::core::match (:wat::core::get facts 1) -> :wat::holon::HolonAST
+      (:wat::core::match (:wat::core::get holons 1) -> :wat::holon::HolonAST
         ((Some h) h)
         (:None (:wat::holon::Atom "unreachable"))))
      ((expected :wat::holon::HolonAST)
@@ -83,10 +83,10 @@
   (:wat::core::let*
     (((t :trading::types::Candle::Time)
       (:trading::types::Candle::Time/new 30.0 14.0 3.0 15.0 6.0))
-     ((facts :Vec<wat::holon::HolonAST>)
-      (:trading::vocab::shared::time::time-facts t))
+     ((holons :wat::holon::Holons)
+      (:trading::vocab::shared::time::time-holons t))
      ((actual :wat::holon::HolonAST)
-      (:wat::core::match (:wat::core::get facts 5) -> :wat::holon::HolonAST
+      (:wat::core::match (:wat::core::get holons 5) -> :wat::holon::HolonAST
         ((Some h) h)
         (:None (:wat::holon::Atom "unreachable"))))
      ((minute-bind :wat::holon::HolonAST)
@@ -111,16 +111,16 @@
       (:trading::types::Candle::Time/new 30.0 14.7 3.0 15.0 6.0))
      ((t-b :trading::types::Candle::Time)
       (:trading::types::Candle::Time/new 30.0 15.1 3.0 15.0 6.0))
-     ((facts-a :Vec<wat::holon::HolonAST>)
-      (:trading::vocab::shared::time::encode-time-facts t-a))
-     ((facts-b :Vec<wat::holon::HolonAST>)
-      (:trading::vocab::shared::time::encode-time-facts t-b))
+     ((holons-a :wat::holon::Holons)
+      (:trading::vocab::shared::time::encode-time-holons t-a))
+     ((holons-b :wat::holon::Holons)
+      (:trading::vocab::shared::time::encode-time-holons t-b))
      ((hour-a :wat::holon::HolonAST)
-      (:wat::core::match (:wat::core::get facts-a 1) -> :wat::holon::HolonAST
+      (:wat::core::match (:wat::core::get holons-a 1) -> :wat::holon::HolonAST
         ((Some h) h)
         (:None (:wat::holon::Atom "unreachable"))))
      ((hour-b :wat::holon::HolonAST)
-      (:wat::core::match (:wat::core::get facts-b 1) -> :wat::holon::HolonAST
+      (:wat::core::match (:wat::core::get holons-b 1) -> :wat::holon::HolonAST
         ((Some h) h)
         (:None (:wat::holon::Atom "unreachable")))))
     (:wat::test::assert-eq
@@ -135,16 +135,16 @@
       (:trading::types::Candle::Time/new 30.0 6.0 3.0 15.0 6.0))
      ((t-evening :trading::types::Candle::Time)
       (:trading::types::Candle::Time/new 30.0 18.0 3.0 15.0 6.0))
-     ((facts-morning :Vec<wat::holon::HolonAST>)
-      (:trading::vocab::shared::time::encode-time-facts t-morning))
-     ((facts-evening :Vec<wat::holon::HolonAST>)
-      (:trading::vocab::shared::time::encode-time-facts t-evening))
+     ((holons-morning :wat::holon::Holons)
+      (:trading::vocab::shared::time::encode-time-holons t-morning))
+     ((holons-evening :wat::holon::Holons)
+      (:trading::vocab::shared::time::encode-time-holons t-evening))
      ((hour-morning :wat::holon::HolonAST)
-      (:wat::core::match (:wat::core::get facts-morning 1) -> :wat::holon::HolonAST
+      (:wat::core::match (:wat::core::get holons-morning 1) -> :wat::holon::HolonAST
         ((Some h) h)
         (:None (:wat::holon::Atom "unreachable"))))
      ((hour-evening :wat::holon::HolonAST)
-      (:wat::core::match (:wat::core::get facts-evening 1) -> :wat::holon::HolonAST
+      (:wat::core::match (:wat::core::get holons-evening 1) -> :wat::holon::HolonAST
         ((Some h) h)
         (:None (:wat::holon::Atom "unreachable")))))
     (:wat::test::assert-eq

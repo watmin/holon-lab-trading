@@ -112,6 +112,8 @@ Source: `archived/pre-wat-native/src/encoding/`.
 
 **Phase 3 test retrofit — Shipped 2026-04-23** (lab arc 003, `docs/arc/2026/04/003-phase3-test-retrofit/`). `wat-tests/encoding/{scale_tracker,scaled-linear,rhythm}.wat` migrated from the pre-arc-027 manual `run-sandboxed-ast` + `:wat::test::program` shape to arc 031's `make-deftest` + inherited-config shape. 784 → 507 lines (−277, −35%); 18/18 tests still green on first pass. Zero semantic test changes, zero substrate work — the retrofit applies the substrate's ergonomic capability to tests that predated it. Helper-in-default-prelude pattern captured: when a single test needs a non-trivial helper, the factory's default-prelude is the honest place for it.
 
+**Phase 3 naming sweep — Shipped 2026-04-23** (lab arc 004, `docs/arc/2026/04/004-lab-naming-sweep/`). Five /gaze-named moves in one arc: `:trading::encoding::Scales` typealias for the `HashMap<String, ScaleTracker>` registry; `:trading::encoding::ScaleEmission` typealias for scaled-linear's `(HolonAST, Scales)` return; lab-wide migration to wat-rs-arc-033's `:wat::holon::Holons`; vocab function renames `encode-*-facts` → `encode-*-holons` (the return type is Holons, the verb follows); test variable renames `facts` → `holons`. 79 swaps across 8 files (slice 1) + 50 swaps across 5 files (slice 2) + 3 FOUNDATION.md updates (slice 3). All 29 lab wat-tests green.
+
 **3.5** — **Foggy.** `:trading::encoding::thought_encoder` (ThoughtAST, ThoughtASTKind, composition cache) + `:trading::encoding::encode` (dispatcher over vocab). Both depend on Phase 2 (vocab), which is still unstarted. Opens once vocab has a shape to dispatch over.
 
 **Status: 3.1–3.4 shipped; 3.5 foggy.**

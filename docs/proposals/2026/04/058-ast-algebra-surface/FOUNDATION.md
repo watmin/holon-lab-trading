@@ -647,7 +647,7 @@ redef-mode = :strict         ;; default — name collisions halt startup
 ```scheme
 ;; Build an AST at runtime — perhaps from parsed user input, perhaps from
 ;; a pattern-matching result, perhaps from an LLM's output:
-(:wat::core::let (((composed :Vec<wat::holon::HolonAST>)
+(:wat::core::let (((composed :wat::holon::Holons)
        (:wat::core::vec ':wat::std::Difference
              (:wat::core::vec ':wat::holon::Atom :observed)
              (:wat::core::vec ':wat::holon::Atom :baseline))))
@@ -2535,9 +2535,11 @@ This section freezes the full algebra in its target shape (post-058). Core forms
 ;; list → element-wise sum + threshold
 ;; commutative, takes an explicit list (not variadic)
 ;;
-;; Signature: :Vec<wat::holon::HolonAST> -> :Result<wat::holon::HolonAST,
-;;                                              :wat::holon::CapacityExceeded>
-;; (per 058-003 INSCRIPTION 2026-04-19 — capacity-guard cascade)
+;; Signature: :wat::holon::Holons -> :wat::holon::BundleResult
+;; (expanded: :Vec<wat::holon::HolonAST> -> :Result<wat::holon::HolonAST,
+;;  :wat::holon::CapacityExceeded>)
+;; (per 058-003 INSCRIPTION 2026-04-19 — capacity-guard cascade;
+;;  arcs 032 + 033 named the short forms)
 ;;
 ;; Under every committed :capacity-mode the return type is Result:
 ;; - :silent — always Ok(h); no check; substrate produces degraded vec
@@ -2753,7 +2755,7 @@ Retrieval is NOT a core form. Presence is measured by the predicates above or by
            (:wat::holon::Bind (:wat::core::first pair) (:wat::core::second pair)))
          pairs)))
 
-(:wat::core::define (:wat::std::Vec (items :Vec<wat::holon::HolonAST>) -> :wat::holon::HolonAST)
+(:wat::core::define (:wat::std::Vec (items :wat::holon::Holons) -> :wat::holon::HolonAST)
   ;; Indexed container. Each item bound to its position as an integer atom.
   ;; (Atom i) is the atom whose literal IS the integer i. Runtime backs it
   ;; with Rust's Vec for O(1) indexing.

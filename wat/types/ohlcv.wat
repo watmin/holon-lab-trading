@@ -4,7 +4,7 @@
 ;; identifies a token (USDC, WBTC, ...). `Ohlcv` is the enterprise's
 ;; only raw input — one period of market data. Everything else the
 ;; lab consumes (Candle's enriched 90+ fields, indicator rhythms,
-;; observer facts) derives from this.
+;; observer holons) derives from this.
 ;;
 ;; Rust field names `source_asset` → wat `source-asset` (kebab-case
 ;; convention). Struct declarations auto-register `<path>/new`

@@ -20,16 +20,16 @@
      (:test::repeat-scaled-linear
        (name :String)
        (v :f64)
-       (scales :HashMap<String,trading::encoding::ScaleTracker>)
+       (scales :trading::encoding::Scales)
        (n :i64)
-       -> :HashMap<String,trading::encoding::ScaleTracker>)
+       -> :trading::encoding::Scales)
      (:wat::core::if (:wat::core::<= n 0)
-                     -> :HashMap<String,trading::encoding::ScaleTracker>
+                     -> :trading::encoding::Scales
        scales
        (:wat::core::let*
-         (((result :(wat::holon::HolonAST,HashMap<String,trading::encoding::ScaleTracker>))
+         (((result :trading::encoding::ScaleEmission)
            (:trading::encoding::scaled-linear name v scales))
-          ((next :HashMap<String,trading::encoding::ScaleTracker>)
+          ((next :trading::encoding::Scales)
            (:wat::core::second result)))
          (:test::repeat-scaled-linear name v next
            (:wat::core::i64::- n 1)))))))
@@ -38,11 +38,11 @@
 
 (:deftest :trading::test::encoding::scaled-linear::test-first-call-creates-tracker
   (:wat::core::let*
-    (((empty :HashMap<String,trading::encoding::ScaleTracker>)
+    (((empty :trading::encoding::Scales)
       (:wat::core::HashMap :(String,trading::encoding::ScaleTracker)))
-     ((result :(wat::holon::HolonAST,HashMap<String,trading::encoding::ScaleTracker>))
+     ((result :trading::encoding::ScaleEmission)
       (:trading::encoding::scaled-linear "rsi" 0.5 empty))
-     ((updated :HashMap<String,trading::encoding::ScaleTracker>)
+     ((updated :trading::encoding::Scales)
       (:wat::core::second result))
      ((tracker :trading::encoding::ScaleTracker)
       (:wat::core::match (:wat::core::get updated "rsi")
@@ -57,15 +57,15 @@
 
 (:deftest :trading::test::encoding::scaled-linear::test-second-call-updates-existing-tracker
   (:wat::core::let*
-    (((empty :HashMap<String,trading::encoding::ScaleTracker>)
+    (((empty :trading::encoding::Scales)
       (:wat::core::HashMap :(String,trading::encoding::ScaleTracker)))
-     ((r1 :(wat::holon::HolonAST,HashMap<String,trading::encoding::ScaleTracker>))
+     ((r1 :trading::encoding::ScaleEmission)
       (:trading::encoding::scaled-linear "rsi" 0.5 empty))
-     ((s1 :HashMap<String,trading::encoding::ScaleTracker>)
+     ((s1 :trading::encoding::Scales)
       (:wat::core::second r1))
-     ((r2 :(wat::holon::HolonAST,HashMap<String,trading::encoding::ScaleTracker>))
+     ((r2 :trading::encoding::ScaleEmission)
       (:trading::encoding::scaled-linear "rsi" 0.5 s1))
-     ((s2 :HashMap<String,trading::encoding::ScaleTracker>)
+     ((s2 :trading::encoding::Scales)
       (:wat::core::second r2))
      ((tracker :trading::encoding::ScaleTracker)
       (:wat::core::match (:wat::core::get s2 "rsi")
@@ -80,20 +80,20 @@
 
 (:deftest :trading::test::encoding::scaled-linear::test-distinct-keys-independent
   (:wat::core::let*
-    (((s0 :HashMap<String,trading::encoding::ScaleTracker>)
+    (((s0 :trading::encoding::Scales)
       (:wat::core::HashMap :(String,trading::encoding::ScaleTracker)))
      ;; Update rsi twice, stoch-k once.
-     ((r1 :(wat::holon::HolonAST,HashMap<String,trading::encoding::ScaleTracker>))
+     ((r1 :trading::encoding::ScaleEmission)
       (:trading::encoding::scaled-linear "rsi" 0.5 s0))
-     ((s1 :HashMap<String,trading::encoding::ScaleTracker>)
+     ((s1 :trading::encoding::Scales)
       (:wat::core::second r1))
-     ((r2 :(wat::holon::HolonAST,HashMap<String,trading::encoding::ScaleTracker>))
+     ((r2 :trading::encoding::ScaleEmission)
       (:trading::encoding::scaled-linear "rsi" 0.5 s1))
-     ((s2 :HashMap<String,trading::encoding::ScaleTracker>)
+     ((s2 :trading::encoding::Scales)
       (:wat::core::second r2))
-     ((r3 :(wat::holon::HolonAST,HashMap<String,trading::encoding::ScaleTracker>))
+     ((r3 :trading::encoding::ScaleEmission)
       (:trading::encoding::scaled-linear "stoch-k" 0.5 s2))
-     ((s3 :HashMap<String,trading::encoding::ScaleTracker>)
+     ((s3 :trading::encoding::Scales)
       (:wat::core::second r3))
      ;; rsi should have count=2, stoch-k count=1.
      ((rsi :trading::encoding::ScaleTracker)
@@ -116,9 +116,9 @@
 
 (:deftest :trading::test::encoding::scaled-linear::test-input-map-unchanged
   (:wat::core::let*
-    (((empty :HashMap<String,trading::encoding::ScaleTracker>)
+    (((empty :trading::encoding::Scales)
       (:wat::core::HashMap :(String,trading::encoding::ScaleTracker)))
-     ((_ :(wat::holon::HolonAST,HashMap<String,trading::encoding::ScaleTracker>))
+     ((_ :trading::encoding::ScaleEmission)
       (:trading::encoding::scaled-linear "rsi" 0.5 empty)))
     ;; original `empty` must still be empty — :None lookup.
     (:wat::test::assert-eq
@@ -143,10 +143,10 @@
 
 (:deftest :trading::test::encoding::scaled-linear::test-fact-is-bind-of-atom-and-thermometer
   (:wat::core::let*
-    (((empty :HashMap<String,trading::encoding::ScaleTracker>)
+    (((empty :trading::encoding::Scales)
       (:wat::core::HashMap :(String,trading::encoding::ScaleTracker)))
      ;; What scaled-linear produces.
-     ((result :(wat::holon::HolonAST,HashMap<String,trading::encoding::ScaleTracker>))
+     ((result :trading::encoding::ScaleEmission)
       (:trading::encoding::scaled-linear "rsi" 0.5 empty))
      ((fact :wat::holon::HolonAST)
       (:wat::core::first result))
@@ -182,9 +182,9 @@
 ;; factory's default-prelude.
 (:deftest :trading::test::encoding::scaled-linear::test-accumulates-across-many-calls
   (:wat::core::let*
-    (((empty :HashMap<String,trading::encoding::ScaleTracker>)
+    (((empty :trading::encoding::Scales)
       (:wat::core::HashMap :(String,trading::encoding::ScaleTracker)))
-     ((final :HashMap<String,trading::encoding::ScaleTracker>)
+     ((final :trading::encoding::Scales)
       (:test::repeat-scaled-linear "rsi" 0.5 empty 10000))
      ((tracker :trading::encoding::ScaleTracker)
       (:wat::core::match (:wat::core::get final "rsi")
