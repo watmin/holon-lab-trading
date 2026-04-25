@@ -30,6 +30,7 @@
 (:wat::load-file! "encoding/rhythm.wat")
 (:wat::load-file! "encoding/atr.wat")
 (:wat::load-file! "encoding/atr-window.wat")
+(:wat::load-file! "encoding/phase-state.wat")
 
 ;; Phase 2 — vocab
 ;;   arc 001 — shared/time

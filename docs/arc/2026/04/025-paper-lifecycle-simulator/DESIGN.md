@@ -524,6 +524,28 @@ This is the kind of gap arc 025 was always going to surface —
 having the verbs the simulator needs. Sort, concat, and recursive
 patterns landed in three days. Future slices may surface more.
 
+### 5i — Substrate gaps surfaced by slice 2: `not=` + Enum equality
+
+**Resolved 2026-04-25 (during slice 2).** PhaseState's boundary
+check `if new_label != current_phase_label` exposed two missing
+pieces:
+
+1. **`:wat::core::not=`** — no inequality primitive in wat. Shipped
+   Clojure-tradition `not=` (over C-style `!=`) consistent with the
+   substrate's Lisp-shaped operator lineage. Shares
+   `infer_polymorphic_compare` with `=`; runtime is `not(=)`.
+2. **Enum equality** — `values_equal` (the runtime kernel for `=`)
+   had arms for primitives, Vec, Tuple, Option, Result, Vector,
+   Struct — but not Enum. Two `Value::Enum`s comparing errored with
+   "TypeMismatch — got: Enum." Added an Enum arm: equal iff same
+   `type_path`, same `variant_name`, structurally-equal fields. Both
+   `=` and `not=` on enums work after this.
+
+Both ship as carry-along uplifts in wat-rs (parallel to slice 1's
+`sort-by` and arc 055's `string::concat`). Same rhythm: arc 025
+forces gaps the substrate had; gaps fill on demand; the lab keeps
+moving.
+
 ### 5f — `:wat::core::nth` doesn't exist; `:get` returns Option
 
 Substrate's design philosophy (`feedback_shim_panic_vs_option`):

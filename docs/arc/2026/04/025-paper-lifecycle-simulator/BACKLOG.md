@@ -79,8 +79,50 @@ abstraction grows then.
 
 ## Slice 2 — PhaseState streaming state machine
 
-**Status: ready (after slice 1; phase-step needs an ATR-derived
-smoothing parameter).**
+**Status: shipped 2026-04-25.** ~330 LOC delivered as
+`wat/encoding/phase-state.wat` (heavier than the 200-LOC sketch
+because the values-up `step` inlines the close_phase + begin_phase
+state transitions explicitly rather than mutating a shared
+struct). 8 tests in `wat-tests/encoding/phase-state.wat`
+(planned 6; added `test-fresh-is-valley` and
+`test-fresh-empty-history` separating the fresh-state
+invariants). Lab wat tests 164 → 172.
+
+**Substrate uplift forced by this slice — `:wat::core::not=` +
+Enum equality.** PhaseState's boundary check `if new_label !=
+current_phase_label` had two missing pieces in wat-rs:
+
+1. **No `not=` primitive.** Wat had `=`/`<`/`>`/`<=`/`>=` but no
+   inequality. Shipped Clojure-tradition `not=` (rather than
+   C-style `!=`); shares `infer_polymorphic_compare` with `=` so
+   the type rules are identical, runtime is a one-liner over
+   `eval_eq`. Consistent with substrate's Lisp-shaped operator
+   lineage.
+2. **`values_equal` had no Enum arm.** `(= phase-label-a
+   phase-label-b)` errored with "TypeMismatch — got: Enum" even
+   though enum values are exactly the kind of thing you want to
+   compare. Added an Enum arm: equal iff same `type_path`, same
+   `variant_name`, structurally-equal fields. Both `=` and `not=`
+   on enums work after this.
+
+Both ship as carry-along (~50 LOC + 4 integration tests in
+`wat-rs/tests/wat_not_eq.rs`); same shape as slice 1's `sort-by`
+uplift.
+
+**Divergence — `f64::NEG_INFINITY` / `f64::MAX` sentinels skipped.**
+Archive seeds `high = NEG_INFINITY`, `low = f64::MAX` defensively
+against an empty pre-step state. In wat the `fresh` state uses
+0.0 placeholders; the first-candle branch of `step` overwrites
+high/low with `close` before any comparison fires, so the
+sentinels were never load-bearing. Documented in the wat file's
+header comment.
+
+**Divergence — `current_phase_label` retained.** The DESIGN
+sketch's struct elided this field; the archive uses it as the
+boundary anchor (`new_label != current_phase_label` is the close
+trigger, distinct from `current_label` which is the per-candle
+output). Faithful port keeps both fields. PhaseState struct ends
+at 16 fields per the archive.
 
 `wat/encoding/phase-state.wat` — direct port of
 `archived/pre-wat-native/src/types/pivot.rs:95-282`'s `PhaseState`.
