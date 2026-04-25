@@ -32,6 +32,10 @@
 (:wat::load-file! "encoding/atr-window.wat")
 (:wat::load-file! "encoding/phase-state.wat")
 
+;; arc 025 — paper lifecycle simulator (yardstick).
+(:wat::load-file! "sim/types.wat")
+(:wat::load-file! "sim/labels.wat")
+
 ;; Phase 2 — vocab
 ;;   arc 001 — shared/time
 ;;   arc 002 — shared/helpers (extracted), exit/time

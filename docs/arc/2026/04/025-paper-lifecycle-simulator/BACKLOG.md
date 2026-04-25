@@ -150,7 +150,40 @@ verbatim — same scenarios, same assertions:
 
 ## Slice 3 — Simulator types + label coordinates (Chapters 55–57)
 
-**Status: ready (no logic; types + label-builder only).**
+**Status: shipped 2026-04-25.** Two files delivered:
+- `wat/sim/types.wat` (~200 LOC) — 5 enums (Direction, PositionState,
+  Decision, TriggerLabel, Action), 7 structs (TriggerEvent,
+  LabeledTrigger, Paper, Outcome, Aggregate, Config, Thinker,
+  Predictor), 4 plural typealiases (Papers, Outcomes,
+  TriggerEvents, LabeledTriggers).
+- `wat/sim/labels.wat` (~100 LOC) — `:trading::sim::force` (local
+  BundleResult unwrap, portable per user direction "we move it
+  when we need to"), `outcome-axis` + `direction-axis` basis
+  atoms, `paper-label` builder (Thermometer over `[-0.05, +0.05]`),
+  four corner reference labels.
+
+13 tests across `wat-tests/sim/types.wat` (7) +
+`wat-tests/sim/labels.wat` (6) — planned 6 (tests 13-18); shipped
+more granular round-trips covering each struct/enum on its own.
+Lab wat tests 172 → 185.
+
+**Paper struct option A confirmed.** Per user direction, Paper
+carries an `entry-surface :wat::holon::HolonAST` field. Single
+source of truth for "the surface that opened this position";
+trail's first event still has it for during-walk convenience but
+resolution code reads the dedicated field. 8 fields total.
+
+**LabeledTriggers plural added.** User caught
+`(labeled-trail :Vec<trading::sim::LabeledTrigger>)` mid-write
+and asked for the plural alias. Now 4 plurals total
+(Papers/Outcomes/TriggerEvents/LabeledTriggers).
+
+**No substrate uplifts surfaced.** sort-by + not= + Enum equality
+were the prerequisites; this slice consumed them cleanly. The
+Thermometer-encoded label coordinates worked first time —
+`cosine(corner-grace-up, corner-grace-dn) > cosine(corner-grace-
+up, corner-violence-dn)` confirms shared-axis structural
+similarity per Chapter 56.
 
 Two files: types in `wat/sim/types.wat`, label-coordinate
 machinery in `wat/sim/labels.wat`.
