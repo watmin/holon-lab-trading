@@ -40,6 +40,7 @@
 ;;   arc 016 — market/keltner (K=2, third plain-Log caller)
 ;;   arc 017 — market/price-action (K=2, biggest Log surface, first f64::min)
 ;;   arc 018 — market/standard (window-based, last market vocab)
+;;   arc 021 — exit/regime (thin delegation to market/regime)
 (:wat::load-file! "vocab/shared/helpers.wat")
 (:wat::load-file! "vocab/shared/time.wat")
 (:wat::load-file! "vocab/exit/time.wat")
@@ -57,6 +58,7 @@
 (:wat::load-file! "vocab/market/price-action.wat")
 (:wat::load-file! "vocab/market/standard.wat")
 (:wat::load-file! "vocab/exit/phase.wat")
+(:wat::load-file! "vocab/exit/regime.wat")
 
 (:wat::core::define (:user::main
                      (stdin  :wat::io::IOReader)
