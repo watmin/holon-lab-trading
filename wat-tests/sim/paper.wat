@@ -299,3 +299,213 @@
     (:wat::core::let*
       (((u1 :()) (:wat::test::assert-eq agg-papers-hold 0)))
       (:wat::test::assert-eq agg-papers-open 0))))
+
+
+;; ─── Helper-level tests (slice-4-5-design-questions Q13) ──────────
+;;
+;; Tests 18-23 from BACKLOG slice 4 — exercise the algebra of the
+;; resolution helpers in isolation, the way archive's pivot.rs tested
+;; PhaseState (smoothing as a parameter, hand-picked values, no
+;; warmup). Skips IndicatorBank/ATR threading entirely.
+
+
+;; Test 18 — Grace eligible: paper-Up + Peak trigger + clean residue.
+(:deftest :trading::test::sim::paper::test-grace-eligible-up-peak
+  (:wat::core::let*
+    (((paper :trading::sim::Paper)
+      (:trading::sim::Paper/new
+        1 :trading::sim::Direction::Up 100.0 0
+        (:test::placeholder-surface) 288
+        :trading::sim::PositionState::Active
+        (:wat::core::vec :trading::sim::TriggerEvent)))
+     ((eligible? :bool)
+      (:trading::sim::evaluate-grace-eligible?
+        paper
+        true
+        :trading::types::PhaseLabel::Peak
+        0.03
+        :trading::sim::Action::Exit
+        (:test::config))))
+    (:wat::test::assert-eq eligible? true)))
+
+
+;; Test 19 — Grace eligible: paper-Down + Valley trigger (symmetric).
+(:deftest :trading::test::sim::paper::test-grace-eligible-down-valley
+  (:wat::core::let*
+    (((paper :trading::sim::Paper)
+      (:trading::sim::Paper/new
+        1 :trading::sim::Direction::Down 100.0 0
+        (:test::placeholder-surface) 288
+        :trading::sim::PositionState::Active
+        (:wat::core::vec :trading::sim::TriggerEvent)))
+     ((eligible? :bool)
+      (:trading::sim::evaluate-grace-eligible?
+        paper
+        true
+        :trading::types::PhaseLabel::Valley
+        0.03
+        :trading::sim::Action::Exit
+        (:test::config))))
+    (:wat::test::assert-eq eligible? true)))
+
+
+;; Test 20 — Residue floor blocks Grace even when other gates pass.
+(:deftest :trading::test::sim::paper::test-residue-floor-blocks-grace
+  (:wat::core::let*
+    (((paper :trading::sim::Paper)
+      (:trading::sim::Paper/new
+        1 :trading::sim::Direction::Up 100.0 0
+        (:test::placeholder-surface) 288
+        :trading::sim::PositionState::Active
+        (:wat::core::vec :trading::sim::TriggerEvent)))
+     ;; min-residue is 0.01 in test::config; pass 0.005 — gate-3 must fail.
+     ((eligible? :bool)
+      (:trading::sim::evaluate-grace-eligible?
+        paper
+        true
+        :trading::types::PhaseLabel::Peak
+        0.005
+        :trading::sim::Action::Exit
+        (:test::config))))
+    (:wat::test::assert-eq eligible? false)))
+
+
+;; Test 21 — Retroactive labeling on Grace: closing trigger gets
+;; :Exit, all earlier triggers get :Hold.
+(:deftest :trading::test::sim::paper::test-label-trail-grace-back-fill
+  (:wat::core::let*
+    (((te :fn(i64)->trading::sim::TriggerEvent)
+      (:wat::core::lambda ((i :i64) -> :trading::sim::TriggerEvent)
+        (:trading::sim::TriggerEvent/new
+          i :trading::types::PhaseLabel::Peak
+          :trading::sim::Decision::NotEvaluated
+          (:test::placeholder-surface))))
+     ((trail :trading::sim::TriggerEvents)
+      (:wat::core::vec :trading::sim::TriggerEvent
+        (te 1) (te 2) (te 3) (te 4)))
+     ((labeled :trading::sim::LabeledTriggers)
+      (:trading::sim::label-trail-grace trail 3))
+     ((label-of :fn(i64)->trading::sim::TriggerLabel)
+      (:wat::core::lambda ((i :i64) -> :trading::sim::TriggerLabel)
+        (:wat::core::match (:wat::core::get labeled i) -> :trading::sim::TriggerLabel
+          ((Some lt) (:trading::sim::LabeledTrigger/label lt))
+          (:None :trading::sim::TriggerLabel::Unknown))))
+     ((is-hold? :fn(trading::sim::TriggerLabel)->bool)
+      (:wat::core::lambda ((l :trading::sim::TriggerLabel) -> :bool)
+        (:wat::core::match l -> :bool
+          (:trading::sim::TriggerLabel::Hold true)
+          (_ false))))
+     ((is-exit? :fn(trading::sim::TriggerLabel)->bool)
+      (:wat::core::lambda ((l :trading::sim::TriggerLabel) -> :bool)
+        (:wat::core::match l -> :bool
+          (:trading::sim::TriggerLabel::Exit true)
+          (_ false))))
+     ((u1 :()) (:wat::test::assert-eq (is-hold? (label-of 0)) true))
+     ((u2 :()) (:wat::test::assert-eq (is-hold? (label-of 1)) true))
+     ((u3 :()) (:wat::test::assert-eq (is-hold? (label-of 2)) true)))
+    (:wat::test::assert-eq (is-exit? (label-of 3)) true)))
+
+
+;; Test 22 — Retroactive labeling on Violence: every passed trigger
+;; labeled :Exit (should-have-Exit'd).
+(:deftest :trading::test::sim::paper::test-label-trail-violence-all-exit
+  (:wat::core::let*
+    (((te :fn(i64)->trading::sim::TriggerEvent)
+      (:wat::core::lambda ((i :i64) -> :trading::sim::TriggerEvent)
+        (:trading::sim::TriggerEvent/new
+          i :trading::types::PhaseLabel::Peak
+          :trading::sim::Decision::NotEvaluated
+          (:test::placeholder-surface))))
+     ((trail :trading::sim::TriggerEvents)
+      (:wat::core::vec :trading::sim::TriggerEvent
+        (te 1) (te 2) (te 3)))
+     ((labeled :trading::sim::LabeledTriggers)
+      (:trading::sim::label-trail-violence trail))
+     ((label-of :fn(i64)->trading::sim::TriggerLabel)
+      (:wat::core::lambda ((i :i64) -> :trading::sim::TriggerLabel)
+        (:wat::core::match (:wat::core::get labeled i) -> :trading::sim::TriggerLabel
+          ((Some lt) (:trading::sim::LabeledTrigger/label lt))
+          (:None :trading::sim::TriggerLabel::Unknown))))
+     ((is-exit? :fn(trading::sim::TriggerLabel)->bool)
+      (:wat::core::lambda ((l :trading::sim::TriggerLabel) -> :bool)
+        (:wat::core::match l -> :bool
+          (:trading::sim::TriggerLabel::Exit true)
+          (_ false))))
+     ((u1 :()) (:wat::test::assert-eq (is-exit? (label-of 0)) true))
+     ((u2 :()) (:wat::test::assert-eq (is-exit? (label-of 1)) true)))
+    (:wat::test::assert-eq (is-exit? (label-of 2)) true)))
+
+
+;; Test 23 — Aggregate accumulation across one Grace + one Violence.
+(:deftest :trading::test::sim::paper::test-aggregate-mixed-grace-violence
+  (:wat::core::let*
+    (((fresh-agg :trading::sim::Aggregate)
+      (:trading::sim::Aggregate/new 0 0 0 0.0 0.0))
+     ((agg-after-grace :trading::sim::Aggregate)
+      (:trading::sim::aggregate-grace fresh-agg 0.03))
+     ((final :trading::sim::Aggregate)
+      (:trading::sim::aggregate-violence agg-after-grace -0.02))
+     ((u1 :()) (:wat::test::assert-eq (:trading::sim::Aggregate/papers final) 2))
+     ((u2 :()) (:wat::test::assert-eq (:trading::sim::Aggregate/grace-count final) 1))
+     ((u3 :()) (:wat::test::assert-eq (:trading::sim::Aggregate/violence-count final) 1))
+     ((u4 :()) (:wat::test::assert-eq (:trading::sim::Aggregate/total-residue final) 0.03)))
+    (:wat::test::assert-eq (:trading::sim::Aggregate/total-loss final) 0.02)))
+
+
+;; ─── Q10 effective-action translation ─────────────────────────────
+
+;; No paper open → effective-action is identity for all raw actions.
+(:deftest :trading::test::sim::paper::test-effective-action-no-paper-identity
+  (:wat::core::let*
+    (((eff :trading::sim::Action)
+      (:trading::sim::effective-action
+        (:trading::sim::Action::Open :trading::sim::Direction::Up)
+        :None))
+     ((is-open-up? :bool)
+      (:wat::core::match eff -> :bool
+        ((:trading::sim::Action::Open d)
+          (:wat::core::match d -> :bool
+            (:trading::sim::Direction::Up true)
+            (:trading::sim::Direction::Down false)))
+        (_ false))))
+    (:wat::test::assert-eq is-open-up? true)))
+
+
+;; Paper-Up open + (Open :Up) → :Hold (already going that way).
+(:deftest :trading::test::sim::paper::test-effective-action-same-direction-is-hold
+  (:wat::core::let*
+    (((paper :trading::sim::Paper)
+      (:trading::sim::Paper/new
+        1 :trading::sim::Direction::Up 100.0 0
+        (:test::placeholder-surface) 288
+        :trading::sim::PositionState::Active
+        (:wat::core::vec :trading::sim::TriggerEvent)))
+     ((eff :trading::sim::Action)
+      (:trading::sim::effective-action
+        (:trading::sim::Action::Open :trading::sim::Direction::Up)
+        (Some paper)))
+     ((is-hold? :bool)
+      (:wat::core::match eff -> :bool
+        (:trading::sim::Action::Hold true)
+        (_ false))))
+    (:wat::test::assert-eq is-hold? true)))
+
+
+;; Paper-Up open + (Open :Down) → :Exit (trend turned).
+(:deftest :trading::test::sim::paper::test-effective-action-opposite-direction-is-exit
+  (:wat::core::let*
+    (((paper :trading::sim::Paper)
+      (:trading::sim::Paper/new
+        1 :trading::sim::Direction::Up 100.0 0
+        (:test::placeholder-surface) 288
+        :trading::sim::PositionState::Active
+        (:wat::core::vec :trading::sim::TriggerEvent)))
+     ((eff :trading::sim::Action)
+      (:trading::sim::effective-action
+        (:trading::sim::Action::Open :trading::sim::Direction::Down)
+        (Some paper)))
+     ((is-exit? :bool)
+      (:wat::core::match eff -> :bool
+        (:trading::sim::Action::Exit true)
+        (_ false))))
+    (:wat::test::assert-eq is-exit? true)))

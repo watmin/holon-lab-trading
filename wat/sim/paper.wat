@@ -207,13 +207,66 @@
       (:wat::core::f64::abs residue))))
 
 
+;; ─── effective-action — Q10 simulator-side translation ──────────
+;;
+;; The Predictor is stateless w.r.t. open-paper (slice-4-5-design-
+;; questions.md Q10): it argmaxes corners and emits one of
+;; `:Hold | (Open :Up) | (Open :Down)`. The simulator owns the
+;; position-aware translation:
+;;
+;;   no paper open    + raw-action       → raw-action  (identity)
+;;   paper-d open     + (Open d)         → :Hold       (already going there)
+;;   paper-d open     + (Open !d)        → :Exit       (trend turned)
+;;   paper open       + :Hold            → :Hold       (keep)
+;;   paper open       + :Exit            → :Exit       (defensive; v1 doesn't emit)
+;;
+;; The translation runs once per tick; the gate evaluator and the
+;; tick-handle-no-paper dispatcher both consume the result.
+(:wat::core::define
+  (:trading::sim::direction-equal?
+    (a :trading::sim::Direction)
+    (b :trading::sim::Direction)
+    -> :bool)
+  (:wat::core::match a -> :bool
+    (:trading::sim::Direction::Up
+      (:wat::core::match b -> :bool
+        (:trading::sim::Direction::Up true)
+        (:trading::sim::Direction::Down false)))
+    (:trading::sim::Direction::Down
+      (:wat::core::match b -> :bool
+        (:trading::sim::Direction::Up false)
+        (:trading::sim::Direction::Down true)))))
+
+(:wat::core::define
+  (:trading::sim::effective-action
+    (raw :trading::sim::Action)
+    (open-paper :Option<trading::sim::Paper>)
+    -> :trading::sim::Action)
+  (:wat::core::match open-paper -> :trading::sim::Action
+    (:None raw)
+    ((Some paper)
+      (:wat::core::match raw -> :trading::sim::Action
+        (:trading::sim::Action::Hold :trading::sim::Action::Hold)
+        (:trading::sim::Action::Exit :trading::sim::Action::Exit)
+        ((:trading::sim::Action::Open dir)
+          (:wat::core::if
+            (:trading::sim::direction-equal?
+              dir (:trading::sim::Paper/direction paper))
+            -> :trading::sim::Action
+            :trading::sim::Action::Hold
+            :trading::sim::Action::Exit))))))
+
+
 ;; ─── Gate-evaluation helper ──────────────────────────────────────
 ;;
 ;; Grace is reachable when:
 ;;   gate-1: phase trigger fired this tick
 ;;   gate-2: phase label is "against" the paper's direction
 ;;   gate-3: residue clears the min-residue floor
-;;   gate-4: predictor said :Exit
+;;   gate-4: effective-action is :Exit (translated from raw predictor
+;;           output by `effective-action`; in v1 the Predictor never
+;;           emits :Exit directly — it emits (Open !d) and the
+;;           simulator translates).
 ;; All four → grace-eligible? = true.
 (:wat::core::define
   (:trading::sim::evaluate-grace-eligible?
@@ -465,8 +518,11 @@
      ((surface :wat::holon::HolonAST)
       ((:trading::sim::Thinker/build-surface thinker)
        window' open-paper))
-     ((action :trading::sim::Action)
+     ((raw-action :trading::sim::Action)
       ((:trading::sim::Predictor/predict predictor) surface))
+     ;; Q10 translation — see `effective-action` above.
+     ((action :trading::sim::Action)
+      (:trading::sim::effective-action raw-action open-paper))
 
      ;; Phase trigger detection — generation incremented this tick.
      ((phase-state :trading::encoding::PhaseState)

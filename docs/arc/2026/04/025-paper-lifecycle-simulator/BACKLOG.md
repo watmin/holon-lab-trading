@@ -360,14 +360,29 @@ producer signals end). Adds ~10 LOC to `src/shims.rs`
 (`open_bounded` constructor, `remaining: i64` field) plus one
 wat wrapper in `wat/io/CandleStream.wat`.
 
-**Test divergence — 9 unit tests instead of 12; engineered-
-phase-history tests deferred to slice 5.** Tests 15-17, 24-26
-ship as 9 unit tests directly exercising the helpers via
+**Test divergence — initial 9 unit tests; tests 18-23 follow up
+in slice 4 with synthetic fixtures.** Tests 15-17, 24-26
+shipped as 9 unit tests directly exercising the helpers via
 constant-Action predictors (Hold, Open-Up, Exit). Tests 18-23
 (Always-Up reaching Peak, retroactive labeling shapes,
-two-paper aggregates) require engineered phase histories that
-real BTC data exercises naturally — deferred to slice 5's
-integration smoke instead of synthesizing pivot-shaped fixtures.
+two-paper aggregates) need engineered phase histories — they
+remain in slice 4 with synthetic OHLCV streams, per
+slice-4-5-design-questions.md Q13. (An earlier draft of this
+backlog moved them into slice 5; that was wrong, since real BTC
+data won't reliably hit specific shapes — synthetic streams
+will. Q13 reverts the move.)
+
+**Q10 follow-up — `effective-action` translation.** The Q10
+resolution pinned in slice-4-5-design-questions.md required a
+simulator-side translation step the initial slice-4 ship
+omitted: when a paper is open and the Predictor emits
+`(Open !d)` (opposite direction), the simulator translates to
+`:Exit` before gate evaluation. Same direction → `:Hold`. The
+Predictor never emits `:Exit` in v1; gate-4 reads the translated
+action. Two helpers (`direction-equal?`, `effective-action`) +
+one binding rename in `tick` (`raw-action` → translated
+`action`). All 9 original tests still green with the
+translation in place.
 
 **Substrate uplifts forced by this slice — none.** The
 IndicatorBank machinery from arc 026 + Thermometer label
@@ -460,9 +475,23 @@ This is the load-bearing slice.
 
 **Status: ready (after slice 4 shipped 2026-04-25).** Slice 4
 is green; integration smoke can now consume real parquet
-candles via `:lab::candles::open-bounded`. Engineered-phase-
-history tests deferred from slice 4 (tests 18-23) move into
-this slice's coverage — real BTC pivots exercise them naturally.
+candles via `:lab::candles::open-bounded`. Per
+slice-4-5-design-questions.md Q13 the slice stays
+smoke-only — one test, ~50 LOC. Tests 18-23 stay in slice 4
+with synthetic fixtures.
+
+Slice 5 ships:
+- `:trading::sim::always-up-thinker` (Q12) — constant
+  `Bundle(outcome=+0.04, direction=+0.04)`. The smoke-test
+  thinker.
+- `:trading::sim::sma-cross-thinker` (Q12) — reads
+  `candle.sma20` / `candle.sma50` with 0.1% deadband; emits
+  outcome × direction lean.
+- `:trading::sim::cosine-vs-corners-predictor` (Q10) — argmax
+  cosine over the four corner labels; maps grace-up/grace-dn to
+  `(Open :Up)`/`(Open :Down)`, both violence corners to `:Hold`.
+- One integration test against `data/btc_5m_raw.parquet`
+  (10k bounded), asserting `papers > 0` and finite total-residue.
 
 `wat-tests/sim/integration.wat` — opens
 `data/btc_5m_raw.parquet` via `:lab::candles::Stream` (Phase 0
