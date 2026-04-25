@@ -25,6 +25,49 @@ Cross-references:
 - [`docs/rewrite-backlog.md`](../../rewrite-backlog.md) — Phase 1.5 (PhaseState deferred to Phase 5), Phase 5 (`simulation.rs`, `indicator_bank.rs`).
 - [`archived/pre-wat-native/src/types/pivot.rs`](../../../archived/pre-wat-native/src/types/pivot.rs) — `PhaseState` reference impl (~150L state machine).
 - [`archived/pre-wat-native/src/domain/indicator_bank.rs:325-354`](../../../archived/pre-wat-native/src/domain/indicator_bank.rs) — `AtrState` reference impl (Wilder-smoothed true range, period 14).
+- [`BOOK.md` Chapter 55 — The Bridge](../../../BOOK.md) — two oracles (cache + reckoner); thinker reshapes from prediction-emitter to AST-builder.
+- [`BOOK.md` Chapter 56 — Labels as Coordinates](../../../BOOK.md) — labels live in a coordinate system; two construction styles (implicit AST, explicit axis-bindings).
+- [`BOOK.md` Chapter 57 — The Continuum](../../../BOOK.md) — every binary distinction is the discretization of a continuum the substrate already encodes; v1 labels ship Thermometer-encoded axes from day one.
+
+---
+
+## Architecture absorbed from BOOK Chapters 55–57
+
+Three recognitions landed mid-arc, before slices 2-6 wrote against
+the old shape. They reshape the simulator's external contract;
+internal mechanics (lifecycle, gates, deadline, retroactive
+labeling) are unchanged.
+
+### From Chapter 55 — Thinker reshape
+
+The thinker stops emitting `Up | Down`. It emits a *surface AST*
+— a thought with concrete values plugged in. The simulator hands
+that surface to a separate **Predictor** which returns the Action
+(Open Up / Open Down / Hold / Exit). The thinker is a vocabulary;
+the predictor is the learner. v1 ships a hand-coded predictor;
+a successor arc swaps in a reckoner-backed one once labels
+accumulate.
+
+### From Chapter 56 — Labels as coordinates
+
+Labels are positions in a coordinate system, not discrete tokens.
+Style B (explicit axis-bindings) is what the substrate naturally
+encodes. The Predictor's `label-set` is `:Vec<HolonAST>` of
+coordinate-bundles.
+
+### From Chapter 57 — Continuous axes
+
+Each axis is a Thermometer-encoded continuous value, not a
+discrete atom. The 2×2 grid `(:Grace :Up)` etc. is just the four
+extreme corners of a 2D continuous plane. v1 ships **two axes**
+(outcome × direction) over `[-0.05, +0.05]` each — the honest
+band for 5-min crypto candles. The third+ axes (duration,
+phase-count, excursion) defer to a successor arc when sample
+efficiency justifies them.
+
+The four corner labels are derived references for argmax queries;
+the *training* labels are continuous Thermometer positions
+captured at exact resolution magnitudes.
 
 ---
 
@@ -165,19 +208,24 @@ The lifecycle, deadline, four gates, retroactive labeling.
   (entry-candle    :i64)
   (deadline-candle :i64)
   (state           :trading::sim::PositionState)
-  ;; Trigger trail — every (candle-i, label, decision) the paper
-  ;; passed through. Used for retroactive labeling at resolution.
+  ;; Trigger trail — every (candle-i, phase-label, decision, surface)
+  ;; the paper passed through. Used for retroactive labeling at
+  ;; resolution. The `surface` field carries the thought-AST the
+  ;; thinker built at that candle (per Chapter 55) — fed to the
+  ;; reckoner with the back-filled label.
   (trail           :Vec<trading::sim::TriggerEvent>))
 
 (:wat::core::struct :trading::sim::TriggerEvent
-  (candle-i :i64)
-  (label    :trading::types::PhaseLabel)
-  (decision :trading::sim::Decision))   ; Hold | Exit | NotEvaluated
+  (candle-i    :i64)
+  (phase-label :trading::types::PhaseLabel)
+  (decision    :trading::sim::Decision)   ; Hold | Exit | NotEvaluated
+  (surface     :wat::holon::HolonAST))    ; thinker's surface AST at this candle
 
 (:wat::core::struct :trading::sim::Outcome
   (paper          :trading::sim::Paper)
   (closed-at      :i64)
   (final-residue  :f64)
+  (paper-label    :wat::holon::HolonAST)   ; continuous label, per Ch.57
   (labeled-trail  :Vec<trading::sim::LabeledTrigger>))   ; back-filled
 
 (:wat::core::struct :trading::sim::Aggregate
@@ -188,28 +236,33 @@ The lifecycle, deadline, four gates, retroactive labeling.
   (total-loss       :f64))
 ```
 
-The thinker abstraction (a wat function passed in) drives gate 4
-(Exit/Hold) and proposes new papers. The simulator owns lifecycle
-and gates 1-3:
+Per Chapter 55 the thinker emits a *surface AST*; a separate
+**Predictor** turns the surface into an Action. The simulator
+owns lifecycle, gates 1-3, and the trail-back-fill at resolution.
 
 ```scheme
 (:wat::core::define
   (:trading::sim::run
     (stream      :lab::candles::Stream)
-    (thinker     :fn(window :trading::types::Candles, position :Option<trading::sim::Paper>) -> :trading::sim::Action)
+    (thinker     :trading::sim::Thinker)        ; surface builder (vocabulary)
+    (predictor   :trading::sim::Predictor)      ; surface → Action (learner slot)
     (config      :trading::sim::Config)
     -> :trading::sim::Aggregate)
   ;; For each candle pulled from stream:
   ;;   1. Advance ATR + PhaseState.
-  ;;   2. For any open paper:
+  ;;   2. Build surface for this candle: (thinker.build-surface window position).
+  ;;   3. Ask predictor for Action: (predictor.predict surface).
+  ;;   4. For any open paper:
   ;;      - if at phase trigger AND market direction against AND residue > min:
-  ;;        ask thinker for Exit/Hold decision (gate 4)
-  ;;        if Exit: close Grace, retroactively label trail, record Outcome
+  ;;        if Action == Exit: close Grace, retroactively label trail, record Outcome
   ;;      - elif candle-i >= paper.deadline-candle:
   ;;        close Violence, retroactively label trail, record Outcome
-  ;;   3. If no open paper: ask thinker for proposal.
-  ;;      If Proposed Up/Down: open new paper at this candle's close.
-  ;;   4. Append to trigger trail at every Peak/Valley pass.
+  ;;   5. If no open paper and Action == (Open dir):
+  ;;      open new paper at this candle's close.
+  ;;   6. Append (candle-i, phase-label, decision, surface) to trigger trail
+  ;;      at every Peak/Valley pass.
+  ;; At resolution: build paper-label from (residue, price-move) per Ch.57;
+  ;; back-fill trail with retroactive trigger labels per Proposal 055.
   ;; Returns aggregate stats over the whole run.
   ...)
 
@@ -241,14 +294,17 @@ PhaseState now means the trigger trail is honest from day one.
 The cost is small: PhaseState is ~150 lines of pure state-machine
 in the archive. Wat translation is mechanical.
 
-### Q2 — Implement gate 4 (position observer) now, or later?
+### Q2 — Implement gate 4 (the learned decision) now, or later?
 
-**Later.** Gate 4 is "the learned decision." The learner
-(Reckoner accepting HolonAST labels per the 2026-04-25 holon-rs
-update) lands in Phase 4. Until then, the simulator's gate 4
-slot accepts a thinker-supplied function. v1 thinkers can be
-hand-coded ("always Exit if gates 1-3 pass") — a learned thinker
-plugs in without changing the simulator.
+**Later — but cleanly slotted.** Per Chapter 55, gate 4 is the
+**Predictor's** job. The Predictor takes a surface AST and returns
+an Action. v1 ships a hand-coded Predictor (e.g., cosine-against-
+four-corner-references; argmax). Surfaces and continuous labels
+get recorded for every paper; the future reckoner-backed Predictor
+trains on accumulated `(surface, label)` pairs and swaps in at the
+same call site without re-architecting the simulator. The slot is
+typed (`:trading::sim::Predictor`), so the swap is one struct
+substitution.
 
 ### Q3 — Static deadline, or trust-scaled?
 
@@ -284,25 +340,31 @@ events per trail). (c) is one struct per broker.
 All bounded. No runaway state. The simulator can run the full
 6-year stream without buffering the whole stream.
 
-### Q6 — Thinker signature
+### Q6 — Thinker + Predictor signatures (Chapter 55)
 
-Two callbacks needed:
-
-- `(thinker/propose? window) -> Option<Direction>` — call when no
-  open paper.
-- `(thinker/should-exit? window position) -> bool` — call at every
-  candle; gates 1-3 are arithmetic prerequisites checked by the
-  simulator, gate 4 is this function.
-
-Pass them as a record (a wat struct holding two function values)
-or as two separate parameters. Lean: **record** — easier to extend
-when learned thinkers add per-call state.
+The thinker is a vocabulary; the predictor is the learner. Two
+structs, two responsibilities. They evolve independently —
+vocabularies get added freely; predictors swap from hand-coded →
+reckoner-backed once labels accumulate.
 
 ```scheme
+;; The vocabulary — given a window + optional open paper, build
+;; a thought-AST with concrete values. Stateless about outcomes.
 (:wat::core::struct :trading::sim::Thinker
-  (propose?     :fn(:trading::types::Candles) -> :Option<trading::sim::Direction>)
-  (should-exit? :fn(:trading::types::Candles, :trading::sim::Paper) -> :bool))
+  (build-surface :fn(:trading::types::Candles, :Option<trading::sim::Paper>)
+                  -> :wat::holon::HolonAST))
+
+;; The learner — given a surface, return the Action. v1 is
+;; hand-coded (e.g., cosine-vs-corner-references); a successor
+;; arc replaces with reckoner-backed.
+(:wat::core::struct :trading::sim::Predictor
+  (predict :fn(:wat::holon::HolonAST) -> :trading::sim::Action))
 ```
+
+Style B label coordinates and the `paper-label` helper land in
+slice 3 alongside these. The Predictor's `label-set` (when the
+reckoner-backed version arrives) consumes those coordinates
+directly.
 
 ### Q7 — Multi-broker support in v1?
 
@@ -313,6 +375,45 @@ on one thinker; multi-broker generalizes by running N simulators
 in parallel and aggregating per-broker `ProposerRecord`. The
 parallelism is CSP — we already have wat's `make-bounded-queue`
 + `spawn`.
+
+### Q8 — How does v1 ship without the reckoner?
+
+**Hand-coded Predictor; surfaces and labels recorded for the
+future reckoner.** Three concrete v1 Predictors that prove the
+shape:
+
+- **`always-Up`** — predict opens always-Up; Exit at first phase
+  trigger (gates 1-3 willing). Baseline.
+- **`always-Hold`** — predict never opens. Empty aggregate.
+  Sanity check.
+- **`cosine-vs-corners`** — given a surface, cosine against the
+  four reference corner labels (Style B coordinate corners at
+  `(±0.05, ±0.05)`). Argmax → Action via a small lookup table.
+  Closest thing to "real" without a learner.
+
+In all three v1 cases, the simulator records `(surface,
+continuous-label)` pairs for every resolved paper. The successor
+arc that ships the reckoner-backed Predictor reads that recorded
+data and trains; the swap happens without changing the simulator
+or the Thinker.
+
+### Q9 — How many label axes for v1? (Chapter 57)
+
+**Two: outcome × direction.** Both Thermometer-encoded over
+`[-0.05, +0.05]`:
+
+- **outcome-axis** — `residue / principal`, signed. Positive
+  Grace, negative Violence. Range based on the empirical band of
+  5-min crypto papers within a 1-day deadline (rare to clear ±5%).
+- **direction-axis** — `(final_close - entry_close) / entry_close`,
+  signed. Positive Up, negative Down. Same range justification.
+
+Third+ axes (duration / phase-count / max-favorable-excursion)
+are deliberately deferred. The substrate handles N dimensions
+identically; the bottleneck is *sample efficiency* — joint cell
+count grows multiplicatively, and v1 needs to prove the 2D plane
+populates cleanly before adding more dimensions. Successor arc
+adds the third axis when a query against it has a real caller.
 
 ---
 
@@ -460,12 +561,51 @@ Refinement: split `:Exit` into "took it" vs "missed it" if needed
 for the position observer's training. Defer until the learner
 slice surfaces a need.
 
+### 5g — Cache wire-up (Chapter 55) — successor arc
+
+The substrate's "have I proven this surface terminates?" cache
+(per Chapter 55) is an *optimization*, not a correctness
+mechanism. The simulator runs without it. A successor arc wires
+wat-lru into the substrate's encode path, keyed by simhash, so
+hot surfaces share termination proofs across thinkers. Out of
+scope for arc 025; named here so the v1 simulator's encode calls
+go through the substrate's standard path (which the cache will
+later transparently absorb).
+
+### 5h — Continuous label range — `[-0.05, +0.05]`
+
+Two empirical justifications for the band:
+
+- **5-min BTC candles rarely move >5% within 288 candles** (the
+  v1 deadline = 1 day). Outliers exist; the Thermometer clamps at
+  the edges. The vast majority of papers fall in the middle of
+  the range, where the encoding has full resolution.
+- **Round-trip venue cost is 0.7%** (per the project_venue_costs
+  memory). `min-residue` is set at 1% to clear the cost floor.
+  A label at `outcome = +0.01` (1%) is the v1 threshold; labels
+  inside `±0.005` are sub-floor noise. The band gives ~10× the
+  noise-floor resolution.
+
+If real data shows the band is wrong (e.g., 5min papers cluster
+inside `±0.01`, wasting 80% of the Thermometer range on outliers
+that never appear), the band tightens. v1 ships `±0.05` as a
+defensible first guess; the sim records actual magnitudes, so we
+have the data to revise from the first run.
+
 ---
 
 ## What this arc does NOT add
 
-- **The position observer (gate 4 learner).** Phase 4. Slot's
-  reserved in the simulator's thinker abstraction.
+- **Reckoner-backed Predictor.** v1 ships a hand-coded Predictor
+  (Q8). Successor arc swaps in reckoner-backed once labels
+  accumulate from resolved papers. Slot is typed, swap is one
+  struct substitution.
+- **Cache wire-up (Chapter 55).** The substrate's termination
+  cache via wat-lru is a successor arc (5g). v1 simulator runs
+  through the standard encode path; cache will absorb it
+  transparently.
+- **Third+ label axes.** Two axes for v1 (outcome × direction);
+  duration / phase-count / excursion deferred (Q9).
 - **The trust ladder / ProposerRecord.** Static deadline for v1.
   Ladder is a follow-up.
 - **Multi-broker tournament.** Single broker for v1. Multi is
@@ -504,16 +644,27 @@ slice surfaces a need.
 ## What this unblocks
 
 - **Every Phase 4–9 port can be measured.** Reckoner port? Run
-  the simulator with a Reckoner-driven thinker; compare residue
+  the simulator with a Reckoner-driven Predictor; compare residue
   to a baseline. WindowSampler port? Same. IndicatorBank port?
   Same.
+- **Trail-as-training-data (Chapter 55).** Every resolved paper
+  produces a labeled `(surface, continuous-label)` sequence —
+  the future reckoner-backed Predictor consumes this directly.
+  No extra plumbing needed when the swap arrives.
+- **Predictor swap.** Hand-coded → reckoner-backed is a one-struct
+  substitution at the simulator's call site. The Thinker (the
+  vocabulary) doesn't change; only the learner does.
+- **Continuous label space (Chapter 57).** v1 ships continuous
+  axes from day one. Future axes (duration, phase-count, etc.)
+  layer in via `paper-label`'s parameter list — the substrate's
+  Bundle absorbs new axis-bindings without re-architecture.
 - **Encoding-experiment regression detection.** Form-atoms vs
   Permute-rhythm (experiment 007's verdict) — the simulator can
   re-run the comparison on actual market data and produce a
   residue delta, not just a cosine ratio.
 - **Reproducible run history.** The aggregate is deterministic
-  from `(stream, thinker, config)`. Runs are comparable. Memory
-  feedback_never_delete_runs holds.
+  from `(stream, thinker, predictor, config)`. Runs are
+  comparable. Memory feedback_never_delete_runs holds.
 - **The first real ProposerRecord trail.** Once multi-broker
   ships, trust ladder slots in cleanly.
 - **Phase 5's IndicatorBank port has a head start** (ATR + Phase

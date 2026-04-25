@@ -106,11 +106,14 @@ verbatim — same scenarios, same assertions:
 
 ---
 
-## Slice 3 — Simulator types
+## Slice 3 — Simulator types + label coordinates (Chapters 55–57)
 
-**Status: ready (no logic; types only).**
+**Status: ready (no logic; types + label-builder only).**
 
-`wat/sim/types.wat`:
+Two files: types in `wat/sim/types.wat`, label-coordinate
+machinery in `wat/sim/labels.wat`.
+
+### `wat/sim/types.wat`
 
 ```scheme
 (:wat::core::enum :trading::sim::Direction :Up :Down)
@@ -129,13 +132,37 @@ verbatim — same scenarios, same assertions:
   (Open (direction :trading::sim::Direction))
   :Exit)
 
-(:wat::core::struct :trading::sim::TriggerEvent ...)
-(:wat::core::struct :trading::sim::LabeledTrigger ...)
+;; TriggerEvent now carries the surface (Chapter 55) — fed to the
+;; future reckoner-backed Predictor with the back-filled label.
+(:wat::core::struct :trading::sim::TriggerEvent
+  (candle-i    :i64)
+  (phase-label :trading::types::PhaseLabel)
+  (decision    :trading::sim::Decision)
+  (surface     :wat::holon::HolonAST))
+
+(:wat::core::struct :trading::sim::LabeledTrigger
+  (event       :trading::sim::TriggerEvent)
+  (label       :trading::sim::TriggerLabel))
+
 (:wat::core::struct :trading::sim::Paper ...)
-(:wat::core::struct :trading::sim::Outcome ...)
+;; Outcome carries the continuous paper-label per Chapter 57.
+(:wat::core::struct :trading::sim::Outcome
+  (paper          :trading::sim::Paper)
+  (closed-at      :i64)
+  (final-residue  :f64)
+  (paper-label    :wat::holon::HolonAST)
+  (labeled-trail  :Vec<trading::sim::LabeledTrigger>))
+
 (:wat::core::struct :trading::sim::Aggregate ...)
 (:wat::core::struct :trading::sim::Config ...)
-(:wat::core::struct :trading::sim::Thinker ...)
+
+;; Thinker (vocabulary) and Predictor (learner) — Chapter 55 split.
+(:wat::core::struct :trading::sim::Thinker
+  (build-surface :fn(:trading::types::Candles, :Option<trading::sim::Paper>)
+                  -> :wat::holon::HolonAST))
+
+(:wat::core::struct :trading::sim::Predictor
+  (predict :fn(:wat::holon::HolonAST) -> :trading::sim::Action))
 ```
 
 Plurals via typealias per arc 020's pattern:
@@ -146,12 +173,65 @@ Plurals via typealias per arc 020's pattern:
 (:wat::core::typealias :trading::sim::TriggerEvents :Vec<trading::sim::TriggerEvent>)
 ```
 
-**Tests** (`wat-tests/sim/types.wat`):
+### `wat/sim/labels.wat` — label coordinates (Chapter 57)
+
+Two basis atoms (`outcome-axis`, `direction-axis`) plus a label
+builder. The label is a Bundle of axis-bindings with Thermometer-
+encoded continuous values per Chapter 57. Range `[-0.05, +0.05]`
+per sub-fog 5h.
+
+```scheme
+;; Basis atoms — the coordinate system's axes.
+(:wat::core::define :trading::sim::outcome-axis
+  (:wat::holon::Atom (:wat::core::quote :outcome)))
+
+(:wat::core::define :trading::sim::direction-axis
+  (:wat::holon::Atom (:wat::core::quote :direction)))
+
+;; Continuous label builder — (residue, price-move) → coordinate.
+;; Used at paper resolution to capture the actual magnitudes.
+(:wat::core::define
+  (:trading::sim::paper-label
+    (residue    :f64)        ; signed: + Grace, - Violence
+    (price-move :f64)        ; signed: + Up, - Down
+    -> :wat::holon::HolonAST)
+  (:explore::force
+    (:wat::holon::Bundle
+      (:wat::core::vec :wat::holon::HolonAST
+        (:wat::holon::Bind :trading::sim::outcome-axis
+          (:wat::holon::Thermometer residue    -0.05 0.05))
+        (:wat::holon::Bind :trading::sim::direction-axis
+          (:wat::holon::Thermometer price-move -0.05 0.05))))))
+
+;; Reference corner labels — the four (±0.05, ±0.05) extremes.
+;; v1's hand-coded Predictor (Q8) cosines a surface against these
+;; for argmax-style classification. The reckoner-backed successor
+;; Predictor will learn from continuous labels directly; corners
+;; remain as reference points for human-readable queries.
+(:wat::core::define :trading::sim::corner-grace-up
+  (:trading::sim::paper-label  0.05  0.05))
+(:wat::core::define :trading::sim::corner-grace-dn
+  (:trading::sim::paper-label  0.05 -0.05))
+(:wat::core::define :trading::sim::corner-violence-up
+  (:trading::sim::paper-label -0.05  0.05))
+(:wat::core::define :trading::sim::corner-violence-dn
+  (:trading::sim::paper-label -0.05 -0.05))
+```
+
+**Tests** (`wat-tests/sim/types.wat` + `wat-tests/sim/labels.wat`):
 
 13. **Construction round-trips** — every struct constructible + accessible.
 14. **Variant construction** — `(Grace residue=42.0)`, `(Open Up)`, etc.
+15. **TriggerEvent carries surface** — field round-trips an arbitrary HolonAST.
+16. **Thinker + Predictor records constructible** — both wrap functions cleanly.
+17. **`paper-label` round-trip** — magnitude flows through Thermometer
+    encoding; `cosine(paper-label(0.04, 0.03), corner-grace-up)` is
+    higher than `cosine(paper-label(0.04, 0.03), corner-violence-dn)`.
+18. **Label structural similarity (Chapter 56)** — `cosine(corner-grace-up,
+    corner-grace-dn) > cosine(corner-grace-up, corner-violence-dn)` because
+    they share `outcome-axis` bind.
 
-**Estimated cost:** ~100 LOC + 2 tests. Half a day.
+**Estimated cost:** ~150 LOC + 6 tests. ~Three quarters of a day.
 
 ---
 
@@ -162,14 +242,31 @@ Plurals via typealias per arc 020's pattern:
 `wat/sim/paper.wat`:
 
 ```scheme
-(:trading::sim::run stream thinker config → aggregate)
+;; Now takes Thinker + Predictor (Chapter 55 split).
+(:trading::sim::run stream thinker predictor config → aggregate)
 
 ;; Internal helpers (not all public):
 (:trading::sim::residue entry-price current-price direction principal fees → f64)
-(:trading::sim::evaluate-gates state position config phase-label market-pred → bool)
+(:trading::sim::price-move entry-price current-price direction → f64)
+(:trading::sim::evaluate-gates state position config phase-label → bool)
 (:trading::sim::label-trail trail outcome → labeled-trail)
-(:trading::sim::tick state candle config thinker → state)
+(:trading::sim::tick state candle config thinker predictor → state)
 ```
+
+The engine's per-candle loop:
+
+1. Advance ATR + PhaseState.
+2. Build surface: `(thinker.build-surface window position)`.
+3. Ask Predictor for Action: `(predictor.predict surface)`.
+4. Append `(candle-i, phase-label, decision, surface)` to any open
+   paper's trail at every Peak/Valley pass.
+5. Apply Action against gates:
+   - Action == `Exit` AND gates 1-3 pass → close Grace, build
+     paper-label from (residue, price-move), back-fill trail.
+   - Deadline reached → close Violence, build paper-label
+     (negative outcome, signed price-move), back-fill trail.
+   - Action == `(Open dir)` AND no open paper → open new paper.
+   - Otherwise → continue.
 
 **Tests** (`wat-tests/sim/paper.wat`):
 
@@ -196,8 +293,20 @@ Plurals via typealias per arc 020's pattern:
     papers (one Grace, one Violence); aggregate.papers=2,
     grace_count=1, violence_count=1, total_residue+total_loss
     matches per-paper amounts.
+24. **Surface recorded in trail (Chapter 55)** — verify each
+    TriggerEvent's `surface` field carries the thinker's actual
+    HolonAST output at that candle. Round-trip through resolution.
+25. **Continuous paper-label at resolution (Chapter 57)** — Grace
+    paper with `residue=$0.40` on `$10` principal → paper-label's
+    outcome-axis Thermometer at +0.04. Direction-axis at the
+    actual `(final-entry)/entry` magnitude.
+26. **Predictor swap is the seam** — same Thinker, different
+    Predictor function (e.g., always-Up vs cosine-vs-corners) →
+    different Aggregate (different paper counts and outcomes).
+    Proves the Chapter 55 split is real and the thinker doesn't
+    leak prediction logic.
 
-**Estimated cost:** ~250 LOC + 9 tests. Two and a half days.
+**Estimated cost:** ~300 LOC + 12 tests. Three days.
 This is the load-bearing slice.
 
 ---
@@ -219,13 +328,15 @@ thinker, asserts the simulator runs end-to-end.
       (:lab::candles::open "data/btc_5m_raw.parquet"))
      ((thinker :trading::sim::Thinker)
       (:trading::sim::Thinker
-        :propose? <always-Up>
-        :should-exit? <exit-at-first-Peak>))
+        :build-surface <surface-builder-fn>))
+     ((predictor :trading::sim::Predictor)
+      (:trading::sim::Predictor
+        :predict <cosine-vs-corners-fn>))           ; Q8 hand-coded v1
      ((config :trading::sim::Config)
       (:trading::sim::Config
         :deadline 288 :min-residue 0.01 :fee-bps 35.0 :atr-period 14))
      ((agg :trading::sim::Aggregate)
-      (:trading::sim::run-bounded stream thinker config 10000)))   ; bounded variant
+      (:trading::sim::run-bounded stream thinker predictor config 10000)))   ; bounded variant
     ;; Smoke assertions only — values not predicted, just sanity.
     (:wat::core::let*
       (((_ :()) (:wat::test::assert-eq (:wat::core::> agg.papers 0) true)))
@@ -323,14 +434,16 @@ count. No runaway state.
 
 ## Total estimate
 
-- Slice 1: 0.5 day (ATR + median window)
+- Slice 1: 0.5 day (ATR + median window) — **shipped 2026-04-25**
 - Slice 2: 1.5 days (PhaseState)
-- Slice 3: 0.5 day (types)
-- Slice 4: 2.5 days (simulator engine — load-bearing)
+- Slice 3: 0.75 day (types + label coordinates)  — was 0.5 day; +0.25 day for label-builder + corner refs + 4 added tests (Chapters 55–57)
+- Slice 4: 3 days (simulator engine — load-bearing)  — was 2.5 days; +0.5 day for Predictor wire-up + continuous label construction at resolution + 3 added tests
 - Slice 5: 0.5 day (integration smoke)
 - Slice 6: 1 hour (docs)
 
-**~5.5 days end-to-end.** Slices 1–3 can ship in any order
-(slice 2 depends on 1 only via the `smoothing` parameter; could
-even ship 3 first since it has no logic deps). Slice 4 is the
-gating chunk; once green, slices 5–6 are short.
+**~6.25 days end-to-end** (was 5.5 pre-Chapter-55–57 absorption).
+Slice 1 already shipped. Slices 2–3 can ship in any order; slice
+4 is still the gating chunk. The +0.75 day delta over the
+original estimate is the price of absorbing the BOOK chapters'
+recognitions before slice 4 writes against the wrong shape — a
+strictly cheaper move than reshaping post-slice-4.
