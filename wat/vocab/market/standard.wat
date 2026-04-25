@@ -44,7 +44,7 @@
 
 (:wat::core::define
   (:trading::vocab::market::standard::encode-standard-holons
-    (window :Vec<trading::types::Candle>)
+    (window :trading::types::Candles)
     (scales :trading::encoding::Scales)
     -> :trading::encoding::VocabEmission)
   (:wat::core::if (:wat::core::empty? window) -> :trading::encoding::VocabEmission

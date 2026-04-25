@@ -133,7 +133,7 @@
   (label     :trading::types::PhaseLabel)
   (direction :trading::types::PhaseDirection)
   (duration  :i64)
-  (history   :Vec<trading::types::PhaseRecord>))
+  (history   :trading::types::PhaseRecords))
 
 ;; ─── Candle — composed of Ohlcv + 11 indicator-family sub-structs ──────
 
@@ -150,3 +150,11 @@
   (timeframe    :trading::types::Candle::Timeframe)
   (time         :trading::types::Candle::Time)
   (phase        :trading::types::Candle::Phase))
+
+;; Candles — vector of enriched candles. Plural-via-typealias per
+;; the user direction "expressivity wins". Window-based vocabs
+;; (standard.wat) consume this; future regime/broker callers will
+;; too.
+(:wat::core::typealias
+  :trading::types::Candles
+  :Vec<trading::types::Candle>)

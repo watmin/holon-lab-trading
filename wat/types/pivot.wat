@@ -33,3 +33,12 @@
   (close-open    :f64)
   (close-final   :f64)
   (volume-avg    :f64))
+
+;; PhaseRecords — vector of completed phases. Plural-via-typealias
+;; per the user direction "expressivity wins" — every site that
+;; previously wrote `:Vec<trading::types::PhaseRecord>` reads
+;; `:trading::types::PhaseRecords`. Mirrors `:wat::holon::Holons`
+;; (arc 033) precedent at the lab tier.
+(:wat::core::typealias
+  :trading::types::PhaseRecords
+  :Vec<trading::types::PhaseRecord>)

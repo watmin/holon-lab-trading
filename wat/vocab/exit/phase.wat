@@ -95,7 +95,7 @@
 
 (:wat::core::define
   (:trading::vocab::exit::phase::encode-phase-scalar-holons
-    (history :Vec<trading::types::PhaseRecord>)
+    (history :trading::types::PhaseRecords)
     (scales :trading::encoding::Scales)
     -> :trading::encoding::VocabEmission)
   (:wat::core::if
@@ -119,11 +119,11 @@
           (:None (:trading::vocab::exit::phase::default-record))))
 
        ;; Filter valleys / peaks from history.
-       ((valleys :Vec<trading::types::PhaseRecord>)
+       ((valleys :trading::types::PhaseRecords)
         (:wat::core::filter history
           (:wat::core::lambda ((r :trading::types::PhaseRecord) -> :bool)
             (:trading::vocab::exit::phase::is-valley? r))))
-       ((peaks :Vec<trading::types::PhaseRecord>)
+       ((peaks :trading::types::PhaseRecords)
         (:wat::core::filter history
           (:wat::core::lambda ((r :trading::types::PhaseRecord) -> :bool)
             (:trading::vocab::exit::phase::is-peak? r))))
@@ -214,7 +214,7 @@
 (:wat::core::define
   (:trading::vocab::exit::phase::append-close-avg-trend
     (acc :trading::encoding::VocabEmission)
-    (records :Vec<trading::types::PhaseRecord>)
+    (records :trading::types::PhaseRecords)
     (name :String)
     -> :trading::encoding::VocabEmission)
   (:wat::core::let*
@@ -279,3 +279,342 @@
     :trading::types::PhaseLabel::Transition
     :trading::types::PhaseDirection::None
     0 0 0 0.0 0.0 0.0 0.0 0.0 0.0))
+
+;; ─── Phase rhythm (arc 020) ────────────────────────────────────
+;;
+;; The third archive function — phase_rhythm_thought. Builds the
+;; structural memory of phase history: per-record Bundles →
+;; Sequential trigrams → plain-Bind pairs → top-level Bundle,
+;; wrapped in (Bind (Atom "phase-rhythm") <bundle>).
+;;
+;; Same-label lookup uses find-last-index per record (O(n²) but n
+;; ≤ 103 by budget); avoids 5-tuple state thread. Each record's
+;; Bundle has 5-11 facts depending on i > 0 + same-label hit.
+
+;; ─── Numeric helpers ───────────────────────────────────────────
+
+(:wat::core::define
+  (:trading::vocab::exit::phase::rec-duration
+    (r :trading::types::PhaseRecord)
+    -> :f64)
+  (:wat::core::i64::to-f64 (:trading::types::PhaseRecord/duration r)))
+
+(:wat::core::define
+  (:trading::vocab::exit::phase::rec-range
+    (r :trading::types::PhaseRecord)
+    -> :f64)
+  (:wat::core::let*
+    (((avg :f64) (:trading::types::PhaseRecord/close-avg r)))
+    (:wat::core::if (:wat::core::> avg 0.0) -> :f64
+      (:wat::core::f64::/
+        (:wat::core::f64::-
+          (:trading::types::PhaseRecord/close-max r)
+          (:trading::types::PhaseRecord/close-min r))
+        avg)
+      0.0)))
+
+(:wat::core::define
+  (:trading::vocab::exit::phase::rec-move
+    (r :trading::types::PhaseRecord)
+    -> :f64)
+  (:wat::core::let*
+    (((open :f64) (:trading::types::PhaseRecord/close-open r)))
+    (:wat::core::if (:wat::core::> open 0.0) -> :f64
+      (:wat::core::f64::/
+        (:wat::core::f64::-
+          (:trading::types::PhaseRecord/close-final r) open)
+        open)
+      0.0)))
+
+(:wat::core::define
+  (:trading::vocab::exit::phase::rec-volume
+    (r :trading::types::PhaseRecord)
+    -> :f64)
+  (:trading::types::PhaseRecord/volume-avg r))
+
+;; rel — relative-delta with epsilon guard. (a - b) / |b| if |b|
+;; > 0.0001 else 0.
+(:wat::core::define
+  (:trading::vocab::exit::phase::rel
+    (a :f64) (b :f64)
+    -> :f64)
+  (:wat::core::let*
+    (((b-abs :f64) (:wat::core::f64::abs b)))
+    (:wat::core::if (:wat::core::> b-abs 0.0001) -> :f64
+      (:wat::core::f64::/ (:wat::core::f64::- a b) b-abs)
+      0.0)))
+
+;; ─── same-label-and-direction? — user-enum predicate ───────────
+;;
+;; Returns true iff records have matching (label, direction). For
+;; Valley/Peak, direction is ignored (set to None by convention);
+;; for Transition, direction matters.
+
+(:wat::core::define
+  (:trading::vocab::exit::phase::direction=
+    (a :trading::types::PhaseDirection)
+    (b :trading::types::PhaseDirection)
+    -> :bool)
+  (:wat::core::match a -> :bool
+    (:trading::types::PhaseDirection::Up
+      (:wat::core::match b -> :bool
+        (:trading::types::PhaseDirection::Up   true)
+        (:trading::types::PhaseDirection::Down false)
+        (:trading::types::PhaseDirection::None false)))
+    (:trading::types::PhaseDirection::Down
+      (:wat::core::match b -> :bool
+        (:trading::types::PhaseDirection::Up   false)
+        (:trading::types::PhaseDirection::Down true)
+        (:trading::types::PhaseDirection::None false)))
+    (:trading::types::PhaseDirection::None
+      (:wat::core::match b -> :bool
+        (:trading::types::PhaseDirection::Up   false)
+        (:trading::types::PhaseDirection::Down false)
+        (:trading::types::PhaseDirection::None true)))))
+
+(:wat::core::define
+  (:trading::vocab::exit::phase::same-label-and-direction?
+    (a :trading::types::PhaseRecord)
+    (b :trading::types::PhaseRecord)
+    -> :bool)
+  (:wat::core::let*
+    (((al :trading::types::PhaseLabel) (:trading::types::PhaseRecord/label a))
+     ((bl :trading::types::PhaseLabel) (:trading::types::PhaseRecord/label b)))
+    (:wat::core::match al -> :bool
+      (:trading::types::PhaseLabel::Valley
+        (:wat::core::match bl -> :bool
+          (:trading::types::PhaseLabel::Valley     true)
+          (:trading::types::PhaseLabel::Peak       false)
+          (:trading::types::PhaseLabel::Transition false)))
+      (:trading::types::PhaseLabel::Peak
+        (:wat::core::match bl -> :bool
+          (:trading::types::PhaseLabel::Valley     false)
+          (:trading::types::PhaseLabel::Peak       true)
+          (:trading::types::PhaseLabel::Transition false)))
+      (:trading::types::PhaseLabel::Transition
+        (:wat::core::match bl -> :bool
+          (:trading::types::PhaseLabel::Valley     false)
+          (:trading::types::PhaseLabel::Peak       false)
+          (:trading::types::PhaseLabel::Transition
+            (:trading::vocab::exit::phase::direction=
+              (:trading::types::PhaseRecord/direction a)
+              (:trading::types::PhaseRecord/direction b))))))))
+
+;; ─── Per-record Bundle facts ───────────────────────────────────
+;;
+;; build-fact — common shape `(Bind (Atom name) (Thermometer v min max))`.
+(:wat::core::define
+  (:trading::vocab::exit::phase::thermometer-fact
+    (name :String) (value :f64) (lo :f64) (hi :f64)
+    -> :wat::holon::HolonAST)
+  (:wat::holon::Bind
+    (:wat::holon::Atom name)
+    (:wat::holon::Thermometer value lo hi)))
+
+;; record-bundle-at-index — produces the Bundle for one record in
+;; the history at index i. 5 base facts + up to 6 conditional
+;; deltas. Bundle returns Result; phase bundles are small (≤11
+;; facts), capacity is not a concern, so the Err sentinel is
+;; unreachable but match-required.
+(:wat::core::define
+  (:trading::vocab::exit::phase::record-bundle-at-index
+    (history :trading::types::PhaseRecords)
+    (i :i64)
+    -> :wat::holon::HolonAST)
+  (:wat::core::let*
+    (((current :trading::types::PhaseRecord)
+      (:wat::core::match (:wat::core::get history i)
+                         -> :trading::types::PhaseRecord
+        ((Some r) r)
+        (:None (:trading::vocab::exit::phase::default-record))))
+
+     ;; Base facts.
+     ((label :trading::types::PhaseLabel)
+      (:trading::types::PhaseRecord/label current))
+     ((direction :trading::types::PhaseDirection)
+      (:trading::types::PhaseRecord/direction current))
+     ((label-name :String)
+      (:trading::vocab::exit::phase::phase-label-name label direction))
+     ((label-fact :wat::holon::HolonAST)
+      (:wat::holon::Bind
+        (:wat::holon::Atom "phase")
+        (:wat::holon::Atom label-name)))
+     ((dur :f64) (:trading::vocab::exit::phase::rec-duration current))
+     ((mv  :f64) (:trading::vocab::exit::phase::rec-move current))
+     ((rng :f64) (:trading::vocab::exit::phase::rec-range current))
+     ((vol :f64) (:trading::vocab::exit::phase::rec-volume current))
+     ((dur-fact :wat::holon::HolonAST)
+      (:trading::vocab::exit::phase::thermometer-fact "rec-duration" dur 0.0 200.0))
+     ((mv-fact :wat::holon::HolonAST)
+      (:trading::vocab::exit::phase::thermometer-fact "rec-move" mv -0.1 0.1))
+     ((rng-fact :wat::holon::HolonAST)
+      (:trading::vocab::exit::phase::thermometer-fact "rec-range" rng 0.0 0.1))
+     ((vol-fact :wat::holon::HolonAST)
+      (:trading::vocab::exit::phase::thermometer-fact "rec-volume" vol 0.0 10000.0))
+     ((base :wat::holon::Holons)
+      (:wat::core::vec :wat::holon::HolonAST
+        label-fact dur-fact mv-fact rng-fact vol-fact))
+
+     ;; Prior-deltas if i > 0.
+     ((with-prior :wat::holon::Holons)
+      (:wat::core::if (:wat::core::> i 0) -> :wat::holon::Holons
+        (:wat::core::let*
+          (((prev :trading::types::PhaseRecord)
+            (:wat::core::match (:wat::core::get history (:wat::core::i64::- i 1))
+                               -> :trading::types::PhaseRecord
+              ((Some r) r)
+              (:None (:trading::vocab::exit::phase::default-record))))
+           ((p-dur :f64) (:trading::vocab::exit::phase::rec-duration prev))
+           ((p-mv  :f64) (:trading::vocab::exit::phase::rec-move prev))
+           ((p-vol :f64) (:trading::vocab::exit::phase::rec-volume prev))
+           ((pd-fact :wat::holon::HolonAST)
+            (:trading::vocab::exit::phase::thermometer-fact "prior-duration-delta"
+              (:trading::vocab::exit::phase::rel dur p-dur) -2.0 2.0))
+           ((pm-fact :wat::holon::HolonAST)
+            (:trading::vocab::exit::phase::thermometer-fact "prior-move-delta"
+              (:wat::core::f64::- mv p-mv) -0.1 0.1))
+           ((pv-fact :wat::holon::HolonAST)
+            (:trading::vocab::exit::phase::thermometer-fact "prior-volume-delta"
+              (:trading::vocab::exit::phase::rel vol p-vol) -2.0 2.0))
+           ((b1 :wat::holon::Holons) (:wat::core::conj base pd-fact))
+           ((b2 :wat::holon::Holons) (:wat::core::conj b1 pm-fact))
+           ((b3 :wat::holon::Holons) (:wat::core::conj b2 pv-fact)))
+          b3)
+        base))
+
+     ;; Same-label-and-direction lookup via find-last-index.
+     ((earlier :trading::types::PhaseRecords)
+      (:wat::core::take history i))
+     ((same-idx :Option<i64>)
+      (:wat::core::find-last-index earlier
+        (:wat::core::lambda ((r :trading::types::PhaseRecord) -> :bool)
+          (:trading::vocab::exit::phase::same-label-and-direction? r current))))
+
+     ((with-same :wat::holon::Holons)
+      (:wat::core::match same-idx -> :wat::holon::Holons
+        ((Some si)
+          (:wat::core::let*
+            (((same-rec :trading::types::PhaseRecord)
+              (:wat::core::match (:wat::core::get history si)
+                                 -> :trading::types::PhaseRecord
+                ((Some r) r)
+                (:None (:trading::vocab::exit::phase::default-record))))
+             ((s-dur :f64) (:trading::vocab::exit::phase::rec-duration same-rec))
+             ((s-mv  :f64) (:trading::vocab::exit::phase::rec-move same-rec))
+             ((s-vol :f64) (:trading::vocab::exit::phase::rec-volume same-rec))
+             ((sm-fact :wat::holon::HolonAST)
+              (:trading::vocab::exit::phase::thermometer-fact "same-move-delta"
+                (:wat::core::f64::- mv s-mv) -0.1 0.1))
+             ((sd-fact :wat::holon::HolonAST)
+              (:trading::vocab::exit::phase::thermometer-fact "same-duration-delta"
+                (:trading::vocab::exit::phase::rel dur s-dur) -2.0 2.0))
+             ((sv-fact :wat::holon::HolonAST)
+              (:trading::vocab::exit::phase::thermometer-fact "same-volume-delta"
+                (:trading::vocab::exit::phase::rel vol s-vol) -2.0 2.0))
+             ((b1 :wat::holon::Holons) (:wat::core::conj with-prior sm-fact))
+             ((b2 :wat::holon::Holons) (:wat::core::conj b1 sd-fact))
+             ((b3 :wat::holon::Holons) (:wat::core::conj b2 sv-fact)))
+            b3))
+        (:None with-prior))))
+
+    ;; Wrap in Bundle. Match the BundleResult; Err sentinel for
+    ;; unreachable capacity-exceeded path.
+    (:wat::core::match (:wat::holon::Bundle with-same) -> :wat::holon::HolonAST
+      ((Ok h) h)
+      ((Err _) (:wat::holon::Atom "phase-rhythm-record-bundle-overflow")))))
+
+;; ─── phase-rhythm-holon — top level ────────────────────────────
+
+;; phase-rhythm-empty-sentinel — singleton-Bundle placeholder.
+;; Per arc 026's empty-Bundle convention (holon-rs panics on
+;; empty bundles), the empty rhythm wraps a single placeholder
+;; Atom inside a Bundle. Used for both insufficient-history
+;; (< 4 records) and empty-pairs (post-windowing) cases.
+(:wat::core::define
+  (:trading::vocab::exit::phase::empty-rhythm-bundle -> :wat::holon::HolonAST)
+  (:wat::core::match
+    (:wat::holon::Bundle
+      (:wat::core::vec :wat::holon::HolonAST
+        (:wat::holon::Atom "phase-rhythm-empty")))
+    -> :wat::holon::HolonAST
+    ((Ok h) h)
+    ((Err _) (:wat::holon::Atom "phase-rhythm-sentinel-overflow"))))
+
+(:wat::core::define
+  (:trading::vocab::exit::phase::phase-rhythm-holon
+    (history :trading::types::PhaseRecords)
+    -> :wat::holon::HolonAST)
+  (:wat::core::if (:wat::core::< (:wat::core::length history) 4)
+                  -> :wat::holon::HolonAST
+    ;; Insufficient history — wrap the empty-rhythm sentinel.
+    (:wat::holon::Bind
+      (:wat::holon::Atom "phase-rhythm")
+      (:trading::vocab::exit::phase::empty-rhythm-bundle))
+    (:wat::core::let*
+      (;; Build all per-record Bundles.
+       ((n :i64) (:wat::core::length history))
+       ((indices :Vec<i64>) (:wat::core::range 0 n))
+       ((all-records :Vec<wat::holon::HolonAST>)
+        (:wat::core::map indices
+          (:wat::core::lambda ((i :i64) -> :wat::holon::HolonAST)
+            (:trading::vocab::exit::phase::record-bundle-at-index history i))))
+
+       ;; Truncate to last (budget + 3) = 103 records.
+       ((budget :i64) 100)
+       ((max-records :i64) (:wat::core::i64::+ budget 3))
+       ((records-len :i64) (:wat::core::length all-records))
+       ((records :Vec<wat::holon::HolonAST>)
+        (:wat::core::if (:wat::core::> records-len max-records)
+                        -> :Vec<wat::holon::HolonAST>
+          (:wat::core::drop all-records
+            (:wat::core::i64::- records-len max-records))
+          all-records))
+
+       ;; window-3 → Sequential trigrams.
+       ((win3 :Vec<wat::holon::Holons>)
+        (:wat::std::list::window records 3))
+       ((trigrams :Vec<wat::holon::HolonAST>)
+        (:wat::core::map win3
+          (:wat::core::lambda ((w :wat::holon::Holons) -> :wat::holon::HolonAST)
+            (:wat::holon::Sequential w))))
+
+       ;; window-2 → plain-Bind pairs (NOT Bigram — archive does not
+       ;; Permute the second element).
+       ((win2 :Vec<wat::holon::Holons>)
+        (:wat::std::list::window trigrams 2))
+       ((pairs :Vec<wat::holon::HolonAST>)
+        (:wat::core::map win2
+          (:wat::core::lambda ((w :wat::holon::Holons) -> :wat::holon::HolonAST)
+            (:wat::core::let*
+              (((a :wat::holon::HolonAST)
+                (:wat::core::match (:wat::core::first w)
+                                   -> :wat::holon::HolonAST
+                  ((Some h) h)
+                  (:None (:wat::holon::Atom "unreachable"))))
+               ((b :wat::holon::HolonAST)
+                (:wat::core::match (:wat::core::second w)
+                                   -> :wat::holon::HolonAST
+                  ((Some h) h)
+                  (:None (:wat::holon::Atom "unreachable")))))
+              (:wat::holon::Bind a b)))))
+
+       ;; Truncate pairs to last `budget` (= 100).
+       ((pairs-len :i64) (:wat::core::length pairs))
+       ((trimmed-pairs :Vec<wat::holon::HolonAST>)
+        (:wat::core::if (:wat::core::> pairs-len budget)
+                        -> :Vec<wat::holon::HolonAST>
+          (:wat::core::drop pairs (:wat::core::i64::- pairs-len budget))
+          pairs))
+
+       ;; Bundle the pairs.
+       ((bundle-result :wat::holon::BundleResult)
+        (:wat::holon::Bundle trimmed-pairs))
+       ((inner :wat::holon::HolonAST)
+        (:wat::core::match bundle-result -> :wat::holon::HolonAST
+          ((Ok h) h)
+          ((Err _) (:wat::holon::Atom "phase-rhythm-bundle-overflow")))))
+
+      ;; Wrap in (Bind (Atom "phase-rhythm") <bundle>).
+      (:wat::holon::Bind
+        (:wat::holon::Atom "phase-rhythm")
+        inner))))

@@ -86,7 +86,7 @@
   (:wat::core::let*
     (((c :trading::types::Candle)
       (:test::fresh-candle 105.0 95.0 100.0 99.0 50.0 0.0 0.01))
-     ((window :Vec<trading::types::Candle>)
+     ((window :trading::types::Candles)
       (:wat::core::vec :trading::types::Candle c c c))
      ((e :trading::encoding::VocabEmission)
       (:trading::vocab::market::standard::encode-standard-holons
@@ -100,7 +100,7 @@
 
 (:deftest :trading::test::vocab::market::standard::test-empty-window-zero-holons
   (:wat::core::let*
-    (((window :Vec<trading::types::Candle>)
+    (((window :trading::types::Candles)
       (:wat::core::vec :trading::types::Candle))
      ((e :trading::encoding::VocabEmission)
       (:trading::vocab::market::standard::encode-standard-holons
@@ -121,7 +121,7 @@
       (:test::fresh-candle 100.0 90.0 95.0 0.0 85.0 0.0 0.0))
      ((c-normal :trading::types::Candle)
       (:test::fresh-candle 100.0 90.0 95.0 0.0 50.0 0.0 0.0))
-     ((window :Vec<trading::types::Candle>)
+     ((window :trading::types::Candles)
       (:wat::core::vec :trading::types::Candle c-extreme c-normal))
      ((e :trading::encoding::VocabEmission)
       (:trading::vocab::market::standard::encode-standard-holons
@@ -148,7 +148,7 @@
     ;; window = [c-normal × 3]; no extreme; since defaults to n = 3
     (((c :trading::types::Candle)
       (:test::fresh-candle 100.0 90.0 95.0 0.0 50.0 0.0 0.0))
-     ((window :Vec<trading::types::Candle>)
+     ((window :trading::types::Candles)
       (:wat::core::vec :trading::types::Candle c c c))
      ((e :trading::encoding::VocabEmission)
       (:trading::vocab::market::standard::encode-standard-holons
@@ -179,7 +179,7 @@
       (:test::fresh-candle 110.0 90.0 100.0 0.0 50.0 0.0 0.0))
      ((c2 :trading::types::Candle)
       (:test::fresh-candle 105.0 95.0 100.0 0.0 50.0 0.0 0.0))
-     ((window :Vec<trading::types::Candle>)
+     ((window :trading::types::Candles)
       (:wat::core::vec :trading::types::Candle c1 c2))
      ((e :trading::encoding::VocabEmission)
       (:trading::vocab::market::standard::encode-standard-holons
@@ -216,7 +216,7 @@
     ;; window of 3 candles: 1 + 3 = 4, max with 1 = 4; round-to-2 = 4.0
     (((c :trading::types::Candle)
       (:test::fresh-candle 100.0 90.0 95.0 0.0 50.0 0.0 0.0))
-     ((window :Vec<trading::types::Candle>)
+     ((window :trading::types::Candles)
       (:wat::core::vec :trading::types::Candle c c c))
      ((e :trading::encoding::VocabEmission)
       (:trading::vocab::market::standard::encode-standard-holons
@@ -242,7 +242,7 @@
   (:wat::core::let*
     (((c :trading::types::Candle)
       (:test::fresh-candle 100.0 90.0 95.0 99.0 50.0 0.0 0.01))
-     ((window :Vec<trading::types::Candle>)
+     ((window :trading::types::Candles)
       (:wat::core::vec :trading::types::Candle c c))
      ((e :trading::encoding::VocabEmission)
       (:trading::vocab::market::standard::encode-standard-holons
@@ -262,7 +262,7 @@
       (:test::fresh-candle 100.0 90.0 95.0 0.0 50.0 2.5 0.0))
      ((c-normal :trading::types::Candle)
       (:test::fresh-candle 100.0 90.0 95.0 0.0 50.0 0.5 0.0))
-     ((window :Vec<trading::types::Candle>)
+     ((window :trading::types::Candles)
       (:wat::core::vec :trading::types::Candle c-spike c-normal c-normal))
      ((e :trading::encoding::VocabEmission)
       (:trading::vocab::market::standard::encode-standard-holons

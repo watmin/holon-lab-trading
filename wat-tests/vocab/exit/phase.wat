@@ -138,7 +138,7 @@
 
 (:deftest :trading::test::vocab::exit::phase::test-scalar-empty-history
   (:wat::core::let*
-    (((history :Vec<trading::types::PhaseRecord>)
+    (((history :trading::types::PhaseRecords)
       (:wat::core::vec :trading::types::PhaseRecord))
      ((e :trading::encoding::VocabEmission)
       (:trading::vocab::exit::phase::encode-phase-scalar-holons
@@ -155,7 +155,7 @@
         :trading::types::PhaseLabel::Valley
         :trading::types::PhaseDirection::None
         5 95.0 100.0 97.0))
-     ((history :Vec<trading::types::PhaseRecord>)
+     ((history :trading::types::PhaseRecords)
       (:wat::core::vec :trading::types::PhaseRecord r))
      ((e :trading::encoding::VocabEmission)
       (:trading::vocab::exit::phase::encode-phase-scalar-holons
@@ -180,7 +180,7 @@
         :trading::types::PhaseLabel::Valley
         :trading::types::PhaseDirection::None
         6 100.0 106.0 103.0))
-     ((history :Vec<trading::types::PhaseRecord>)
+     ((history :trading::types::PhaseRecords)
       (:wat::core::vec :trading::types::PhaseRecord r1 r2))
      ((e :trading::encoding::VocabEmission)
       (:trading::vocab::exit::phase::encode-phase-scalar-holons
@@ -189,3 +189,136 @@
     (:wat::test::assert-eq
       (:wat::core::length holons)
       3)))
+
+;; ─── Phase rhythm (arc 020) ────────────────────────────────────
+
+(:deftest :trading::test::vocab::exit::phase::test-rhythm-insufficient-history
+  ;; < 4 records returns (Bind (Atom "phase-rhythm")
+  ;; (Bundle [(Atom "phase-rhythm-empty")])) — the singleton-
+  ;; sentinel from arc 026's empty-Bundle convention.
+  (:wat::core::let*
+    (((r :trading::types::PhaseRecord)
+      (:test::fresh-record
+        :trading::types::PhaseLabel::Valley
+        :trading::types::PhaseDirection::None
+        5 95.0 100.0 97.0))
+     ((history :trading::types::PhaseRecords)
+      (:wat::core::vec :trading::types::PhaseRecord r r r))
+     ((actual :wat::holon::HolonAST)
+      (:trading::vocab::exit::phase::phase-rhythm-holon history))
+     ((expected :wat::holon::HolonAST)
+      (:wat::holon::Bind
+        (:wat::holon::Atom "phase-rhythm")
+        (:trading::vocab::exit::phase::empty-rhythm-bundle))))
+    (:wat::test::assert-eq
+      (:wat::holon::coincident? actual expected)
+      true)))
+
+(:deftest :trading::test::vocab::exit::phase::test-rhythm-four-records
+  ;; Exactly 4 records — produces 2 trigrams, 1 pair, wrapped in
+  ;; (Bind (Atom "phase-rhythm") <bundle>). The HolonAST should
+  ;; coincide with itself when re-evaluated; just check that the
+  ;; result is non-empty (length > 0 substitute via coincident?
+  ;; against a known-different empty-bundle).
+  (:wat::core::let*
+    (((rv :trading::types::PhaseRecord)
+      (:test::fresh-record
+        :trading::types::PhaseLabel::Valley
+        :trading::types::PhaseDirection::None
+        5 95.0 100.0 97.0))
+     ((rp :trading::types::PhaseRecord)
+      (:test::fresh-record
+        :trading::types::PhaseLabel::Peak
+        :trading::types::PhaseDirection::None
+        4 102.0 108.0 105.0))
+     ((rtu :trading::types::PhaseRecord)
+      (:test::fresh-record
+        :trading::types::PhaseLabel::Transition
+        :trading::types::PhaseDirection::Up
+        2 104.0 109.0 106.0))
+     ((rtd :trading::types::PhaseRecord)
+      (:test::fresh-record
+        :trading::types::PhaseLabel::Transition
+        :trading::types::PhaseDirection::Down
+        3 100.0 105.0 102.0))
+     ((history :trading::types::PhaseRecords)
+      (:wat::core::vec :trading::types::PhaseRecord rv rp rtu rtd))
+     ((actual :wat::holon::HolonAST)
+      (:trading::vocab::exit::phase::phase-rhythm-holon history))
+     ;; Compare against the empty-rhythm sentinel (insufficient
+     ;; history) — non-empty rhythm should NOT coincide with it.
+     ;; Bare `(Bundle empty-vec)` would panic during encoding
+     ;; (holon-rs's vector-layer bundle requires non-empty input).
+     ((empty-rhythm :wat::holon::HolonAST)
+      (:wat::holon::Bind
+        (:wat::holon::Atom "phase-rhythm")
+        (:trading::vocab::exit::phase::empty-rhythm-bundle))))
+    (:wat::test::assert-eq
+      (:wat::holon::coincident? actual empty-rhythm)
+      false)))
+
+;; ─── same-label-and-direction? predicate ───────────────────────
+
+(:deftest :trading::test::vocab::exit::phase::test-same-valley-valley
+  (:wat::core::let*
+    (((a :trading::types::PhaseRecord)
+      (:test::fresh-record
+        :trading::types::PhaseLabel::Valley
+        :trading::types::PhaseDirection::None
+        5 95.0 100.0 97.0))
+     ((b :trading::types::PhaseRecord)
+      (:test::fresh-record
+        :trading::types::PhaseLabel::Valley
+        :trading::types::PhaseDirection::None
+        6 100.0 106.0 103.0)))
+    (:wat::test::assert-eq
+      (:trading::vocab::exit::phase::same-label-and-direction? a b)
+      true)))
+
+(:deftest :trading::test::vocab::exit::phase::test-same-valley-peak
+  (:wat::core::let*
+    (((a :trading::types::PhaseRecord)
+      (:test::fresh-record
+        :trading::types::PhaseLabel::Valley
+        :trading::types::PhaseDirection::None
+        5 95.0 100.0 97.0))
+     ((b :trading::types::PhaseRecord)
+      (:test::fresh-record
+        :trading::types::PhaseLabel::Peak
+        :trading::types::PhaseDirection::None
+        4 102.0 108.0 105.0)))
+    (:wat::test::assert-eq
+      (:trading::vocab::exit::phase::same-label-and-direction? a b)
+      false)))
+
+(:deftest :trading::test::vocab::exit::phase::test-same-transition-up-up
+  (:wat::core::let*
+    (((a :trading::types::PhaseRecord)
+      (:test::fresh-record
+        :trading::types::PhaseLabel::Transition
+        :trading::types::PhaseDirection::Up
+        2 104.0 109.0 106.0))
+     ((b :trading::types::PhaseRecord)
+      (:test::fresh-record
+        :trading::types::PhaseLabel::Transition
+        :trading::types::PhaseDirection::Up
+        3 110.0 115.0 112.0)))
+    (:wat::test::assert-eq
+      (:trading::vocab::exit::phase::same-label-and-direction? a b)
+      true)))
+
+(:deftest :trading::test::vocab::exit::phase::test-same-transition-up-down
+  (:wat::core::let*
+    (((a :trading::types::PhaseRecord)
+      (:test::fresh-record
+        :trading::types::PhaseLabel::Transition
+        :trading::types::PhaseDirection::Up
+        2 104.0 109.0 106.0))
+     ((b :trading::types::PhaseRecord)
+      (:test::fresh-record
+        :trading::types::PhaseLabel::Transition
+        :trading::types::PhaseDirection::Down
+        3 100.0 105.0 102.0)))
+    (:wat::test::assert-eq
+      (:trading::vocab::exit::phase::same-label-and-direction? a b)
+      false)))
