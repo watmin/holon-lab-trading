@@ -25,8 +25,10 @@
   (:wat::core::let*
     (((s :trading::encoding::AtrState)
       (:trading::encoding::AtrState::fresh 14)))
+    ;; Post-arc-026 refactor: count moved to inner WilderState.
     (:wat::test::assert-eq
-      (:trading::encoding::AtrState/count s)
+      (:trading::encoding::WilderState/count
+        (:trading::encoding::AtrState/wilder s))
       0)))
 
 (:deftest :trading::test::encoding::atr::test-fresh-not-ready
@@ -48,7 +50,7 @@
      ((s1 :trading::encoding::AtrState)
       (:trading::encoding::AtrState::update s0 110.0 100.0 105.0)))
     (:wat::test::assert-eq
-      (:trading::encoding::AtrState/value s1)
+      (:trading::encoding::AtrState::value s1)
       10.0)))
 
 ;; Subsequent update with high-prev_close > range → TR = |high-prev_close|.
@@ -65,7 +67,7 @@
      ((s2 :trading::encoding::AtrState)
       (:trading::encoding::AtrState::update s1 120.0 115.0 118.0)))
     (:wat::test::assert-eq
-      (:trading::encoding::AtrState/value s2)
+      (:trading::encoding::AtrState::value s2)
       15.0)))
 
 ;; ─── Ready gate ────────────────────────────────────────────────────
@@ -103,5 +105,5 @@
      ((s50 :trading::encoding::AtrState)
       (:test::repeat-update s0 110.0 100.0 105.0 50)))
     (:wat::test::assert-eq
-      (:trading::encoding::AtrState/value s50)
+      (:trading::encoding::AtrState::value s50)
       10.0)))

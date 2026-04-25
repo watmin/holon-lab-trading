@@ -47,6 +47,73 @@
 ;;   :trading::encoding::SmaState::ready? state -> bool
 
 
+;; ─── WilderState — Wilder smoothing (alpha = 1/period) ────────────
+;;
+;; Lifted from arc 025's AtrState during arc 026 slice 2. Three
+;; non-ATR consumers materialized at once (RSI's gain/loss smoothers,
+;; DMI's four Wilder instances, future regime indicators), so the
+;; "factor when called for" footnote in slice 1's BACKLOG fired.
+;;
+;; Warmup: simple sum over first `period` observations; on observation
+;; #period set value = accum/period. Post-warmup uses the Wilder
+;; recurrence `value' = x/p + value · (p-1)/p`. ready? at count ≥ period.
+;;
+;; AtrState (arc 025) now composes a WilderState; old AtrState fields
+;; (value, count, period, accum) move to WilderState. Callers that
+;; previously read `:AtrState/value` use new `:AtrState::value`
+;; delegate; deeper field access goes through `:AtrState/wilder`.
+
+(:wat::core::struct :trading::encoding::WilderState
+  (period :i64)
+  (value  :f64)
+  (count  :i64)
+  (accum  :f64))
+
+
+(:wat::core::define
+  (:trading::encoding::WilderState::fresh
+    (period :i64)
+    -> :trading::encoding::WilderState)
+  (:trading::encoding::WilderState/new period 0.0 0 0.0))
+
+
+(:wat::core::define
+  (:trading::encoding::WilderState::update
+    (state :trading::encoding::WilderState)
+    (x :f64)
+    -> :trading::encoding::WilderState)
+  (:wat::core::let*
+    (((period :i64) (:trading::encoding::WilderState/period state))
+     ((p-f64 :f64) (:wat::core::i64::to-f64 period))
+     ((old-count :i64) (:trading::encoding::WilderState/count state))
+     ((new-count :i64) (:wat::core::+ old-count 1))
+     ((old-accum :f64) (:trading::encoding::WilderState/accum state))
+     ((old-value :f64) (:trading::encoding::WilderState/value state))
+     ((new-accum :f64)
+      (:wat::core::if (:wat::core::<= new-count period) -> :f64
+        (:wat::core::+ old-accum x)
+        old-accum))
+     ((new-value :f64)
+      (:wat::core::if (:wat::core::<= new-count period) -> :f64
+        (:wat::core::if (:wat::core::= new-count period) -> :f64
+          (:wat::core::/ new-accum p-f64)
+          old-value)
+        ;; Post-warmup: value' = x/p + value · (p-1)/p
+        (:wat::core::+
+          (:wat::core::/ x p-f64)
+          (:wat::core::* old-value (:wat::core::/ (:wat::core::- p-f64 1.0) p-f64))))))
+    (:trading::encoding::WilderState/new period new-value new-count new-accum)))
+
+
+(:wat::core::define
+  (:trading::encoding::WilderState::ready?
+    (state :trading::encoding::WilderState)
+    -> :bool)
+  (:wat::core::>=
+    (:trading::encoding::WilderState/count state)
+    (:trading::encoding::WilderState/period state)))
+
+
 ;; ─── RingBuffer — bounded sliding window over f64 ───────────────────
 
 (:wat::core::struct :trading::encoding::RingBuffer

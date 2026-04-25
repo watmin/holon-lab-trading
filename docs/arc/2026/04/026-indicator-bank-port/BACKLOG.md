@@ -105,7 +105,34 @@ no re-shipment. Slice 1 simply imports and re-uses.
 
 ## Slice 2 — Oscillators
 
-**Status: ready (after slice 1).**
+**Status: shipped 2026-04-25.** ~470 LOC delivered as
+`wat/encoding/indicator-bank/oscillators.wat` — RSI (two
+WilderState smoothers + prev-close), Stochastic (three RingBuffers:
+high/low/k), Williams %R (pure compute over Stoch's high/low),
+CCI (RingBuffer + SmaState over typical price + foldl mean
+deviation), MFI (two RingBuffers for pos/neg money flow). 15
+tests in `wat-tests/encoding/indicator-bank/oscillators.wat` (budget
+18; shipped 15 — covers fresh/ready/range/convergence per indicator
+plus Williams %R bounds at high/low). Lab wat tests 195 → 210.
+
+**Refactor as planned: WilderState factored out of arc 025's
+AtrState.** The slice-1 footnote ("if a non-ATR Wilder consumer
+surfaces, factor then") fired immediately. New `WilderState` in
+`primitives.wat`; `wat/encoding/atr.wat` rewritten to compose it
+(AtrState now holds `(wilder, prev-close, started)`); arc 025 atr
+tests updated to use `:AtrState::value` (new explicit delegate)
+and `:WilderState/count (:AtrState/wilder s)` for deeper field
+access. All 6 arc 025 atr tests still green post-refactor.
+
+**Off-by-one caught in test-stoch-ready-gate.** Initial test
+expected ready at candle 8; with k-period=5 + d-period=3 the gate
+actually fires at candle 7 (high/low full at 5; k-buf gets one
+push per candle from 5 onward; full at 7). Fixed to test 6→false,
+7→true.
+
+**No substrate uplifts surfaced.** All five oscillators ran clean
+on slice 1's primitives + arc 050's polymorphic arithmetic + arc
+056's foldl + the substrate's existing match/Option/and primitives.
 
 Five indicators: RSI, Stochastic (k + d), CCI, MFI, Williams %R.
 
