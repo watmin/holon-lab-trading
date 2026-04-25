@@ -9,13 +9,15 @@ INSCRIPTION + cross-link sixth.
 Each slice is independently mergeable. Slice 4 is the load-bearing
 chunk; slices 1–3 enable it; slices 5–6 close it.
 
-**Arc-level status (2026-04-25): PAUSED at slice 4.** Slices 1-3
-shipped. Slice 4+ requires the enriched `:trading::types::Candle`
-(populated indicator fields), which depends on the IndicatorBank
-port. Per builder direction "we /must/ have it... pause arc 025
-pending completion of arc 026," the simulator engine waits on
-[lab arc 026](../026-indicator-bank-port/) closing. SimCandle stub
-was considered and rejected. Resume slice 4 when arc 026 ships.
+**Arc-level status (2026-04-25): UNPAUSED — arc 026 closed.**
+Slices 1-3 shipped. Arc 026 (IndicatorBank port) closed at
+INSCRIPTION on 2026-04-25; the enriched `:trading::types::Candle`
+is now produceable per tick via
+`(:trading::encoding::IndicatorBank::tick bank ohlcv)`. Slices 4-6
+flip from "paused on arc 026" back to "ready." Slice 4's Thinker
+signature can finalize against `:trading::types::Candles`
+(plural); the simulator engine consumes the IndicatorBank-produced
+Candle stream as its yardstick data source.
 
 ---
 
