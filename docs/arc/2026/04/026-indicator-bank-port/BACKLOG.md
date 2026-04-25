@@ -631,7 +631,20 @@ fractal-dim on smooth (→ 1) vs noisy (→ 2). **~16 tests.**
 
 ## Slice 11 — Divergence + cross-deltas + price-action
 
-**Status: ready (after slices 2, 3).**
+**Status: shipped 2026-04-25.** Two files delivered:
+- `wat/encoding/indicator-bank/divergence.wat` (~140 LOC) —
+  `detect-divergence` (returns `:(f64,f64)` bull/bear tuple) +
+  `compute-stoch-cross-delta`.
+- `wat/encoding/indicator-bank/price-action.wat` (~95 LOC) —
+  `compute-range-ratio`, `compute-gap`, `ConsecutiveState` struct
+  with up/down counters.
+
+11 tests across both files (budget 10; +1 for divergence-flat-zero).
+Lab wat tests 292 → 303. No substrate uplifts surfaced.
+
+**ConsecutiveState** holds (up-count, down-count, prev-close, started)
+— reversal resets the opposite counter, matching archive's
+step_price_action.
 
 Compose existing oscillators (RSI from slice 2, Stoch from
 slice 2, MACD from slice 3) with simple price-action checks.
