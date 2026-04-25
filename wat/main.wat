@@ -32,6 +32,9 @@
 (:wat::load-file! "encoding/atr-window.wat")
 (:wat::load-file! "encoding/phase-state.wat")
 
+;; arc 026 — IndicatorBank port (in flight; slice-by-slice).
+(:wat::load-file! "encoding/indicator-bank/primitives.wat")
+
 ;; arc 025 — paper lifecycle simulator (yardstick).
 (:wat::load-file! "sim/types.wat")
 (:wat::load-file! "sim/labels.wat")

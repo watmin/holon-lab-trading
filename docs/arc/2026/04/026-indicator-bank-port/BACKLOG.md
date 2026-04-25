@@ -18,7 +18,27 @@ chunk, mostly orchestration boilerplate.
 
 ## Slice 1 — Streaming primitives
 
-**Status: ready.**
+**Status: shipped 2026-04-25.** ~280 LOC delivered as
+`wat/encoding/indicator-bank/primitives.wat` — RingBuffer (struct +
+fresh/push/len/sum/mean/min/max/get/full?), EmaState (alpha =
+2/(period+1), warmup-via-SMA-then-EMA, ready? gate), SmaState
+(RingBuffer + rolling sum, peek-and-subtract on eviction). 10
+tests in `wat-tests/encoding/indicator-bank/primitives.wat` (budget
+8; added test-sma-rolling-sum-after-eviction + test-ring-get-out-
+of-range as edge cases). Lab wat tests 185 → 195. No substrate
+uplifts surfaced.
+
+**Decisions held:**
+- WilderState **not re-exported** as a separate type. Arc 025's
+  AtrState already wraps Wilder semantics; if a non-ATR Wilder
+  consumer surfaces (DMI's plus_di / minus_di in slice 3), we'll
+  factor a WilderState struct out then. Doesn't block slice 1.
+- RingBuffer's `get i` indexes 0=most-recent (inverts substrate's
+  0=front). Matches archive's `[len-1-i]` convention; archive's
+  Rust ring-buffer accessors all work this way.
+- `SmaState::update` peek-and-subtract uses substrate's
+  `feedback_shim_panic_vs_option` pattern — match-with-impossible-
+  None (sentinel 0.0) on the get-oldest call, gated by `full?`.
 
 `wat/encoding/indicator-bank/primitives.wat`:
 
