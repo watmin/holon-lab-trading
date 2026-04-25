@@ -233,7 +233,34 @@ input (each ready at its own period). **~12 tests.**
 
 ## Slice 4 — Volatility (Bollinger + Keltner + squeeze + ATR-ratio)
 
-**Status: ready (after slices 1, 3).**
+**Status: shipped 2026-04-25.** ~290 LOC delivered as
+`wat/encoding/indicator-bank/volatility.wat` + RollingStddev added
+to primitives.wat (~70 LOC). 12 tests in
+`wat-tests/encoding/indicator-bank/volatility.wat`. Lab wat tests
+222 → 234.
+
+**Substrate uplift surfaced — `:wat::std::math::sqrt`.** The BACKLOG
+anticipated this. Shipped as carry-along to wat-rs (commit
+`c750fe2`); same shape as the existing math unaries (ln/exp/sin/
+cos) — one dispatch arm + `"sqrt"` in the for-loop's name list.
+3 new wat-rs tests; 962 → 965.
+
+**RollingStddev added to primitives.wat** (rather than a separate
+file) — it's a general utility likely consumed by future
+statistical estimators (slices 9-10). Maintains both `sum` and
+`sum-sq` for O(1) updates via peek-and-subtract on eviction
+(matches archive convention exactly).
+
+**Bollinger composes SmaState + RollingStddev.** Same period for
+both; archive duplicates the windows similarly. Keltner wraps
+EmaState only — ATR is passed in at compute time (matches
+IndicatorBank's atr-once policy; the bank holds one AtrState that
+multiple consumers query).
+
+**Squeeze + atr-ratio are pure scalar computes.** No struct, no
+state — just `compute-squeeze` and `compute-atr-ratio` defines.
+Both use `:wat::core::if (= 0.0)` defensive fallbacks for
+degenerate denominators (matches archive).
 
 Bollinger uses SMA + stddev (substrate uplift candidate: a `stddev`
 helper, or write inline). Keltner uses EMA + ATR (already shipped

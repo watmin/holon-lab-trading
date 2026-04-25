@@ -381,3 +381,93 @@
     -> :bool)
   (:trading::encoding::RingBuffer::full?
     (:trading::encoding::SmaState/buffer state)))
+
+
+;; ─── RollingStddev — running sum + sum-of-squares ──────────────────
+;;
+;; For a window of n values: stddev = sqrt(sum_sq/n - (sum/n)²).
+;; Maintains both sums in O(1) per update via peek-and-subtract on
+;; eviction. ready? at buffer.full?; archive returns 0 for n < 2 so
+;; consumers don't read garbage during warmup.
+;;
+;; Used by BollingerState (slice 4); likely consumed by future
+;; statistical estimators (slices 9-10) that need windowed variance.
+
+(:wat::core::struct :trading::encoding::RollingStddev
+  (buffer :trading::encoding::RingBuffer)
+  (sum    :f64)
+  (sum-sq :f64))
+
+
+(:wat::core::define
+  (:trading::encoding::RollingStddev::fresh
+    (period :i64)
+    -> :trading::encoding::RollingStddev)
+  (:trading::encoding::RollingStddev/new
+    (:trading::encoding::RingBuffer::fresh period)
+    0.0
+    0.0))
+
+
+(:wat::core::define
+  (:trading::encoding::RollingStddev::update
+    (state :trading::encoding::RollingStddev)
+    (x :f64)
+    -> :trading::encoding::RollingStddev)
+  (:wat::core::let*
+    (((buf :trading::encoding::RingBuffer)
+      (:trading::encoding::RollingStddev/buffer state))
+     ((old-sum :f64) (:trading::encoding::RollingStddev/sum state))
+     ((old-sum-sq :f64) (:trading::encoding::RollingStddev/sum-sq state))
+     ((was-full? :bool) (:trading::encoding::RingBuffer::full? buf))
+     ((evicted :f64)
+      (:wat::core::if was-full? -> :f64
+        (:wat::core::match
+          (:trading::encoding::RingBuffer::get
+            buf
+            (:wat::core::- (:trading::encoding::RingBuffer::len buf) 1))
+          -> :f64
+          ((Some v) v)
+          (:None 0.0))
+        0.0))
+     ((sum-after-evict :f64)
+      (:wat::core::- old-sum evicted))
+     ((sum-sq-after-evict :f64)
+      (:wat::core::- old-sum-sq (:wat::core::* evicted evicted)))
+     ((new-buf :trading::encoding::RingBuffer)
+      (:trading::encoding::RingBuffer::push buf x))
+     ((new-sum :f64) (:wat::core::+ sum-after-evict x))
+     ((new-sum-sq :f64) (:wat::core::+ sum-sq-after-evict (:wat::core::* x x))))
+    (:trading::encoding::RollingStddev/new new-buf new-sum new-sum-sq)))
+
+
+;; Stddev value. Returns 0.0 when n < 2 (matches archive); negative
+;; variance from numerical noise clamped to 0 before sqrt.
+(:wat::core::define
+  (:trading::encoding::RollingStddev::value
+    (state :trading::encoding::RollingStddev)
+    -> :f64)
+  (:wat::core::let*
+    (((buf :trading::encoding::RingBuffer)
+      (:trading::encoding::RollingStddev/buffer state))
+     ((n :i64) (:trading::encoding::RingBuffer::len buf))
+     ((n-f64 :f64) (:wat::core::i64::to-f64 n)))
+    (:wat::core::if (:wat::core::< n 2) -> :f64
+      0.0
+      (:wat::core::let*
+        (((mean :f64)
+          (:wat::core::/ (:trading::encoding::RollingStddev/sum state) n-f64))
+         ((var-raw :f64)
+          (:wat::core::-
+            (:wat::core::/ (:trading::encoding::RollingStddev/sum-sq state) n-f64)
+            (:wat::core::* mean mean)))
+         ((var :f64) (:wat::core::f64::max var-raw 0.0)))
+        (:wat::std::math::sqrt var)))))
+
+
+(:wat::core::define
+  (:trading::encoding::RollingStddev::ready?
+    (state :trading::encoding::RollingStddev)
+    -> :bool)
+  (:trading::encoding::RingBuffer::full?
+    (:trading::encoding::RollingStddev/buffer state)))
