@@ -364,7 +364,17 @@ positive/negative, volume_accel ratio behavior. **~6 tests.**
 
 ## Slice 6 — Rate of Change + Range positions
 
-**Status: ready (after slice 1).**
+**Status: shipped 2026-04-25.** ~95 LOC delivered as
+`wat/encoding/indicator-bank/rate.wat` — pure compute functions,
+no state structs (the IndicatorBank holds the relevant RingBuffers
+and calls these per tick). 8 tests in
+`wat-tests/encoding/indicator-bank/rate.wat` (budget 6; added
+roc-past-zero defensive case + range-pos-at-high/at-low edges).
+Lab wat tests 242 → 250.
+
+**No substrate uplifts surfaced.** ROC and range-pos are direct
+ports of archive's free functions; the `:None` arms of get/min/max
+unreachable-but-typed (sentinel 0.0) per slice 1's pattern.
 
 Pure-compute functions over a RingBuffer; no state structs of
 their own. Each is N-period close-vs-N-ago (ROC) or close-vs-
