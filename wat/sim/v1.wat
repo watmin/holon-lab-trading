@@ -66,11 +66,13 @@
           (:wat::core::last window))
          ((sma20 :f64)
           (:wat::core::match last-candle -> :f64
-            ((Some c) (:trading::types::Candle/sma20 c))
+            ((Some c) (:trading::types::Candle::Trend/sma20
+                        (:trading::types::Candle/trend c)))
             (:None 0.0)))
          ((sma50 :f64)
           (:wat::core::match last-candle -> :f64
-            ((Some c) (:trading::types::Candle/sma50 c))
+            ((Some c) (:trading::types::Candle::Trend/sma50
+                        (:trading::types::Candle/trend c)))
             (:None 0.0)))
          ((up-band :f64) (:wat::core::* sma50 1.001))
          ((dn-band :f64) (:wat::core::* sma50 0.999)))
