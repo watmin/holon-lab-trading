@@ -17,6 +17,7 @@
 (:wat::load-file! "types/distances.wat")
 (:wat::load-file! "types/pivot.wat")
 (:wat::load-file! "types/candle.wat")
+(:wat::load-file! "types/portfolio.wat")
 
 ;; Phase 3 — encoding helpers
 (:wat::load-file! "encoding/round.wat")
@@ -41,6 +42,7 @@
 ;;   arc 017 — market/price-action (K=2, biggest Log surface, first f64::min)
 ;;   arc 018 — market/standard (window-based, last market vocab)
 ;;   arc 021 — exit/regime (thin delegation to market/regime)
+;;   arc 022 — broker/portfolio (first broker vocab)
 (:wat::load-file! "vocab/shared/helpers.wat")
 (:wat::load-file! "vocab/shared/time.wat")
 (:wat::load-file! "vocab/exit/time.wat")
@@ -59,6 +61,7 @@
 (:wat::load-file! "vocab/market/standard.wat")
 (:wat::load-file! "vocab/exit/phase.wat")
 (:wat::load-file! "vocab/exit/regime.wat")
+(:wat::load-file! "vocab/broker/portfolio.wat")
 
 (:wat::core::define (:user::main
                      (stdin  :wat::io::IOReader)
