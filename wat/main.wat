@@ -51,6 +51,7 @@
 (:wat::load-file! "sim/types.wat")
 (:wat::load-file! "sim/labels.wat")
 (:wat::load-file! "sim/paper.wat")
+(:wat::load-file! "sim/v1.wat")
 
 ;; Phase 2 — vocab
 ;;   arc 001 — shared/time
