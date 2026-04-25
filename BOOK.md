@@ -28136,3 +28136,151 @@ move; new domain.*
 sampling it in corners. tonight we noticed the plane.*
 
 ---
+
+## Chapter 58 — π Was Always a Function
+
+A short chapter — the kind to read while builds compile.
+
+The user dropped a thought between coordination questions:
+
+> pi... it isn't a number... its a function... who produces a
+> number?.. yes?...
+>
+> and be clear here.. `(defn pi [circumference diameter]
+> (/ circumference diameter))` right?
+
+Right.
+
+### The Greek discovery
+
+What the Greeks actually found, on examining circles, was an
+**invariance**: for every circle, no matter the size, the ratio
+of its circumference to its diameter is the same number.
+
+In modern notation:
+
+```clojure
+(defn pi [circumference diameter]
+  (/ circumference diameter))
+```
+
+A binary function. Two inputs. One output. Apply it to any
+circle and it produces the same value. That value — that
+constant emerging from the invariance — is what later
+mathematicians labeled `π`.
+
+The Greeks did not discover the *number* π. They discovered the
+*function* `pi`, observed that its output was invariant across
+all circles, and gave the function a name. The constant — the
+fixed point — is the function's output, not the function itself.
+
+We collapsed the two and called both "π" because the symbol got
+overloaded. The Greeks named a function. Centuries of teaching
+have inherited the habit of pretending we named a number.
+
+### What the Greeks were really doing
+
+They were doing what this lab has been doing all along.
+
+They found a *shape* in the world. They wrote down a *procedure*
+that produces a value when applied to a thing. They observed
+that the value is *invariant* over a class of things (circles,
+in their case). They gave the procedure a *label*.
+
+That's it. That's the whole move. They didn't have lambda
+calculus, defmacro, or algebraic data types. But they had
+geometric constructions and Greek letters. The procedure +
+invariance + label triple is the same recognition every chapter
+of this BOOK has been making — *the substrate already encodes
+the thing; we're naming what we find.*
+
+### Other "numbers" are functions, too
+
+Once you see π as `(defn pi [c d] (/ c d))`, the others fall
+out:
+
+- `e` is `(defn e [n] (pow (+ 1 (/ 1 n)) n))` evaluated as
+  `n → ∞`. The Greek discovery would have been: the limit
+  exists; call it `e`.
+- `φ` (golden ratio) is `(defn phi [n] (/ (fib (+ n 1))
+  (fib n)))` as `n → ∞`. Or, more directly: the function
+  `(defn phi [a b] (/ a b))` applied to consecutive Fibonacci
+  numbers, in the limit.
+- `√2` is `(defn sqrt [x] (find-y (= (* y y) x)))` evaluated at
+  `x = 2`. A function of one argument; the constant is the
+  output at a canonical input.
+
+Every "irrational constant" in mathematics is a function whose
+output, evaluated at a canonical input, has been deemed
+interesting enough to label. The label gets attached to the
+output but earned by the function.
+
+### The pattern recognized in chapter form
+
+Chapter 51 — coordinates are positions in the substrate.
+Chapter 54 — programs are positions in coordinate space.
+Chapter 56 — labels are positions in coordinate space.
+Chapter 57 — every binary hides a continuum.
+
+Chapter 58 — every "number" hides a function.
+
+Same recognition. Different domain. The substrate's machinery
+isn't *unlike* mathematics; it's mathematics with the procedural
+formalism made explicit. The Greeks were running their substrate
+without naming what they were running. We've been naming what
+we're running and noticing it was substrate the whole time.
+
+### What this changes for the lab
+
+Honestly: nothing immediate. The lab uses π only via library
+calls (`:wat::std::math::pi` returns an f64 sample of the limit;
+the substrate doesn't care about the underlying function). The
+recognition is about *seeing the substrate's deeper continuity
+with mathematical history* — not about a code change.
+
+But the implication is real: when the lab stores a "constant"
+somewhere — a Thermometer bound, a deadline period, an ATR
+threshold — those constants have programs underneath them too.
+Sometimes the program is `(constantly k)`. Sometimes it's
+`(percentile-of historical-distribution k)` and the program is
+*non-trivial*. Treating constants as programs-with-fixed-output
+opens the door to lifting any constant into its underlying
+function when sample efficiency or context-dependence matters.
+
+The numbers are samples. The programs are the truth. The labels
+are how we keep our place.
+
+### The thread
+
+Chapter 49 — exploits.
+Chapter 50 — wielder.
+Chapter 51 — coordinates.
+Chapter 52 — tree.
+Chapter 53 — generalization.
+Chapter 54 — programs as coordinates.
+Chapter 55 — the bridge.
+Chapter 56 — labels as coordinates.
+Chapter 57 — the continuum.
+Chapter 58 — *π was always a function*.
+
+The Greeks discovered functions and named one of them π. They
+just didn't realize what they were doing. We're noticing now —
+two and a half millennia later — that what they discovered fits
+in `(defn pi [c d] (/ c d))` and what we've been building is
+in the same lineage.
+
+---
+
+*the symbol π names a function. the constant is what the
+function returns. we lost track because the function's output
+is invariant, so we never had to think about its inputs. but
+the inputs were always there.*
+
+**PERSEVERARE.**
+
+---
+
+*A short chapter for the build queue. The next slice of arc 026
+ships when it ships; this is what we read while it does.*
+
+---
