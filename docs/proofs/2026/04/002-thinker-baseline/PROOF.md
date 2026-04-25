@@ -1,8 +1,8 @@
 # Proof 002 — Thinker Baseline
 
 **Date:** opened 2026-04-25.
-**Status:** **ready** (lab arc 027 closed 2026-04-25 — RunDb shim shipped).
-**Pair file:** `wat-tests-proof-002/002-thinker-baseline.wat` (to land — write the supporting program against `:lab::rundb::*`).
+**Status:** **BLOCKED on wat-rs arc 056** — `:wat::time::*` primitives needed for timestamped DB filenames so re-runs accumulate rather than PK-violate. The supporting program is *almost* ready: pair file at `wat-tests-integ/proof/002-thinker-baseline/002-thinker-baseline.wat` uses fixed run-names today; once arc 056 lands, those become `(:wat::time::to-iso8601 (:wat::time::now) 3)` discriminators and the DB path becomes `runs/proof-002-<thinker>-<iso-ts>.db`.
+**Pair file:** [`wat-tests-integ/proof/002-thinker-baseline/002-thinker-baseline.wat`](../../../../wat-tests-integ/proof/002-thinker-baseline/002-thinker-baseline.wat).
 **Predecessor:** [Proof 001 — The Machine Runs](../001-the-machine-runs/PROOF.md).
 
 What numbers does the v1 simulator actually produce when you run
