@@ -1,4 +1,4 @@
-;; experiments/2026/04/003-tree-walks/explore-tree.wat
+;; docs/experiments/2026/04/003-tree-walks/explore-tree.wat
 ;;
 ;; Proof program for BOOK Chapter 52 — The Tree.
 ;;
@@ -29,7 +29,7 @@
 ;;            unbinding (asking "config" of the etc bundle)
 ;;            recovers the sub-bundle.
 ;;
-;; Run: wat experiments/2026/04/003-tree-walks/explore-tree.wat
+;; Run: wat docs/experiments/2026/04/003-tree-walks/explore-tree.wat
 ;; All bipolar — {-1, 0, 1}^d. Default tier routing.
 
 ;; ─── helpers ───────────────────────────────────────────────────────

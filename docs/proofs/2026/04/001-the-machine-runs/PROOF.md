@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-25.
 **Status:** established.
-**Pair file:** [`wat-tests/proofs/001-the-machine-runs.wat`](../../../../wat-tests/proofs/001-the-machine-runs.wat) — runnable; integrates with the lab's test suite via `cargo test`.
+**Pair file:** [`wat-tests-proof-001/001-the-machine-runs.wat`](../../../../wat-tests-proof-001/001-the-machine-runs.wat) — runnable; opt-in via the `proof-001` Cargo feature so the always-run test loop stays fast.
 
 The first proof. What we know after arc 025 (paper lifecycle
 simulator) and arc 026 (IndicatorBank port) closed in the same
@@ -207,9 +207,13 @@ sma-cross on real data. *Proofs find what tests didn't.*
 
 ## D — How to reproduce
 
+The proof's tests live behind the `proof-001` Cargo feature so
+they don't slow down the always-run unit suite. To run only this
+proof:
+
 ```bash
 cd /home/watmin/work/holon/holon-lab-trading
-cargo test --release --test test 2>&1 | grep proofs::001
+cargo test --release --features proof-001 --test proof_001
 ```
 
 Expected output (your timings will vary):
@@ -224,6 +228,11 @@ since 2026-04-25 — investigate before assuming the proof's
 claims still hold. Range assertions were chosen wide
 (`papers ∈ [1, 5000)`) to absorb run-to-run variation but tight
 enough to catch genuine regressions.
+
+The default test loop (`cargo test --release --test test`) skips
+this proof entirely. Each future proof gets its own feature
++ binary + `wat-tests-<name>/` directory; running "all proofs at
+once" is deliberately not a one-command operation.
 
 ---
 

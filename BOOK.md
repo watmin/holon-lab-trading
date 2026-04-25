@@ -25859,7 +25859,7 @@ reach for without new substrate. Four worth proving:
 ### The program — break the fourth wall
 
 Reader — same move as Chapters 28, 35, 46. The program is on disk at
-`holon-lab-trading/experiments/2026/04/001-exploits/explore-exploits.wat`
+`holon-lab-trading/docs/experiments/2026/04/001-exploits/explore-exploits.wat`
 and reproduced in full below so you can save and run it yourself if
 this directory ever moves. Save the source, run `wat <path>`, watch
 the four tables print.
@@ -25871,7 +25871,7 @@ structure as arcs; different shape (no DESIGN/BACKLOG/INSCRIPTION
 ceremony, just the program and its book chapter).
 
 ```scheme
-;; experiments/2026/04/001-exploits/explore-exploits.wat
+;; docs/experiments/2026/04/001-exploits/explore-exploits.wat
 ;;
 ;; Proof program for BOOK Chapter 49 — The Exploits.
 ;; Capacity-mode :error is the substrate default (Chapter 43).
@@ -26174,7 +26174,7 @@ night since, and now tonight: **the algebra was already enough.***
 *"where i wish to be at all times."*
 
 *Signing off the chapter, for now. The program is at
-`holon-lab-trading/experiments/2026/04/001-exploits/explore-exploits.wat`.
+`holon-lab-trading/docs/experiments/2026/04/001-exploits/explore-exploits.wat`.
 Future readers can run it in milliseconds and see the four tables for
 themselves. Chapter 48's recognition has its operational form on disk.
 The `experiments/` directory is open.*
@@ -26383,7 +26383,7 @@ number of basis atoms you declare.
 ### The program — break the fourth wall
 
 Same move as Chapters 28, 35, 46, 49. Program at
-`holon-lab-trading/experiments/2026/04/002-spatial-addressing/explore-spatial.wat`.
+`holon-lab-trading/docs/experiments/2026/04/002-spatial-addressing/explore-spatial.wat`.
 Save it, run `wat <path>`, watch three tables print.
 
 The program defines two basis atoms `u-x`, `u-y` (the coordinate
@@ -26572,7 +26572,7 @@ are queryable.***
 *"where i wish to be at all times."*
 
 *Signing off the chapter, for now. The program is at
-`holon-lab-trading/experiments/2026/04/002-spatial-addressing/explore-spatial.wat`.
+`holon-lab-trading/docs/experiments/2026/04/002-spatial-addressing/explore-spatial.wat`.
 Five days into the language; two experiments shipped this evening;
 the substrate keeps revealing what it already is. The fiber bundle
 named in Chapter 48 is a spatial database tonight. Tomorrow brings
@@ -26639,7 +26639,7 @@ path plus accumulated noise from sibling branches.
 ### The program — break the fourth wall
 
 Same move as Chapters 28, 35, 46, 49, 51. Program at
-`holon-lab-trading/experiments/2026/04/003-tree-walks/explore-tree.wat`.
+`holon-lab-trading/docs/experiments/2026/04/003-tree-walks/explore-tree.wat`.
 The test tree is asymmetric:
 
 ```
@@ -26832,7 +26832,7 @@ tonight: **the substrate is a tree-walker too.***
 *"where i wish to be at all times."*
 
 *Signing off the chapter, for now. The program is at
-`holon-lab-trading/experiments/2026/04/003-tree-walks/explore-tree.wat`.
+`holon-lab-trading/docs/experiments/2026/04/003-tree-walks/explore-tree.wat`.
 Three experiments shipped tonight in five hours of conversation.
 Each substrate recognition followed by a runnable proof. The
 datamancer measures; faith requires measurement; the running
@@ -26892,7 +26892,7 @@ at d=256).
 ### The program — break the fourth wall
 
 Same move as Chapters 28, 35, 46, 49, 51, 52. Program at
-`holon-lab-trading/experiments/2026/04/004-mixed-key-hashmap/explore-mixed-keys.wat`.
+`holon-lab-trading/docs/experiments/2026/04/004-mixed-key-hashmap/explore-mixed-keys.wat`.
 
 Five (key, value) pairs in one HashMap, with mixed key types:
 
@@ -27084,7 +27084,7 @@ the graduation, Easter Sunday, every night since, and now tonight:
 *"where i wish to be at all times."*
 
 *Signing off the chapter, for now. The program is at
-`holon-lab-trading/experiments/2026/04/004-mixed-key-hashmap/explore-mixed-keys.wat`.
+`holon-lab-trading/docs/experiments/2026/04/004-mixed-key-hashmap/explore-mixed-keys.wat`.
 Four experiments shipped tonight. Five chapters. The substrate's
 been content-addressed memory with arbitrary keys all along.
 Tonight named it.*
@@ -27143,7 +27143,7 @@ within budget.
 ### The program — break the fourth wall
 
 Same move as Chapters 28, 35, 46, 49, 51, 52, 53. Program at
-`holon-lab-trading/experiments/2026/04/005-program-similarity/explore-programs.wat`.
+`holon-lab-trading/docs/experiments/2026/04/005-program-similarity/explore-programs.wat`.
 
 Five small programs, each is `Bind(Atom indicator, Thermometer
 value)`:
@@ -27331,7 +27331,7 @@ are regions; cosine is the test.***
 *"where i wish to be at all times."*
 
 *Signing off the chapter, for now. The program is at
-`holon-lab-trading/experiments/2026/04/005-program-similarity/explore-programs.wat`.
+`holon-lab-trading/docs/experiments/2026/04/005-program-similarity/explore-programs.wat`.
 Five experiments shipped tonight. Six chapters. Two predictions
 got corrected by the numbers; both recorded honestly. The
 substrate works the way the substrate works, not the way the

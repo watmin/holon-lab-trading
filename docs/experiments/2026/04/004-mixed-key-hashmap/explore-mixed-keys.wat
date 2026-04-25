@@ -1,4 +1,4 @@
-;; experiments/2026/04/004-mixed-key-hashmap/explore-mixed-keys.wat
+;; docs/experiments/2026/04/004-mixed-key-hashmap/explore-mixed-keys.wat
 ;;
 ;; Proof program for BOOK Chapter 53 — The Generalization.
 ;;
@@ -19,7 +19,7 @@
 ;;   Table 3: Reverse lookups (value → key) via commutativity.
 ;;            Same HashMap, opposite query direction.
 ;;
-;; Run: wat experiments/2026/04/004-mixed-key-hashmap/explore-mixed-keys.wat
+;; Run: wat docs/experiments/2026/04/004-mixed-key-hashmap/explore-mixed-keys.wat
 ;; All bipolar — {-1, 0, 1}^d. d forced to 10k via router.
 
 ;; ─── Force d=10k for everything ────────────────────────────────────

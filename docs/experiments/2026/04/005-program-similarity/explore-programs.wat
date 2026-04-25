@@ -1,4 +1,4 @@
-;; experiments/2026/04/005-program-similarity/explore-programs.wat
+;; docs/experiments/2026/04/005-program-similarity/explore-programs.wat
 ;;
 ;; Proof program for BOOK Chapter 54 — Programs as Coordinates.
 ;;
@@ -28,7 +28,7 @@
 ;; Force d=10k for clean numbers (default tier 0 at d=256 has
 ;; significant cross-talk; d=10k is the trading lab's typical tier).
 ;;
-;; Run: wat experiments/2026/04/005-program-similarity/explore-programs.wat
+;; Run: wat docs/experiments/2026/04/005-program-similarity/explore-programs.wat
 
 ;; ─── Force d=10k for everything ────────────────────────────────────
 (:wat::config::set-dim-router!

@@ -1,4 +1,4 @@
-;; experiments/2026/04/007-form-atoms-vs-permute/explore-form-atoms.wat
+;; docs/experiments/2026/04/007-form-atoms-vs-permute/explore-form-atoms.wat
 ;;
 ;; The verdict program. Permute-vs-form-atoms head-to-head.
 ;;
@@ -42,7 +42,7 @@
 ;;
 ;; Same input data. Three encodings. One verdict.
 ;;
-;; Run: wat experiments/2026/04/007-form-atoms-vs-permute/explore-form-atoms.wat
+;; Run: wat docs/experiments/2026/04/007-form-atoms-vs-permute/explore-form-atoms.wat
 
 ;; ─── Force d=10k for everything ────────────────────────────────────
 (:wat::config::set-dim-router!

@@ -1,4 +1,4 @@
-;; experiments/2026/04/002-spatial-addressing/explore-spatial.wat
+;; docs/experiments/2026/04/002-spatial-addressing/explore-spatial.wat
 ;;
 ;; Proof program for BOOK Chapter 51 — The Spatial Database.
 ;;
@@ -19,7 +19,7 @@
 ;;            its (x, y) via unbinding + cleanup against probes.
 ;;            Implementation of `hash-ast-to-coords` from the chapter.
 ;;
-;; Run: wat experiments/2026/04/002-spatial-addressing/explore-spatial.wat
+;; Run: wat docs/experiments/2026/04/002-spatial-addressing/explore-spatial.wat
 ;; All operations at d=256 (default tier 0). Bipolar substrate.
 ;; Capacity-mode :error is the substrate default.
 

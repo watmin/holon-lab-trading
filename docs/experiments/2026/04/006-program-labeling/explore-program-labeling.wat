@@ -1,4 +1,4 @@
-;; experiments/2026/04/006-program-labeling/explore-program-labeling.wat
+;; docs/experiments/2026/04/006-program-labeling/explore-program-labeling.wat
 ;;
 ;; Program-similarity labeling at production complexity.
 ;;
@@ -32,7 +32,7 @@
 ;; d=10k forced. Each program has 8 children in its top-level
 ;; Bundle — well under √10000 = 100 capacity.
 ;;
-;; Run: wat experiments/2026/04/006-program-labeling/explore-program-labeling.wat
+;; Run: wat docs/experiments/2026/04/006-program-labeling/explore-program-labeling.wat
 
 ;; ─── Force d=10k for everything ────────────────────────────────────
 (:wat::config::set-dim-router!
