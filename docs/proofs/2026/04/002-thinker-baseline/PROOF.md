@@ -1,8 +1,8 @@
 # Proof 002 — Thinker Baseline
 
 **Date:** opened 2026-04-25.
-**Status:** **BLOCKED on lab arc 027** (RunDb shim).
-**Pair file:** `wat-tests-proof-002/002-thinker-baseline.wat` (planned, lands when status flips to `ready`).
+**Status:** **ready** (lab arc 027 closed 2026-04-25 — RunDb shim shipped).
+**Pair file:** `wat-tests-proof-002/002-thinker-baseline.wat` (to land — write the supporting program against `:lab::rundb::*`).
 **Predecessor:** [Proof 001 — The Machine Runs](../001-the-machine-runs/PROOF.md).
 
 What numbers does the v1 simulator actually produce when you run
@@ -27,10 +27,14 @@ This proof requires SQLite-logging from the simulator's resolution
 path. The infra ask lives at
 [`docs/arc/2026/04/027-rundb-shim/DESIGN.md`](../../../arc/2026/04/027-rundb-shim/DESIGN.md).
 
-The shim's surface (`:lab::rundb::open` /
-`:lab::rundb::log-paper` / `:lab::rundb::close`) is documented
-there. When arc 027 closes, this proof flips from `BLOCKED` to
-`ready` and the supporting program below ships.
+The shim's surface — `:lab::rundb::open` and
+`:lab::rundb::log-paper` — landed at
+[`wat/io/RunDb.wat`](../../../../wat/io/RunDb.wat). One divergence
+from the original DESIGN sketch: `close` was dropped (Drop on the
+thread-owned cell handles file-handle release; rusqlite
+auto-commits on every statement, so there's nothing to flush).
+The supporting program below uses `let*` binding scope as the
+implicit close point.
 
 ---
 

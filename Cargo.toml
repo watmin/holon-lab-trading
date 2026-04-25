@@ -30,3 +30,4 @@ wat-macros = { path = "../wat-rs/wat-macros" }
 parquet    = "53"
 arrow      = "53"
 chrono     = "0.4"
+rusqlite   = { version = "0.31", features = ["bundled"] }

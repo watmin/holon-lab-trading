@@ -11,11 +11,18 @@
 //!   `archived/pre-wat-native/src/domain/candle_stream.rs` reader,
 //!   cut down to a 6-field tuple emit (asset metadata is wat-side
 //!   configuration, not a parquet payload).
+//! - `:rust::lab::RunDb` — a thread-owned SQLite writer for
+//!   per-paper resolution rows. Expressed at the wat surface as
+//!   `:lab::rundb::*` via `wat/io/RunDb.wat`. Single in-crate shim;
+//!   `archived/pre-wat-native/src/programs/stdlib/database.rs`'s
+//!   627-LOC CSP-style writer is deliberately out of scope for v1
+//!   (Phase 7's `wat-rusqlite` sibling crate territory).
 
 use std::path::Path;
 
 use arrow::array::{Array, Float64Array, TimestampMicrosecondArray, TimestampMillisecondArray};
 use parquet::arrow::arrow_reader::{ParquetRecordBatchReader, ParquetRecordBatchReaderBuilder};
+use rusqlite::{params, Connection};
 
 use wat::rust_deps::RustDepsBuilder;
 use wat::WatSource;
@@ -215,20 +222,123 @@ impl WatCandleStream {
     }
 }
 
+/// `:rust::lab::RunDb` — thread-owned SQLite writer.
+///
+/// Holds an open `Connection` plus a `run_name` discriminator bound at
+/// `open` time. Schema (`paper_resolutions`) is created if absent;
+/// every `log_paper` call inserts one row. Auto-commit; no batching;
+/// idempotent on `(run_name, paper_id)` PRIMARY KEY via `INSERT OR
+/// REPLACE` (test-rerun friendly without a `remove-file!` helper).
+///
+/// Per `feedback_shim_panic_vs_option`: construction-time errors
+/// panic with diagnostic; per-call write errors panic in v1 (a
+/// future arc returns `:Result<()>` once a caller wants to handle
+/// disk-full / permission failures gracefully).
+pub struct WatRunDb {
+    conn: Connection,
+    run_name: String,
+}
+
+const RUNDB_SCHEMA: &str = "
+CREATE TABLE IF NOT EXISTS paper_resolutions (
+  run_name     TEXT NOT NULL,
+  thinker      TEXT NOT NULL,
+  predictor    TEXT NOT NULL,
+  paper_id     INTEGER NOT NULL,
+  direction    TEXT NOT NULL,
+  opened_at    INTEGER NOT NULL,
+  resolved_at  INTEGER NOT NULL,
+  state        TEXT NOT NULL,
+  residue      REAL NOT NULL,
+  loss         REAL NOT NULL,
+  PRIMARY KEY (run_name, paper_id)
+);
+";
+
+#[wat_dispatch(
+    path = ":rust::lab::RunDb",
+    scope = "thread_owned"
+)]
+impl WatRunDb {
+    /// `:rust::lab::RunDb::open path run_name` — open or create a
+    /// SQLite database at `path`, ensure the `paper_resolutions`
+    /// schema exists, and bind `run_name` for every subsequent
+    /// `log_paper` call. Panics on any rusqlite error (bad path,
+    /// permission, schema creation failure).
+    pub fn open(path: String, run_name: String) -> Self {
+        let conn = Connection::open(&path).unwrap_or_else(|e| {
+            panic!(":rust::lab::RunDb::open: cannot open {path}: {e}")
+        });
+        conn.execute_batch(RUNDB_SCHEMA).unwrap_or_else(|e| {
+            panic!(":rust::lab::RunDb::open: schema creation failed at {path}: {e}")
+        });
+        Self { conn, run_name }
+    }
+
+    /// `:rust::lab::RunDb::log-paper db ...` — insert one row into
+    /// `paper_resolutions`. `INSERT OR REPLACE` semantics — the same
+    /// `(run_name, paper_id)` re-logged overwrites the prior row.
+    /// Panics on rusqlite write errors.
+    #[allow(clippy::too_many_arguments)]
+    pub fn log_paper(
+        &mut self,
+        thinker: String,
+        predictor: String,
+        paper_id: i64,
+        direction: String,
+        opened_at: i64,
+        resolved_at: i64,
+        state: String,
+        residue: f64,
+        loss: f64,
+    ) {
+        self.conn
+            .execute(
+                "INSERT OR REPLACE INTO paper_resolutions \
+                 (run_name, thinker, predictor, paper_id, direction, \
+                  opened_at, resolved_at, state, residue, loss) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                params![
+                    self.run_name,
+                    thinker,
+                    predictor,
+                    paper_id,
+                    direction,
+                    opened_at,
+                    resolved_at,
+                    state,
+                    residue,
+                    loss,
+                ],
+            )
+            .unwrap_or_else(|e| {
+                panic!(":rust::lab::RunDb::log-paper: insert failed: {e}")
+            });
+    }
+
+}
+
 /// wat-side wrappers contributed by this shim. The deps mechanism
 /// concatenates this slice into the global `WatSource` list before
 /// parsing the entry file, so `(:wat::load-file! "io/CandleStream.wat")`
 /// in `wat/main.wat` resolves to this baked source.
 pub fn wat_sources() -> &'static [WatSource] {
-    static FILES: &[WatSource] = &[WatSource {
-        path: "io/CandleStream.wat",
-        source: include_str!("../wat/io/CandleStream.wat"),
-    }];
+    static FILES: &[WatSource] = &[
+        WatSource {
+            path: "io/CandleStream.wat",
+            source: include_str!("../wat/io/CandleStream.wat"),
+        },
+        WatSource {
+            path: "io/RunDb.wat",
+            source: include_str!("../wat/io/RunDb.wat"),
+        },
+    ];
     FILES
 }
 
 /// Wire the dispatch into the runtime. `#[wat_dispatch]` generated the
-/// type-name-prefixed register fn; we just forward the call.
+/// type-name-prefixed register fn per impl block; we forward both.
 pub fn register(builder: &mut RustDepsBuilder) {
     __wat_dispatch_WatCandleStream::register(builder);
+    __wat_dispatch_WatRunDb::register(builder);
 }

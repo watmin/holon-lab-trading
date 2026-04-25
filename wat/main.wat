@@ -10,8 +10,9 @@
 ;; See `docs/rewrite-backlog.md` for the leaves-to-root build order.
 
 
-;; Phase 0 — Rust interop (shims/parquet candle stream)
+;; Phase 0 — Rust interop (shims/parquet candle stream + sqlite logger)
 (:wat::load-file! "io/CandleStream.wat")
+(:wat::load-file! "io/RunDb.wat")
 
 ;; Phase 1 — types
 (:wat::load-file! "types/enums.wat")

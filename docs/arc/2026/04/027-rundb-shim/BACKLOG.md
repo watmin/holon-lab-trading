@@ -14,7 +14,7 @@ adds INSCRIPTION; downstream proofs flip from `BLOCKED` to `ready`.
 
 ## Slice 1 — Rust shim + Cargo dep
 
-**Status: ready.**
+**Status: shipped 2026-04-25.**
 
 `Cargo.toml` — append to `[dependencies]`:
 
@@ -83,7 +83,7 @@ Verify: `cargo build --release` clean.
 
 ## Slice 2 — wat wrapper
 
-**Status: ready (after slice 1).**
+**Status: shipped 2026-04-25.**
 
 `wat/io/RunDb.wat` — typealias + thin define wrappers, same shape
 as `wat/io/CandleStream.wat`:
@@ -130,7 +130,7 @@ as `wat/io/CandleStream.wat`:
 
 ## Slice 3 — Smoke test + INSCRIPTION
 
-**Status: ready (after slice 2).**
+**Status: shipped 2026-04-25.**
 
 `wat-tests/io/RunDb.wat` — three deftests in the always-run
 suite. SQLite roundtrip is fast (<1 second per test), so this is
