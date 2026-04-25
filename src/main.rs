@@ -9,4 +9,6 @@
 //! when Phase 3 (encoding) needs VSA primitives, `wat-rusqlite` when
 //! Phase 5's ledger lands, etc. See `docs/rewrite-backlog.md`.
 
-wat::main! { deps: [] }
+mod shims;
+
+wat::main! { deps: [shims] }

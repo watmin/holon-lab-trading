@@ -10,6 +10,9 @@
 ;; See `docs/rewrite-backlog.md` for the leaves-to-root build order.
 
 
+;; Phase 0 — Rust interop (shims/parquet candle stream)
+(:wat::load-file! "io/CandleStream.wat")
+
 ;; Phase 1 — types
 (:wat::load-file! "types/enums.wat")
 (:wat::load-file! "types/newtypes.wat")
@@ -25,6 +28,8 @@
 (:wat::load-file! "encoding/scale-tracker.wat")
 (:wat::load-file! "encoding/scaled-linear.wat")
 (:wat::load-file! "encoding/rhythm.wat")
+(:wat::load-file! "encoding/atr.wat")
+(:wat::load-file! "encoding/atr-window.wat")
 
 ;; Phase 2 — vocab
 ;;   arc 001 — shared/time

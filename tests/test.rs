@@ -9,4 +9,11 @@
 //! integration tests from `archived/pre-wat-native/tests/` port in
 //! Phase 9.
 
-wat::test! {}
+// shims lives at `src/shims.rs`; the lab is a binary crate (no [lib]),
+// so we surface the module to the test harness with `#[path]`. Same
+// `wat_sources()` + `register()` contract the binary's `mod shims;`
+// uses — pattern from wat-rs's USER-GUIDE.
+#[path = "../src/shims.rs"]
+mod shims;
+
+wat::test! { deps: [shims] }
