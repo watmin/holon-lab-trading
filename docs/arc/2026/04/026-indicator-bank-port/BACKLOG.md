@@ -480,8 +480,36 @@ ordering, tk-cross-delta direction. **~8 tests.**
 
 ## Slice 9 — Persistence (Hurst + autocorrelation + vwap_distance)
 
-**Status: ready (after slice 1).** First statistical-estimator
-slice; the math is non-trivial. Port the archive carefully.
+**Status: shipped 2026-04-25.** ~310 LOC delivered as
+`wat/encoding/indicator-bank/persistence.wat`. 10 tests in
+`wat-tests/encoding/indicator-bank/persistence.wat` (matching
+budget). Lab wat tests 266 → 276. **First statistical slice; all
+tests green first pass.**
+
+**Diverged from BACKLOG sketch.** The sketched HurstState struct
+wrapping a return-buf was over-engineered; archive uses pure
+compute functions over a shared close-buf-48 RingBuffer (one
+buffer, two consumers — Hurst + autocorrelation). Faithful port
+exposes pure functions:
+  `compute-hurst                :Vec<f64> -> :f64`
+  `compute-autocorrelation-lag1 :Vec<f64> -> :f64`
+plus a `VwapState` struct (cum-pv + cum-vol, the legitimately
+state-bearing piece).
+
+**Internal helpers shipped reusable across slice 10:**
+  `persistence::mean         :Vec<f64> -> :f64`
+  `persistence::variance     :Vec<f64> :f64 -> :f64`
+  `persistence::returns      :Vec<f64> -> :Vec<f64>`
+  `persistence::cum-deviations :Vec<f64> :f64 -> :Vec<f64>`
+
+The cum-deviations helper is the slice's most interesting piece —
+substrate has no `:wat::core::scan` primitive, so cumulative
+running-sum is expressed via a foldl over `(acc-vec, running)`
+tuples. Works clean; defer the `scan` substrate uplift unless a
+second site reaches for it.
+
+**Substrate uplifts consumed:** `sqrt` (slice 4 carry-along),
+`ln`, polymorphic arithmetic. No new uplifts surfaced.
 
 `wat/encoding/indicator-bank/persistence.wat`:
 
