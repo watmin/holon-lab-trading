@@ -688,7 +688,43 @@ behavior, consecutive_up streak. **~10 tests.**
 
 ## Slice 12 — IndicatorBank orchestration
 
-**Status: ready (after every prior slice).** **Load-bearing.**
+**Status: shipped 2026-04-25.** **Load-bearing piece landed.**
+~580 LOC delivered as `wat/encoding/indicator-bank/bank.wat` —
+the integrating struct (50 fields), `IndicatorBank::fresh`
+constructor, `IndicatorBank::tick(bank, ohlcv) -> (bank, candle)`
+that advances every per-indicator state values-up and assembles
+the enriched `:trading::types::Candle` (11 sub-structs, 73 fields).
+7 tests in `wat-tests/encoding/indicator-bank/bank.wat` (budget
+6; +1 for sma200 warmup confirmation). Lab wat tests 303 → 310.
+
+**Performance check.** The sma200-ready test feeds 200 flat
+candles in 512ms — ~400 candles/sec on this machine. Matches
+BACKLOG's 200-500 cps prediction. 6-year stream (652k candles)
+finishes in ~25 minutes — bounded but not interactive, as
+BACKLOG anticipated.
+
+**Time-of-day fields populated as 0.0 sentinels.** Time-string
+parsing (parse-minute / parse-hour / parse-day-of-week from
+archive) is a deferred follow-up; the Time sub-struct's fields
+appear in the Candle as zeros until that ships. Documented in
+the bank.wat header comment; doesn't block arc 025's resumption
+since the simulator's first-thinker doesn't read Time fields.
+
+**Cached_phase_history optimization skipped.** Archive caches
+phase history snapshot to avoid re-cloning every tick; the wat
+port reads `phase-state.phase-history` directly via the auto-
+generated accessor (which is just a pointer-deref in a values-up
+struct). Identical correctness; minor performance difference
+that doesn't matter at the 6-year-stream scale.
+
+**No new substrate uplifts surfaced.** Every prior slice
+prepared the substrate properly; the bank's tick consumes
+existing primitives.
+
+**Dep loading caught at first run** — initial bank.wat omitted
+`(:wat::load-file! "../atr-window.wat")` and tests failed with
+`UnknownFunction(:trading::encoding::AtrWindow::fresh)`. One-line
+fix; tests then passed first try.
 
 `wat/encoding/indicator-bank/bank.wat`:
 
