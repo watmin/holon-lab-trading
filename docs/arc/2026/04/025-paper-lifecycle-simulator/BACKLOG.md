@@ -9,6 +9,14 @@ INSCRIPTION + cross-link sixth.
 Each slice is independently mergeable. Slice 4 is the load-bearing
 chunk; slices 1–3 enable it; slices 5–6 close it.
 
+**Arc-level status (2026-04-25): PAUSED at slice 4.** Slices 1-3
+shipped. Slice 4+ requires the enriched `:trading::types::Candle`
+(populated indicator fields), which depends on the IndicatorBank
+port. Per builder direction "we /must/ have it... pause arc 025
+pending completion of arc 026," the simulator engine waits on
+[lab arc 026](../026-indicator-bank-port/) closing. SimCandle stub
+was considered and rejected. Resume slice 4 when arc 026 ships.
+
 ---
 
 ## Slice 1 — ATR (Wilder-smoothed true range) + median-week window
@@ -312,7 +320,20 @@ per sub-fog 5h.
 
 ## Slice 4 — Simulator engine
 
-**Status: ready (after slices 1, 2, 3).**
+**Status: PAUSED pending lab arc 026 (IndicatorBank port).** Slice 3
+typed the Thinker against `:trading::types::Candles` — the
+enriched form. Slice 4 must produce Candles to feed the Thinker;
+that requires the IndicatorBank port. SimCandle stub was
+considered and rejected (DESIGN.md sub-fog 5i — "indicator-
+honesty"); the user picked Option I (full port) per builder
+direction "we /must/ have it." Resume slice 4 once arc 026 closes
+with the orchestrating `indicator-bank-tick` available. The
+slice 4 spec below is otherwise unchanged.
+
+See [`docs/arc/2026/04/026-indicator-bank-port/`](../026-indicator-bank-port/)
+for the unblocking arc.
+
+**Status (was): ready (after slices 1, 2, 3).**
 
 `wat/sim/paper.wat`:
 
@@ -388,7 +409,10 @@ This is the load-bearing slice.
 
 ## Slice 5 — Real-data integration smoke
 
-**Status: ready (after slice 4).**
+**Status: PAUSED pending arc 026.** Transitively blocked by
+slice 4. Resume after slice 4 unblocks.
+
+**Status (was): ready (after slice 4).**
 
 `wat-tests/sim/integration.wat` — opens
 `data/btc_5m_raw.parquet` via `:lab::candles::Stream` (Phase 0
