@@ -9,6 +9,18 @@ description = "Self-organizing trading enterprise, rebuilt on the wat language. 
 name = "holon-lab-trading"
 path = "src/main.rs"
 
+# Slow-test binaries live in subdirs under `tests/`. Cargo doesn't
+# auto-discover sub-dirs there, so each gets an explicit [[test]]
+# entry. The default `tests/test.rs` (always-run unit suite) is
+# still auto-discovered.
+[[test]]
+name = "sim_smoke"
+path = "tests/integ/sim_smoke.rs"
+
+[[test]]
+name = "proof_001"
+path = "tests/proof/proof_001.rs"
+
 [features]
 # Slow tests are opt-in via per-concern features. `cargo test` runs
 # only the fast `wat-tests/` suite via `tests/test.rs`. To run a

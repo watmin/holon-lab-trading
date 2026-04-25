@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-25.
 **Status:** established.
-**Pair file:** [`wat-tests-proof-001/001-the-machine-runs.wat`](../../../../wat-tests-proof-001/001-the-machine-runs.wat) — runnable; opt-in via the `proof-001` Cargo feature so the always-run test loop stays fast.
+**Pair file:** [`wat-tests-integ/proof/001-the-machine-runs/001-the-machine-runs.wat`](../../../../wat-tests-integ/proof/001-the-machine-runs/001-the-machine-runs.wat) — runnable; opt-in via the `proof-001` Cargo feature so the always-run test loop stays fast.
 
 The first proof. What we know after arc 025 (paper lifecycle
 simulator) and arc 026 (IndicatorBank port) closed in the same
