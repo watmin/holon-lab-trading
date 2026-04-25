@@ -402,7 +402,12 @@ center/edge behavior. **~6 tests.**
 
 ## Slice 7 — Multi-timeframe
 
-**Status: ready (after slice 1).**
+**Status: shipped 2026-04-25.** ~140 LOC delivered as
+`wat/encoding/indicator-bank/timeframe.wat` — `compute-tf-ret`,
+`compute-tf-body`, `compute-tf-agreement` plus a local `signum`
+helper. 8 tests in `wat-tests/encoding/indicator-bank/timeframe.wat`
+(budget 6; added 2 sign-and-direction edges). Lab wat tests 250 →
+258. No substrate uplifts surfaced.
 
 5-minute candles aggregated to 1-hour and 4-hour windows. tf-1h
 needs a 12-period RingBuffer; tf-4h needs a 48-period RingBuffer.
