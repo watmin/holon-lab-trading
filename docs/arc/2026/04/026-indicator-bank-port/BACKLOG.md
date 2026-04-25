@@ -433,7 +433,21 @@ tf-agreement directional cases. **~6 tests.**
 
 ## Slice 8 — Ichimoku
 
-**Status: ready (after slice 1).**
+**Status: shipped 2026-04-25.** ~210 LOC delivered as
+`wat/encoding/indicator-bank/ichimoku.wat`. Six RingBuffers
+(high/low at 9, 26, 52) + prev-tenkan/prev-kijun for cross-delta
+tracking. tenkan, kijun, senkou-a, senkou-b, cloud-top, cloud-bottom,
+tk-cross-delta accessors. 8 tests in
+`wat-tests/encoding/indicator-bank/ichimoku.wat` (matching budget).
+Lab wat tests 258 → 266.
+
+**Diverges from BACKLOG sketch.** Sketch had a single shared
+high-buf/low-buf; archive uses three separate period-pairs (9/26/
+52). Faithful port to archive — six RingBuffers; ~120 LOC of
+pass-through state — but conceptually clean (`ichimoku::midpoint`
+helper unifies the (max + min) / 2 expression).
+
+**No substrate uplifts surfaced.**
 
 Multi-window state machine. Tenkan-sen (9-period high+low/2),
 Kijun-sen (26-period), cloud_top/bottom (max/min of tenkan/kijun
