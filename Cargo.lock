@@ -1494,6 +1494,7 @@ name = "wat"
 version = "0.1.0"
 dependencies = [
  "base64",
+ "chrono",
  "crossbeam-channel",
  "ed25519-dalek",
  "holon",

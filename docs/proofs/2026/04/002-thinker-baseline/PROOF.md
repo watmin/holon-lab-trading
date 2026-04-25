@@ -1,205 +1,188 @@
 # Proof 002 — Thinker Baseline
 
-**Date:** opened 2026-04-25.
-**Status:** **BLOCKED on wat-rs arc 056** — `:wat::time::*` primitives needed for timestamped DB filenames so re-runs accumulate rather than PK-violate. The supporting program is *almost* ready: pair file at `wat-tests-integ/proof/002-thinker-baseline/002-thinker-baseline.wat` uses fixed run-names today; once arc 056 lands, those become `(:wat::time::to-iso8601 (:wat::time::now) 3)` discriminators and the DB path becomes `runs/proof-002-<thinker>-<iso-ts>.db`.
+**Date:** opened 2026-04-25, shipped 2026-04-25.
+**Status:** **SHIPPED.** Both deftests pass; SQLite databases populated; SQL queries below capture the established facts.
 **Pair file:** [`wat-tests-integ/proof/002-thinker-baseline/002-thinker-baseline.wat`](../../../../wat-tests-integ/proof/002-thinker-baseline/002-thinker-baseline.wat).
 **Predecessor:** [Proof 001 — The Machine Runs](../001-the-machine-runs/PROOF.md).
 
 What numbers does the v1 simulator actually produce when you run
 it? Proof 001 established existence — papers > 0, conservation
-holds, finite outputs. Proof 002 measures those numbers and lets
-us compare the two v1 thinkers.
+holds, finite outputs. Proof 002 measures those numbers and
+compares the two v1 thinkers.
 
 > Every proof moves us a step forward. — the user, opening
 > proof 001.
 
-This proof's claim is small but load-bearing: **the always-up and
+This proof's claim was small but load-bearing: **the always-up and
 sma-cross thinkers, run on the same 10k-candle window, produce
 measurable Grace/Violence distributions**, and the difference
 between them tells us whether the simulator's lifecycle is
 sensitive to thinker behavior at all.
 
----
-
-## A — The unblocking arc
-
-This proof requires SQLite-logging from the simulator's resolution
-path. The infra ask lives at
-[`docs/arc/2026/04/027-rundb-shim/DESIGN.md`](../../../arc/2026/04/027-rundb-shim/DESIGN.md).
-
-The shim's surface — `:lab::rundb::open` and
-`:lab::rundb::log-paper` — landed at
-[`wat/io/RunDb.wat`](../../../../wat/io/RunDb.wat). One divergence
-from the original DESIGN sketch: `close` was dropped (Drop on the
-thread-owned cell handles file-handle release; rusqlite
-auto-commits on every statement, so there's nothing to flush).
-The supporting program below uses `let*` binding scope as the
-implicit close point.
+It is. Below are the numbers.
 
 ---
 
-## B — What the proof will measure
+## A — The unblocking arcs
 
-Two runs, identical config, different thinker. Each writes one
-row per resolved Outcome to `runs/proof-002-<thinker>.db`.
+Two arcs paved the way:
 
-| Metric | Source |
-|--------|--------|
-| `papers` (count of resolutions) | `SELECT COUNT(*) FROM paper_resolutions WHERE run_name = ?` |
-| `grace-count`, `violence-count` | `GROUP BY state` |
-| `grace-rate` | `grace / papers` |
-| `total-residue`, `total-loss` | `SUM(residue)`, `SUM(loss)` |
-| `mean-residue` (Grace papers) | `AVG(residue) WHERE state='Grace'` |
-| `max-residue`, `min-residue` | `MAX/MIN(residue)` |
-| `mean-paper-duration` | `AVG(resolved_at - opened_at)` |
+- [`docs/arc/2026/04/027-rundb-shim/`](../../../arc/2026/04/027-rundb-shim/DESIGN.md) shipped `:lab::rundb::open` / `:lab::rundb::log-paper` — the SQLite-logging seam. `close` was dropped (Drop on the thread-owned cell handles file-handle release; rusqlite auto-commits per statement).
+- [`wat-rs` arc 056](../../../../../wat-rs/docs/arc/2026/04/056-time-instant/BACKLOG.md) shipped `:wat::time::*` primitives — `(:wat::time::now)`, `epoch-seconds`, `to-iso8601`. The pair file uses these to mint unique-per-execution DB filenames so re-runs accumulate (`runs/proof-002-<thinker>-<epoch>.db`) rather than PK-violate.
 
-Results land in two SQLite databases:
-- `runs/proof-002-always-up.db`
-- `runs/proof-002-sma-cross.db`
-
-The proof doc embeds the SQL queries and their results as the
-established facts. No grepping logs; the tables are queried
-directly.
+The seam exposed by the simulator: per-paper Outcomes weren't on `:trading::sim::run`'s return type — only the rolled-up Aggregate. The pair file drops to `:trading::sim::run-loop` + `SimState/outcomes` (both already public) and walks the resulting `:Outcomes` vec via `foldl` for the side effect of logging. No simulator-side change required.
 
 ---
 
-## C — The supporting program (sketched)
-
-Will live at `wat-tests-proof-002/002-thinker-baseline.wat`,
-behind a `proof-002` Cargo feature gate (same pattern as proof
-001's `proof-001` feature). Two deftests, one per thinker:
-
-```scheme
-;; Default-prelude — no load needed (shim auto-registers)
-(:wat::test::make-deftest :deftest ())
-
-(:deftest :trading::test::proofs::002::always-up-10k
-  (:wat::core::let*
-    (((stream :lab::candles::Stream)
-      (:lab::candles::open-bounded "data/btc_5m_raw.parquet" 10000))
-     ((db :lab::rundb::RunDb)
-      (:lab::rundb::open "runs/proof-002-always-up.db"
-                          "proof-002-always-up-10k"))
-     ((cfg :trading::sim::Config)
-      (:trading::sim::Config/new 288 0.01 35.0 14))
-     ;; A run-with-logging variant of :trading::sim::run that
-     ;; calls (:lab::rundb::log-paper db ...) on every Outcome.
-     ;; (Maybe ships as a wat-side wrapper, or as an Aggregate-
-     ;;  level callback the simulator surfaces.)
-     ((agg :trading::sim::Aggregate)
-      (:trading::sim::run-and-log
-        stream
-        (:trading::sim::always-up-thinker)
-        (:trading::sim::cosine-vs-corners-predictor)
-        cfg
-        db))
-     ((_ :()) (:lab::rundb::close db)))
-    ;; Same conservation invariant as proof 001.
-    (:wat::test::assert-eq
-      (:wat::core::= (:trading::sim::Aggregate/papers agg)
-                     (:wat::core::+ (:trading::sim::Aggregate/grace-count agg)
-                                    (:trading::sim::Aggregate/violence-count agg)))
-      true)))
-
-;; Symmetric deftest for sma-cross-thinker → runs/proof-002-sma-cross.db
-```
-
-The `:trading::sim::run-and-log` wrapper is the seam this proof
-needs. Two ways to ship it:
-
-- **Option A — wat wrapper.** A `run-and-log` function in
-  `wat/sim/paper.wat` (or a sibling) that wraps `:trading::sim::run`
-  and walks the resulting `:Vec<Outcome>` to log each. Requires
-  the simulator to expose Outcomes (currently only Aggregate is
-  returned — a shape change).
-- **Option B — callback parameter.** The simulator's `run`
-  signature gains an optional `on-resolution` callback. Each
-  Outcome fires the callback before being folded into the
-  Aggregate. The callback closure captures the RunDb handle.
-
-Option A keeps `:trading::sim::run`'s signature stable but
-requires shape-changing the return type. Option B changes the
-signature but keeps the data flow forward-only. Decide at
-implementation time; arc 027 doesn't need to pick.
-
----
-
-## D — What this proof will establish
-
-When the run lands and the SQL queries return:
-
-1. **Concrete aggregate numbers** for both v1 thinkers on a
-   real 10k-candle window. No more "papers > 0; details
-   unknown."
-2. **Whether always-up vs sma-cross differ measurably.** If
-   sma-cross's grace-rate ≠ always-up's grace-rate by more than
-   noise, the simulator's lifecycle is sensitive to thinker
-   behavior — the prerequisite for any future "thinker A beats
-   thinker B" claim.
-3. **The Grace/Violence residue distribution shape.** Mean,
-   min, max per state. Proof 001 established residue is finite;
-   proof 002 names what range it actually occupies.
-4. **Paper duration distribution.** Are most papers resolving
-   at deadline (Violence by timeout) or earlier (Grace at
-   Peak/Valley)? The mean of `(resolved_at - opened_at)` tells
-   us.
-
----
-
-## E — What this proof will NOT establish
-
-- **That sma-cross's signal is REAL** (vs. statistical noise on
-  a single 10k window). A multi-window run + significance test
-  is a future proof.
-- **6-year-stream behavior.** Proof 002 stays at 10k for fast
-  iteration; proof 004 takes the full stream.
-- **Effect of any optimization.** Cache, concurrency, learned
-  Predictors — all still unwired. This proof measures the same
-  unoptimized baseline as proof 001.
-- **Win-rate intuition matching trader experience.** The numbers
-  ARE the numbers; whether they reflect "good trading" is a
-  separate evaluative question.
-
----
-
-## F — How to reproduce (when unblocked)
-
-Once arc 027 closes:
+## B — How the proof was reproduced
 
 ```bash
-cargo test --release --features proof-002 --test proof_002
-
-# After the run:
-sqlite3 runs/proof-002-always-up.db <<EOF
-SELECT
-  COUNT(*) AS papers,
-  SUM(state='Grace') AS grace,
-  SUM(state='Violence') AS violence,
-  ROUND(SUM(state='Grace') * 1.0 / COUNT(*), 4) AS grace_rate,
-  ROUND(SUM(residue), 4) AS total_residue,
-  ROUND(SUM(loss), 4) AS total_loss
-FROM paper_resolutions;
-EOF
-
-# And the symmetric query against runs/proof-002-sma-cross.db
+cd /home/watmin/work/holon/holon-lab-trading
+cargo test --release --features proof-002 --test proof_002 -- --nocapture
 ```
 
-The proof doc post-execution embeds the actual table outputs as
-the established facts.
+Both deftests passed in ~30s each on a 10k-candle BTC window
+(`data/btc_5m_raw.parquet`). Each test wrote one row per resolved
+Outcome to a fresh timestamped database under `runs/`.
+
+Schema (per arc 027):
+
+```sql
+CREATE TABLE paper_resolutions (
+  run_name     TEXT NOT NULL,
+  thinker      TEXT NOT NULL,
+  predictor    TEXT NOT NULL,
+  paper_id     INTEGER NOT NULL,
+  direction    TEXT NOT NULL,
+  opened_at    INTEGER NOT NULL,
+  resolved_at  INTEGER NOT NULL,
+  state        TEXT NOT NULL,    -- 'Grace' | 'Violence'
+  residue      REAL NOT NULL,    -- positive for Grace, 0 for Violence
+  loss         REAL NOT NULL,    -- 0 for Grace, abs(final-residue) for Violence
+  PRIMARY KEY (run_name, paper_id)
+);
+```
+
+---
+
+## C — What the numbers say
+
+### Always-up thinker (`runs/proof-002-always-up-1777160871.db`)
+
+```sql
+SELECT COUNT(*)                                   AS papers,
+       SUM(state='Grace')                          AS grace,
+       SUM(state='Violence')                       AS violence,
+       ROUND(SUM(state='Grace')*1.0/COUNT(*), 4)   AS grace_rate,
+       ROUND(SUM(residue), 4)                      AS total_residue,
+       ROUND(SUM(loss), 4)                         AS total_loss,
+       ROUND(AVG(resolved_at - opened_at), 2)      AS mean_paper_duration_candles
+FROM paper_resolutions;
+```
+
+| papers | grace | violence | grace_rate | total_residue | total_loss | mean_duration |
+|-------:|------:|---------:|-----------:|--------------:|-----------:|--------------:|
+| 34     | 0     | 34       | 0.0000     | 0.0           | 0.6498     | 288.00        |
+
+Direction breakdown: **34 Up / 0 Down** (always-up only proposes Up — by construction).
+
+### SMA-cross thinker (`runs/proof-002-sma-cross-1777160902.db`)
+
+| papers | grace | violence | grace_rate | total_residue | total_loss | mean_duration |
+|-------:|------:|---------:|-----------:|--------------:|-----------:|--------------:|
+| 34     | 5     | 29       | 0.1471     | 0.1561        | 0.4352     | 280.12        |
+
+Direction × state breakdown:
+
+| direction | state    | count |
+|-----------|----------|------:|
+| Up        | Grace    | 3     |
+| Up        | Violence | 15    |
+| Down      | Grace    | 2     |
+| Down      | Violence | 14    |
+
+Grace residue stats (sma-cross): mean 0.0312, max 0.0471.
+
+---
+
+## D — What this proof established
+
+1. **Concrete aggregate numbers** for both v1 thinkers on the
+   same 10k-candle BTC window. Both produced 34 papers each
+   (same Config: 288-candle deadline = 24h, 1% peak/valley
+   thresholds, 35 lookback, 14 min-life).
+2. **The simulator's lifecycle is sensitive to thinker
+   behavior.** Always-up: 0% grace-rate, 100% papers deadline
+   out at exactly 288 candles. SMA-cross: 14.71% grace-rate,
+   mean duration 280.12 (some early Grace exits at peak/valley).
+   This is the prerequisite for any future "thinker A beats
+   thinker B" claim.
+3. **Direction diversity matters.** Always-up only opens Up
+   papers (by construction). SMA-cross opens both: 18 Up + 16
+   Down. The Down side has Grace too — the lifecycle is
+   symmetric.
+4. **Net P&L per thinker.** Always-up: residue − loss = 0 −
+   0.6498 = **−0.6498**. SMA-cross: 0.1561 − 0.4352 =
+   **−0.2791**. Both lose on raw cosine residue with no
+   predictor learning, but sma-cross loses less than half of
+   what always-up does — direction selection plus early Grace
+   exits both contribute.
+5. **Conservation invariant holds** on real data: papers ==
+   grace + violence (34 == 0 + 34, 34 == 5 + 29). No "Active"
+   leaks at outcome time.
+
+---
+
+## E — What this proof did NOT establish
+
+- **That sma-cross's edge is real.** A single 10k window with
+  34 papers per thinker is not statistical significance. Proof
+  003 will run multi-window with a difference-of-proportions
+  test.
+- **6-year-stream behavior.** Stayed at 10k for fast iteration.
+  Proof 004 takes the full 652k.
+- **Effect of any optimization.** Cache, concurrency, learned
+  Predictors all unwired. Same unoptimized baseline as proof
+  001.
+- **Win-rate intuition matching trader experience.** The
+  numbers ARE the numbers; whether they reflect "good trading"
+  is a separate evaluative question.
+
+---
+
+## F — How to reproduce
+
+```bash
+cd /home/watmin/work/holon/holon-lab-trading
+cargo test --release --features proof-002 --test proof_002 -- --nocapture
+
+# Then query the freshest DB per thinker:
+ls -t runs/proof-002-always-up-*.db | head -1 | xargs -I{} sqlite3 {} <<EOF
+SELECT COUNT(*) papers,
+       SUM(state='Grace') grace,
+       SUM(state='Violence') violence,
+       ROUND(SUM(residue), 4) total_residue,
+       ROUND(SUM(loss), 4)    total_loss
+FROM paper_resolutions;
+EOF
+```
+
+Re-runs accumulate; never delete `runs/proof-002-*.db` (per
+`feedback_never_delete_runs`).
 
 ---
 
 ## G — The next proofs queued behind this one
 
-- **Proof 003** — `sma-cross vs always-up` significance: do they
-  differ across 10 windows of 10k? Or is the difference within
-  noise? Adds a multi-window runner.
+- **Proof 003** — `sma-cross vs always-up` significance: do
+  they differ across 10 windows of 10k? Or is the difference
+  within noise? Adds a multi-window runner.
 - **Proof 004** — Full 6-year stream. Same metrics over 652k
-  candles. Probably runs in ~33 minutes. The aggregate's
-  long-horizon shape (drawdown, deepest residue, max-paper-life).
+  candles. Long-horizon shape (drawdown, deepest residue,
+  max-paper-life).
 - **Proof 005** — A richer thinker that uses 5+ indicators
-  (RSI, MACD-hist, ADX, kama-er, choppiness) projected into the
-  outcome × direction basis. First step toward reproducing
+  (RSI, MACD-hist, ADX, kama-er, choppiness) projected into
+  the outcome × direction basis. First step toward reproducing
   Chapter 1's 59% directional accuracy.
 
 Each proof is its own dir + own feature + own supporting
@@ -209,9 +192,11 @@ program. The pattern from proof 001 holds.
 
 ## Closing
 
-Proof 001 said "the machine runs." Proof 002 will say "here's
-what the machine produces." That's enough for one proof.
+Proof 001 said "the machine runs." Proof 002 says "here's what
+the machine produces — and the two v1 thinkers produce
+measurably different numbers."
 
-When arc 027 closes, this stub becomes a real proof.
+Always-up: −0.6498. SMA-cross: −0.2791. The lifecycle responds
+to vocabulary. That's the foothold every later proof needs.
 
 PERSEVERARE.

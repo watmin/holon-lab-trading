@@ -109,8 +109,21 @@
   (:wat::core::let*
     (((stream :lab::candles::Stream)
       (:lab::candles::open-bounded "data/btc_5m_raw.parquet" 10000))
-     ((db :lab::rundb::RunDb)
-      (:lab::rundb::open "runs/proof-002-always-up.db" "always-up-10k"))
+     ;; Per arc 056 — :wat::time::Instant gives unique-per-execution
+     ;; discriminators. epoch-seconds in the FILENAME (numeric, sortable,
+     ;; no chars that confuse downstream tools); ISO 8601 ms-precision
+     ;; in the run_name (human-readable in SQL queries).
+     ((now :wat::time::Instant) (:wat::time::now))
+     ((epoch-str :String)
+      (:wat::core::i64::to-string (:wat::time::epoch-seconds now)))
+     ((iso-str :String) (:wat::time::to-iso8601 now 3))
+     ((path :String)
+      (:wat::core::string::concat
+        "runs/proof-002-always-up-" epoch-str ".db"))
+     ((run-name :String)
+      (:wat::core::string::concat
+        "always-up-10k-" iso-str))
+     ((db :lab::rundb::RunDb) (:lab::rundb::open path run-name))
      ((cfg :trading::sim::Config)
       (:trading::sim::Config/new 288 0.01 35.0 14))
      ((agg :trading::sim::Aggregate)
@@ -139,8 +152,17 @@
   (:wat::core::let*
     (((stream :lab::candles::Stream)
       (:lab::candles::open-bounded "data/btc_5m_raw.parquet" 10000))
-     ((db :lab::rundb::RunDb)
-      (:lab::rundb::open "runs/proof-002-sma-cross.db" "sma-cross-10k"))
+     ((now :wat::time::Instant) (:wat::time::now))
+     ((epoch-str :String)
+      (:wat::core::i64::to-string (:wat::time::epoch-seconds now)))
+     ((iso-str :String) (:wat::time::to-iso8601 now 3))
+     ((path :String)
+      (:wat::core::string::concat
+        "runs/proof-002-sma-cross-" epoch-str ".db"))
+     ((run-name :String)
+      (:wat::core::string::concat
+        "sma-cross-10k-" iso-str))
+     ((db :lab::rundb::RunDb) (:lab::rundb::open path run-name))
      ((cfg :trading::sim::Config)
       (:trading::sim::Config/new 288 0.01 35.0 14))
      ((agg :trading::sim::Aggregate)
