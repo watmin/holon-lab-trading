@@ -309,7 +309,27 @@ already shipped. ~30 LOC carry-along to wat-rs.
 
 ## Slice 5 — Volume (OBV + volume_accel)
 
-**Status: ready (after slice 1).**
+**Status: shipped 2026-04-25.** ~210 LOC delivered as
+`wat/encoding/indicator-bank/volume.wat`. 8 tests in
+`wat-tests/encoding/indicator-bank/volume.wat` (budget 6; added 2
+standalone linreg-slope tests). Lab wat tests 234 → 242.
+
+**Linreg-slope shipped as a free function** (`compute-linreg-slope
+:Vec<f64> -> :f64`) inside volume.wat. Two-pass implementation:
+foldl for y-mean, then map+foldl over enumerated (i, y) pairs for
+the cross-products. Used here by ObvState::slope; will likely be
+reused by future statistical estimators (slices 9-10) — lift to
+primitives.wat when a second consumer materializes.
+
+**ObvState** (cumulative balance + history RingBuffer) and
+**VolumeAccelState** (SMA + last-volume ratio) directly mirror
+archive shapes. VolumeAccel stores last-volume in state so
+`value` is a pure read (matches archive's per-tick recomputation
+without taking volume as a parameter).
+
+**No substrate uplifts surfaced.** `:wat::core::range start end`
+returns `Vec<i64>`; combined with `map` and `foldl` does the
+enumerated-pair fold cleanly without new primitives.
 
 OBV is a running cumulative balance plus a slope over a RingBuffer.
 Volume_accel is short-SMA / long-SMA volume.

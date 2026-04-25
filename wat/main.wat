@@ -37,6 +37,7 @@
 (:wat::load-file! "encoding/indicator-bank/oscillators.wat")
 (:wat::load-file! "encoding/indicator-bank/trend.wat")
 (:wat::load-file! "encoding/indicator-bank/volatility.wat")
+(:wat::load-file! "encoding/indicator-bank/volume.wat")
 
 ;; arc 025 — paper lifecycle simulator (yardstick).
 (:wat::load-file! "sim/types.wat")
