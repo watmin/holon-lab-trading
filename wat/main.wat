@@ -18,6 +18,7 @@
 (:wat::load-file! "types/pivot.wat")
 (:wat::load-file! "types/candle.wat")
 (:wat::load-file! "types/portfolio.wat")
+(:wat::load-file! "types/paper-entry.wat")
 
 ;; Phase 3 — encoding helpers
 (:wat::load-file! "encoding/round.wat")
@@ -43,6 +44,7 @@
 ;;   arc 018 — market/standard (window-based, last market vocab)
 ;;   arc 021 — exit/regime (thin delegation to market/regime)
 ;;   arc 022 — broker/portfolio (first broker vocab)
+;;   arc 023 — exit/trade-atoms (PaperEntry + 13 atoms; exit sub-tree complete)
 (:wat::load-file! "vocab/shared/helpers.wat")
 (:wat::load-file! "vocab/shared/time.wat")
 (:wat::load-file! "vocab/exit/time.wat")
@@ -62,6 +64,7 @@
 (:wat::load-file! "vocab/exit/phase.wat")
 (:wat::load-file! "vocab/exit/regime.wat")
 (:wat::load-file! "vocab/broker/portfolio.wat")
+(:wat::load-file! "vocab/exit/trade-atoms.wat")
 
 (:wat::core::define (:user::main
                      (stdin  :wat::io::IOReader)
