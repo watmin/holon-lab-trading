@@ -13,7 +13,32 @@ chunk; slices 1–3 enable it; slices 5–6 close it.
 
 ## Slice 1 — ATR (Wilder-smoothed true range) + median-week window
 
-**Status: ready.**
+**Status: shipped 2026-04-25.** ~80 LOC ATR + ~75 LOC AtrWindow
+delivered as `wat/encoding/atr.wat` + `wat/encoding/atr-window.wat`.
+12 tests across `wat-tests/encoding/atr.wat` (6) +
+`wat-tests/encoding/atr-window.wat` (6) — all green first pass after
+the substrate uplift below. Lab wat tests 152 → 164.
+
+**Substrate uplift forced by this slice — `:wat::core::sort-by`.**
+AtrWindow's `median` requires sort, and wat-rs had no sort
+primitive. Shipped to wat-rs as a carry-along (single primitive,
+predicate-driven Common-Lisp-style `(sort-by xs less?)` — user owns
+asc/desc/key via the predicate). Same shape as `string::concat`
+during arc 055. Tagged "arc 056" in the wat-rs commit message but
+no separate INSCRIPTION (small enough to ride as carry-along).
+
+**Divergence from plan — `:wat::core::nth` not existing.** The
+DESIGN sketched `(:nth sorted mid)` for indexed access. Substrate
+provides `(:get sorted mid) -> :Option<f64>` instead — deliberate
+per `feedback_shim_panic_vs_option`. Median rewrites with
+match-with-impossible-None (sentinel 0.0; n>0 already gated, mid
+in-range by construction). Cleaner than adding a third primitive.
+
+**Divergence — AtrState + WilderState merged.** Archive's Rust
+separates `AtrState` (a wrapper over `WilderState`) for reuse across
+other indicators. wat-rs port collapses to one struct; if Phase 5's
+IndicatorBank materializes multiple Wilder consumers, the
+abstraction grows then.
 
 `wat/encoding/atr.wat` — direct port of
 `archived/pre-wat-native/src/domain/indicator_bank.rs:315-354`'s

@@ -408,6 +408,31 @@ relative to the 652k-candle dataset. Documented as a parameter.
 
 Wilder convention is period 14. The archive uses 14. Lock.
 
+### 5e — Substrate gap surfaced by slice 1: sort-by missing
+
+**Resolved 2026-04-25 (during slice 1).** wat-rs had no sort
+primitive. AtrWindow's `median` needs a sort. Substrate uplift
+shipped: `:wat::core::sort-by xs less?` — single predicate-driven
+form (Common Lisp tradition; user picks asc/desc/key by which way
+the predicate compares). Wraps Rust's `Vec::sort_by`; two-sided
+predicate test for stable-sort semantics. Same carry-along pattern
+as `string::concat` during arc 055.
+
+This is the kind of gap arc 025 was always going to surface —
+"every Phase 4–9 port can be measured" relies on the substrate
+having the verbs the simulator needs. Sort, concat, and recursive
+patterns landed in three days. Future slices may surface more.
+
+### 5f — `:wat::core::nth` doesn't exist; `:get` returns Option
+
+Substrate's design philosophy (`feedback_shim_panic_vs_option`):
+lookups return `:Option<T>`, not bare `T`. The DESIGN sketched
+`(:nth sorted mid)` for indexed access; AtrWindow's median uses
+`(:get sorted mid) -> :Option<f64>` instead, with match-with-
+impossible-None (sentinel; the call site has already gated `n > 0`
+and `mid ∈ [0, n)`). Same shape will recur across slices 2–4 for
+trail back-fill / phase-history access; standardize the pattern.
+
 ### 5c — Fee model granularity
 
 v1 uses a single `fee-bps` parameter (35 bps = 0.35% per swap,
