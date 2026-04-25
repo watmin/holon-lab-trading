@@ -1,7 +1,7 @@
 # 058-030: Types — The Language Core Type System
 
 **Scope:** language
-**Class:** LANGUAGE CORE — **INSCRIPTION amendments 2026-04-19, 2026-04-20**
+**Class:** LANGUAGE CORE — **INSCRIPTION amendments 2026-04-19, 2026-04-20, 2026-04-24 (enum), 2026-04-24 (newtype)**
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
 **Depends on:** 058-001-atom-typed-literals (for atom literal types)
@@ -321,6 +321,57 @@ One generic `Value::Enum` variant covers every user-declared enum. Built-in `:Op
 
 - wat-rs commit (2026-04-24) — `Value::Enum`, `EnumValue`, `:wat::core::variant` primitive, `register_enum_methods` auto-synthesis, `SymbolTable.unit_variants`, `CheckEnv.unit_variant_types`, match-pattern + exhaustiveness extensions for `MatchShape::Enum`
 - `tests/wat_user_enums.rs` — 8 end-to-end cases covering unit + tagged construction, mixed match arms, exhaustiveness diagnostics, cross-enum rejection, arity mismatch, and tagged-vs-unit shape mismatch
+
+---
+
+## INSCRIPTION — 2026-04-24 — Newtype value construction + accessor syntax pinned
+
+This proposal locked newtype DECLARATIONS (line 538: nominal wrapper, "Compiles to Rust: `struct A(B);`") in 2026-04-18 but **never pinned the construction or accessor syntax** for newtype values. The auto-generation pattern was specced for structs (2026-04-19 inscription) and enums (2026-04-24 inscription); newtype's was implicit in the "follows the same auto-gen pattern as struct" framing without naming the accessor. wat-rs arc 049 (2026-04-24) closes the gap; this addendum captures what shipped.
+
+### Construction
+
+**`(:T/new <inner>)`** — auto-synthesized constructor, signature `(:fn(<Inner>) -> :T)`. One positional arg, the inner value. The `/new` convention mirrors struct's auto-generated constructor (2026-04-19 inscription) — the same `/` separator that "attaches a function" to the type path (per FOUNDATION line 189).
+
+```scheme
+(:wat::core::newtype :my::trading::Price :f64)
+
+(:my::trading::Price/new 100.0)
+;; ⇒ Value::Struct { type_name: ":my::trading::Price",
+;;                   fields: [Value::F64(100.0)] }
+```
+
+Newtype values reuse `Value::Struct` because newtype's Rust compilation IS a single-field tuple struct (`struct Price(f64);`). The runtime representation IS a struct of arity 1; no separate `Value::Newtype` variant.
+
+### Accessor
+
+**`(:T/0 <self>)`** — auto-synthesized accessor, signature `(:fn(:T) -> <Inner>)`. The `/0` accessor name mirrors Rust's `.0` tuple-struct positional access. Embodying the host language: numeric positional access named exactly the way Rust names it.
+
+```scheme
+(:my::trading::Price/0 (:my::trading::Price/new 100.0))
+;; ⇒ Value::F64(100.0)
+```
+
+Why `/0` over `/value` or `/inner`? Newtype's tuple-struct shape gives the field NO name (only an index). `/value` and `/inner` would invent names Rust doesn't have; `/unwrap` would impose Option/Result semantics that don't apply (newtype always has a value). `/0` says exactly what it is — the zeroth (and only) positional field. The lexer was already permissive enough to accept the numeric segment; no parser change required.
+
+### Nominal distinction is free
+
+`expand_alias` walks `TypeDef::Alias` only — newtypes pass through unchanged. So `TypeExpr::Path(":Price")` and `TypeExpr::Path(":f64")` are distinct under the unifier without any check.rs work. The auto-synthesized `:T/new` and `:T/0` Functions carry proper signatures; the type checker picks them up via `from_symbols` like any other function. Type mismatches fail with the surface name (`Price`, not `f64`) for actionable diagnostics.
+
+### Atom hashing distinguishes newtype from inner
+
+`Value::Struct` carries `type_name` in its EDN encoding. `(Atom (:Price/new 100.0))` and `(Atom 100.0)` produce different vectors at the substrate level — algebra-level identity preserves the nominal distinction the type-checker enforces. This works for free by reusing `Value::Struct` rather than introducing a parallel `Value::Newtype` hashing path.
+
+### What this inscription does NOT add
+
+- **`Value::Newtype` variant.** Newtype IS a tuple struct; reusing `Value::Struct` is the honest representation. Multi-field tuple newtypes (if ever added to grammar) extend without a new variant.
+- **Match patterns for newtype.** No variants to discriminate. The `/0` accessor is the access surface.
+- **Generic newtypes.** `(:wat::core::newtype :Wrapper<T> :T)` parses today; auto-instantiation per use site is its own arc when a caller demands it.
+
+### Implementation Reference
+
+- wat-rs commit (2026-04-24) — `register_newtype_methods` auto-synthesis (mirrors `register_struct_methods` for arity-1 tuple struct shape), reusing `:wat::core::struct-new` and `:wat::core::struct-field` primitives. Zero new Value variants, zero new primitives, zero new SymbolTable / CheckEnv fields.
+- `tests/wat_newtype_values.rs` — 5 end-to-end cases covering construct/accessor round-trip, nominal distinction in argument position, inverse rejection where inner is expected, newtype-as-struct-field round-trip, and two-distinct-newtypes-over-same-inner-stay-distinct.
+- Full INSCRIPTION at `wat-rs/docs/arc/2026/04/049-newtype-values/INSCRIPTION.md`.
 
 ---
 
