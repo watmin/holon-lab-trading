@@ -26,7 +26,7 @@
 
 ;; ─── Smoke — 10k candles, always-up-thinker ──────────────────────
 
-(:deftest :trading::test::sim::integration::test-ten-thousand-candles-smoke
+(:deftest :trading::test::sim::integration::ten-thousand-candles-smoke
   (:wat::core::let*
     (((stream :lab::candles::Stream)
       (:lab::candles::open-bounded "data/btc_5m_raw.parquet" 10000))

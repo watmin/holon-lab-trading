@@ -65,7 +65,7 @@ All source files: `archived/pre-wat-native/src/types/`.
 
 **1.4** — **Shipped 2026-04-22** (`9c44860`). `:trading::types::{Distances,Levels}` from `distances.rs` (46L). Levels references the Price newtype from 1.2. The Rust `Distances::to_levels(price, side) -> Levels` conversion stays in the archive; it ships with its Phase 5 callers (treasury / simulation).
 
-**1.5** — **Shipped 2026-04-22** (`267c84a`). `:trading::types::{PhaseLabel,PhaseDirection,PhaseRecord}` from `pivot.rs` (432L). Only the three value types; `PhaseState` streaming state machine + its step / close_phase / begin_phase logic ships in Phase 5 on IndicatorBank where its callers live. Sub-fog 1.7a (from original listing — state-machine expressiveness in wat) defers to Phase 5.
+**1.5** — **Shipped 2026-04-22** (`267c84a`). `:trading::types::{PhaseLabel,PhaseDirection,PhaseRecord}` from `pivot.rs` (432L). Only the three value types; `PhaseState` streaming state machine shipped early via **lab arc 025 slice 2** (2026-04-25) at `wat/encoding/phase-state.wat` — the simulator's yardstick needed the trigger machinery before Phase 5 could justify materializing IndicatorBank. Sub-fog 1.7a (state-machine expressiveness in wat) resolved by that arc; archive's pivot.rs tests ported verbatim.
 
 **1.6** — **Shipped 2026-04-22** (`dd32fda`). `:trading::types::Candle` from `candle.rs` (243L). 73 fields (identity + raw OHLCV + 60+ indicator scalars + 5 time scalars + 4 phase-labeler fields). Sub-fog 1.5a (struct field-count limit) **resolved** — the substrate freezes a 73-field struct cleanly. Indicator values stay `:f64` bare per the archive's `rune:forge(bare-type)` note.
 
@@ -185,9 +185,9 @@ Source: `archived/pre-wat-native/src/domain/`.
 - `config.rs` (142L) — observer construction, lens choice, seeds, parameters.
 - `ledger.rs` (140L) — SQL schema + dispatch. **Depends on `wat-rusqlite` sibling crate.**
 - `candle_stream.rs` (136L) — Parquet source. **Depends on `wat-parquet` sibling crate.**
-- `indicator_bank.rs` (2,365L) — streaming state machine over 100+ indicators. Architectural center. The monster.
+- `indicator_bank.rs` (2,365L) — streaming state machine over 100+ indicators. Architectural center. **Shipped 2026-04-25 via lab arc 026** (`docs/arc/2026/04/026-indicator-bank-port/`). 13 slices, ~3,300 LOC, 122 tests. ATR + AtrWindow + PhaseState arrived early via lab arc 025 slices 1-2 (the simulator's yardstick needed them); arc 026 ported the rest. **Lab arc 025** (`docs/arc/2026/04/025-paper-lifecycle-simulator/`) shipped same day — paper lifecycle simulator + Chapter-55 Thinker/Predictor split + label coordinates + cosine-vs-corners predictor + integration smoke. The yardstick is live: every Phase 4-9 port can now be measured against `:trading::sim::Aggregate` deltas.
 
-**Status: foggy.** Sequence once Phase 4 lands. `indicator_bank.rs` may warrant its own sub-phase.
+**Status: foggy.** The remaining domain modules (observers, broker, treasury, simulation.rs trailing-stop variant, lens.rs, config.rs) sequence once Phase 4 (learning machinery — Reckoner + OnlineSubspace + WindowSampler) lands.
 
 ### Phase 6 — Services (CSP primitives)
 
