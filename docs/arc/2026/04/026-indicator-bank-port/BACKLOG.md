@@ -544,8 +544,46 @@ vwap-distance on flat input (→ 0). **~10 tests.**
 
 ## Slice 10 — Regime (kama_er + choppiness + DFA + variance_ratio + entropy + Aroon + fractal-dim)
 
-**Status: ready (after slice 1).** **Biggest slice.** Eight
-indicators, several with statistical-estimator algorithms.
+**Status: shipped 2026-04-25.** ~620 LOC delivered as
+`wat/encoding/indicator-bank/regime.wat`. Eight indicators —
+kama_er, choppiness, dfa-alpha (with linear-detrend + dfa-
+fluctuation helpers), variance-ratio, entropy-bin + entropy-rate,
+aroon-up + aroon-down, fractal-dim (with higuchi-length helper).
+**16 tests green first pass** in
+`wat-tests/encoding/indicator-bank/regime.wat` (matching budget).
+Lab wat tests 276 → 292. **Biggest slice in the arc; landed
+without an off-by-one.**
+
+**Substrate uplift surfaced — `:wat::std::stat::mean`/`variance`/
+`stddev`.** User caught the lab's local mean/variance helpers
+in slice 9 ("those look /very/ generic") and asked for them to
+move to wat core. Shipped as a new namespace `:wat::std::stat::*`
+(distinct from math::*; reductions over Vec<f64>; population
+variance per numpy convention; `:Option<f64>` for all three with
+None on empty input — matches `f64::min-of`/`max-of` pattern).
+wat-rs commit `7899dab`; 5 tests; 965 → 970.
+
+**Persistence.wat refactored to consume the new substrate
+primitives.** Local mean/variance helpers retired; cum-deviations
+helper retained (substrate has no scan; the foldl-with-tuple
+expression there is reusable enough to keep as lab-tier).
+
+**`compute-entropy-bin` discretization** ships as a free function
+that the IndicatorBank's slice-12 step will call to pre-discretize
+returns into the entropy buffer (matches archive's step_entropy
+pattern; bin values pushed into the buffer rather than raw
+returns).
+
+**Aroon's "last index of extreme"** — substrate has no built-in;
+expressed via foldl-with-(best-value, best-index)-tuple over
+enumerated pairs. Cleaner shape than the archive's mutable-idx
+loop. Two callers (aroon-up uses >=, aroon-down uses <=); the
+shared `regime::index-of-last-extreme` helper takes the
+predicate as a function value.
+
+**No `f64::powf` needed.** BACKLOG anticipated this; archive's
+ln/log-ratio idioms cover all the math without it. Defer the
+uplift unless slice 11 or beyond reaches for it.
 
 `wat/encoding/indicator-bank/regime.wat`:
 

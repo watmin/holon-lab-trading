@@ -35,22 +35,14 @@
 
 
 ;; ─── Internal helpers ────────────────────────────────────────────
-
-;; mean of a Vec<f64>. Returns 0 on empty.
-(:wat::core::define
-  (:trading::encoding::persistence::mean
-    (xs :Vec<f64>)
-    -> :f64)
-  (:wat::core::let*
-    (((n :i64) (:wat::core::length xs)))
-    (:wat::core::if (:wat::core::= n 0) -> :f64
-      0.0
-      (:wat::core::/
-        (:wat::core::foldl xs 0.0
-          (:wat::core::lambda ((acc :f64) (x :f64) -> :f64)
-            (:wat::core::+ acc x)))
-        (:wat::core::i64::to-f64 n)))))
-
+;;
+;; persistence::mean / persistence::variance lifted to wat-rs as
+;; :wat::std::stat::mean / :wat::std::stat::variance / ::stddev (the
+;; substrate's universal-stats namespace). Lab callers below
+;; consume those directly. The sites that previously called the
+;; local mean now match-with-impossible-None on the substrate's
+;; Option<f64> result; this slice's compute helpers gate on
+;; sufficient data first, so the None arm is unreachable.
 
 ;; Build the simple-returns vector from a closes vector.
 ;; returns[i] = (closes[i+1] - closes[i]) / closes[i], or 0 if
@@ -103,25 +95,6 @@
             new-running))))))
 
 
-;; Variance over a Vec<f64> (population, divides by n).
-(:wat::core::define
-  (:trading::encoding::persistence::variance
-    (xs :Vec<f64>)
-    (mu :f64)
-    -> :f64)
-  (:wat::core::let*
-    (((n :i64) (:wat::core::length xs)))
-    (:wat::core::if (:wat::core::= n 0) -> :f64
-      0.0
-      (:wat::core::/
-        (:wat::core::foldl xs 0.0
-          (:wat::core::lambda ((acc :f64) (x :f64) -> :f64)
-            (:wat::core::let*
-              (((dx :f64) (:wat::core::- x mu)))
-              (:wat::core::+ acc (:wat::core::* dx dx)))))
-        (:wat::core::i64::to-f64 n)))))
-
-
 ;; ─── Hurst exponent via R/S analysis ──────────────────────────────
 
 (:wat::core::define
@@ -137,7 +110,12 @@
           (:trading::encoding::persistence::returns closes))
          ((rn :i64) (:wat::core::length returns))
          ((rn-f64 :f64) (:wat::core::i64::to-f64 rn))
-         ((mu :f64) (:trading::encoding::persistence::mean returns))
+         ;; mu / variance via the substrate's :wat::std::stat::*.
+         ;; Empty arm unreachable: outer gate already caught n < 8 →
+         ;; rn >= 7, returns Vec is non-empty.
+         ((mu :f64)
+          (:wat::core::match (:wat::std::stat::mean returns) -> :f64
+            ((Some v) v) (:None 0.0)))
          ((cum-dev :Vec<f64>)
           (:trading::encoding::persistence::cum-deviations returns mu))
          ;; Range of cum-dev. min/max return Option<f64>; at this
@@ -152,10 +130,10 @@
             (:wat::core::f64::min-of cum-dev) -> :f64
             ((Some v) v) (:None 0.0)))
          ((r :f64) (:wat::core::- cd-max cd-min))
-         ;; Stddev of returns (population).
-         ((var :f64)
-          (:trading::encoding::persistence::variance returns mu))
-         ((s :f64) (:wat::std::math::sqrt var)))
+         ;; Stddev of returns (population) via substrate.
+         ((s :f64)
+          (:wat::core::match (:wat::std::stat::stddev returns) -> :f64
+            ((Some v) v) (:None 0.0))))
         (:wat::core::if (:wat::core::= s 0.0) -> :f64
           0.5
           (:wat::core::let*
@@ -178,8 +156,13 @@
     (:wat::core::if (:wat::core::< n 3) -> :f64
       0.0
       (:wat::core::let*
-        (((mu :f64) (:trading::encoding::persistence::mean xs))
-         ((var :f64) (:trading::encoding::persistence::variance xs mu)))
+        (;; Empty arms unreachable: outer gate caught n < 3.
+         ((mu :f64)
+          (:wat::core::match (:wat::std::stat::mean xs) -> :f64
+            ((Some v) v) (:None 0.0)))
+         ((var :f64)
+          (:wat::core::match (:wat::std::stat::variance xs) -> :f64
+            ((Some v) v) (:None 0.0))))
         (:wat::core::if (:wat::core::= var 0.0) -> :f64
           0.0
           (:wat::core::let*
