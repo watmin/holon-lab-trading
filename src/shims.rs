@@ -47,6 +47,13 @@ pub struct WatCandleStream {
     buffer: Vec<Row>,
     pos: usize,
     total: i64,
+    /// Remaining rows the stream is allowed to emit. Decrements on
+    /// each `next`; once it hits 0 the stream returns `None` even
+    /// if the parquet has more rows. `open` sets this to `i64::MAX`
+    /// (effectively unbounded); `open_bounded(path, n)` sets it to
+    /// `n` so callers can run "first N candles" tests cheaply
+    /// without consuming the full 6-year stream.
+    remaining: i64,
 }
 
 #[wat_dispatch(
@@ -87,18 +94,39 @@ impl WatCandleStream {
             buffer: Vec::new(),
             pos: 0,
             total,
+            remaining: i64::MAX,
         }
+    }
+
+    /// `:rust::lab::CandleStream::open-bounded path n` — open a parquet
+    /// file capped at `n` row emissions. After `n` successful `next`
+    /// pulls, subsequent `next` calls return `None` regardless of the
+    /// parquet's remaining content. Used by tests + cheap exploratory
+    /// runs (500 / 1000 / 10000 candles) to avoid pulling the full
+    /// 6-year stream.
+    ///
+    /// `n <= 0` produces a stream that emits nothing — also useful
+    /// for harness sanity checks.
+    pub fn open_bounded(path: String, n: i64) -> Self {
+        let mut s = Self::open(path);
+        s.remaining = n.max(0);
+        s
     }
 
     /// `:rust::lab::CandleStream::next stream` — pull the next OHLCV row.
     /// Returns `(ts_us, open, high, low, close, volume)` wrapped in
-    /// `Option`; `None` when the stream is exhausted.
+    /// `Option`; `None` when the stream is exhausted OR when the
+    /// `open_bounded` row-cap has been reached.
     pub fn next(&mut self) -> Option<(i64, f64, f64, f64, f64, f64)> {
+        if self.remaining <= 0 {
+            return None;
+        }
         if self.pos >= self.buffer.len() && !self.fill_buffer() {
             return None;
         }
         let r = self.buffer[self.pos];
         self.pos += 1;
+        self.remaining -= 1;
         Some((r.ts_us, r.open, r.high, r.low, r.close, r.volume))
     }
 

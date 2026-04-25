@@ -26,11 +26,26 @@
 (:wat::core::typealias :lab::candles::Stream :rust::lab::CandleStream)
 
 ;; Open a parquet file and return a fresh stream positioned at row 0.
+;; Unbounded: emits until the parquet's natural end-of-stream.
 (:wat::core::define
   (:lab::candles::open
     (path :String)
     -> :lab::candles::Stream)
   (:rust::lab::CandleStream::open path))
+
+;; Open a parquet file capped at `n` row emissions. After `n`
+;; successful `next!` pulls the stream returns `:None` regardless of
+;; the parquet's remaining content. Used for cheap bounded test runs
+;; (500 / 1000 / 10000 candles) without pulling the full 6-year
+;; stream. The reader is still streaming — one record batch at a
+;; time from disk; the cap only changes when the producer signals
+;; end-of-stream, not how it loads.
+(:wat::core::define
+  (:lab::candles::open-bounded
+    (path :String)
+    (n :i64)
+    -> :lab::candles::Stream)
+  (:rust::lab::CandleStream::open_bounded path n))
 
 ;; Pull the next OHLCV row. Returns `(ts_us, open, high, low, close,
 ;; volume)` wrapped in Option; None at end of stream.

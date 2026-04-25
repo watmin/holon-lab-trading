@@ -9,15 +9,15 @@ INSCRIPTION + cross-link sixth.
 Each slice is independently mergeable. Slice 4 is the load-bearing
 chunk; slices 1–3 enable it; slices 5–6 close it.
 
-**Arc-level status (2026-04-25): UNPAUSED — arc 026 closed.**
-Slices 1-3 shipped. Arc 026 (IndicatorBank port) closed at
-INSCRIPTION on 2026-04-25; the enriched `:trading::types::Candle`
-is now produceable per tick via
-`(:trading::encoding::IndicatorBank::tick bank ohlcv)`. Slices 4-6
-flip from "paused on arc 026" back to "ready." Slice 4's Thinker
-signature can finalize against `:trading::types::Candles`
-(plural); the simulator engine consumes the IndicatorBank-produced
-Candle stream as its yardstick data source.
+**Arc-level status (2026-04-25): slices 1-4 shipped.** Arc 026
+(IndicatorBank port) closed at INSCRIPTION earlier today; the
+enriched `:trading::types::Candle` is produceable per tick via
+`(:trading::encoding::IndicatorBank::tick bank ohlcv)`. Slice 4
+shipped same-day with the simulator engine consuming that
+Candle stream end-to-end. Slices 5-6 (integration smoke +
+INSCRIPTION) are the remaining work; integration smoke unblocks
+the deferred engineered-phase-history tests against real BTC
+pivots.
 
 ---
 
@@ -322,20 +322,65 @@ per sub-fog 5h.
 
 ## Slice 4 — Simulator engine
 
-**Status: PAUSED pending lab arc 026 (IndicatorBank port).** Slice 3
-typed the Thinker against `:trading::types::Candles` — the
-enriched form. Slice 4 must produce Candles to feed the Thinker;
-that requires the IndicatorBank port. SimCandle stub was
-considered and rejected (DESIGN.md sub-fog 5i — "indicator-
-honesty"); the user picked Option I (full port) per builder
-direction "we /must/ have it." Resume slice 4 once arc 026 closes
-with the orchestrating `indicator-bank-tick` available. The
-slice 4 spec below is otherwise unchanged.
+**Status: shipped 2026-04-25.** ~590 LOC delivered as
+`wat/sim/paper.wat`; 9 tests in `wat-tests/sim/paper.wat`. Lab
+wat tests +9 with this slice. The simulator engine yields a
+fresh `SimState` per tick, advances the IndicatorBank, builds
+the Thinker's surface, asks the Predictor for an Action, and
+dispatches into one of three resolution paths or two
+continue-holding paths — values-up throughout. End-to-end
+public API: `(:trading::sim::run stream thinker predictor config
+-> :trading::sim::Aggregate)`.
 
-See [`docs/arc/2026/04/026-indicator-bank-port/`](../026-indicator-bank-port/)
-for the unblocking arc.
+**Decomposition divergence — six helpers + a thin orchestrator.**
+The plan sketched a single ~250-line `tick`. The first attempt
+shipped at 270 lines and hit a paren-discipline wall during
+debugging — too long to track by eye. SLICE-4-PLAN.md records
+the restart: extract `evaluate-grace-eligible?`,
+`tick-resolve-violence`, `tick-resolve-grace`,
+`tick-open-new-paper`, `tick-continue-holding`,
+`tick-handle-no-paper` as named defines, then a ~50-line `tick`
+orchestrator that dispatches over `(state.open-paper, action,
+deadline-reached?, grace?)`. Each helper builds a complete new
+SimState from the "before" state plus the new bank+window. The
+plan stays on disk as the honest record of the restart per
+`feedback_proposal_process`.
 
-**Status (was): ready (after slices 1, 2, 3).**
+**Bounded-run divergence — producer-side cap, not engine-side.**
+The plan envisioned a `run-bounded` variant of `run` taking a
+max-candles parameter. Shipped instead is a producer-side cap:
+`(:lab::candles::open-bounded path n)` constructs a stream that
+emits at most `n` rows before returning `:None`. The engine has
+no max-candles knob — `run-loop` terminates on the stream's
+natural end-of-stream. Streaming semantics preserved (one record
+batch at a time from disk; the cap just changes when the
+producer signals end). Adds ~10 LOC to `src/shims.rs`
+(`open_bounded` constructor, `remaining: i64` field) plus one
+wat wrapper in `wat/io/CandleStream.wat`.
+
+**Test divergence — 9 unit tests instead of 12; engineered-
+phase-history tests deferred to slice 5.** Tests 15-17, 24-26
+ship as 9 unit tests directly exercising the helpers via
+constant-Action predictors (Hold, Open-Up, Exit). Tests 18-23
+(Always-Up reaching Peak, retroactive labeling shapes,
+two-paper aggregates) require engineered phase histories that
+real BTC data exercises naturally — deferred to slice 5's
+integration smoke instead of synthesizing pivot-shaped fixtures.
+
+**Substrate uplifts forced by this slice — none.** The
+IndicatorBank machinery from arc 026 + Thermometer label
+construction from slice 3 + sort-by/not=/Enum-equality from
+slices 1-2 covered every requirement. Slice 4 is the first
+consumer slice that asked for nothing new from the substrate.
+
+`wat/sim/paper.wat` — engine, helpers, orchestrator, run-loop.
+Ports the proposal 055 four-gate Grace/Violence model over the
+Chapter 55 Thinker+Predictor split. Phase trigger detection via
+`prev-phase-gen` field tracks PhaseState.generation across
+ticks. Window cap is hardcoded at 256 (BOOK Chapter 36
+convention).
+
+**Status (was): PAUSED pending arc 026.**
 
 `wat/sim/paper.wat`:
 
@@ -411,10 +456,11 @@ This is the load-bearing slice.
 
 ## Slice 5 — Real-data integration smoke
 
-**Status: PAUSED pending arc 026.** Transitively blocked by
-slice 4. Resume after slice 4 unblocks.
-
-**Status (was): ready (after slice 4).**
+**Status: ready (after slice 4 shipped 2026-04-25).** Slice 4
+is green; integration smoke can now consume real parquet
+candles via `:lab::candles::open-bounded`. Engineered-phase-
+history tests deferred from slice 4 (tests 18-23) move into
+this slice's coverage — real BTC pivots exercise them naturally.
 
 `wat-tests/sim/integration.wat` — opens
 `data/btc_5m_raw.parquet` via `:lab::candles::Stream` (Phase 0

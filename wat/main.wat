@@ -50,6 +50,7 @@
 ;; arc 025 — paper lifecycle simulator (yardstick).
 (:wat::load-file! "sim/types.wat")
 (:wat::load-file! "sim/labels.wat")
+(:wat::load-file! "sim/paper.wat")
 
 ;; Phase 2 — vocab
 ;;   arc 001 — shared/time
