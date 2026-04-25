@@ -38,6 +38,7 @@
 ;;   arc 014 — market/flow (K=3, log-bound Thermometer for missing exp)
 ;;   arc 015 — market/ichimoku (K=3) + substrate uplift sweep (wat-rs arc 046)
 ;;   arc 016 — market/keltner (K=2, third plain-Log caller)
+;;   arc 017 — market/price-action (K=2, biggest Log surface, first f64::min)
 (:wat::load-file! "vocab/shared/helpers.wat")
 (:wat::load-file! "vocab/shared/time.wat")
 (:wat::load-file! "vocab/exit/time.wat")
@@ -52,6 +53,7 @@
 (:wat::load-file! "vocab/market/flow.wat")
 (:wat::load-file! "vocab/market/ichimoku.wat")
 (:wat::load-file! "vocab/market/keltner.wat")
+(:wat::load-file! "vocab/market/price-action.wat")
 
 (:wat::core::define (:user::main
                      (stdin  :wat::io::IOReader)
