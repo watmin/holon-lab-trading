@@ -118,8 +118,8 @@
           ((Some v) v)
           (:None 0.0)))
        ((window-mid :f64)
-        (:wat::core::f64::/
-          (:wat::core::f64::+ window-high window-low) 2.0))
+        (:wat::core::/
+          (:wat::core::+ window-high window-low) 2.0))
 
        ;; Find-last-index for three event-counter atoms. None means
        ;; the window had no matching event; archive returns n
@@ -136,7 +136,7 @@
                 (:wat::core::< rsi 20.0))))))
        ((since-rsi :i64)
         (:wat::core::match last-rsi-idx -> :i64
-          ((Some i) (:wat::core::i64::- n i))
+          ((Some i) (:wat::core::- n i))
           (:None n)))
        ((since-rsi-extreme :f64)
         (:trading::encoding::round-to-2
@@ -153,7 +153,7 @@
               (:wat::core::> vol 2.0)))))
        ((since-vol :i64)
         (:wat::core::match last-vol-idx -> :i64
-          ((Some i) (:wat::core::i64::- n i))
+          ((Some i) (:wat::core::- n i))
           (:None n)))
        ((since-vol-spike :f64)
         (:trading::encoding::round-to-2
@@ -170,7 +170,7 @@
               (:wat::core::> (:wat::core::f64::abs roc-1) 0.02)))))
        ((since-large :i64)
         (:wat::core::match last-large-idx -> :i64
-          ((Some i) (:wat::core::i64::- n i))
+          ((Some i) (:wat::core::- n i))
           (:None n)))
        ((since-large-move :f64)
         (:trading::encoding::round-to-2
@@ -180,26 +180,26 @@
        ;; Distance atoms — (price - X) / price, round-to-4.
        ((dist-from-high :f64)
         (:trading::encoding::round-to-4
-          (:wat::core::f64::/
-            (:wat::core::f64::- price window-high) price)))
+          (:wat::core::/
+            (:wat::core::- price window-high) price)))
        ((dist-from-low :f64)
         (:trading::encoding::round-to-4
-          (:wat::core::f64::/
-            (:wat::core::f64::- price window-low) price)))
+          (:wat::core::/
+            (:wat::core::- price window-low) price)))
        ((dist-from-midpoint :f64)
         (:trading::encoding::round-to-4
-          (:wat::core::f64::/
-            (:wat::core::f64::- price window-mid) price)))
+          (:wat::core::/
+            (:wat::core::- price window-mid) price)))
        ((dist-from-sma200 :f64)
         (:trading::encoding::round-to-4
-          (:wat::core::f64::/
-            (:wat::core::f64::- price sma200) price)))
+          (:wat::core::/
+            (:wat::core::- price sma200) price)))
 
        ;; session-depth — (1 + n).max(1.0), round-to-2, count family Log.
        ((session-depth :f64)
         (:trading::encoding::round-to-2
           (:wat::core::f64::max
-            (:wat::core::f64::+ 1.0 n-f64) 1.0)))
+            (:wat::core::+ 1.0 n-f64) 1.0)))
 
        ;; ─── Encode 8 atoms in archive order. ────────────────────
 

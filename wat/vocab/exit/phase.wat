@@ -113,7 +113,7 @@
           ((Some r) r)
           (:None (:trading::vocab::exit::phase::default-record))))
        ((prev-rec :trading::types::PhaseRecord)
-        (:wat::core::match (:wat::core::get history (:wat::core::i64::- n 2))
+        (:wat::core::match (:wat::core::get history (:wat::core::- n 2))
                            -> :trading::types::PhaseRecord
           ((Some r) r)
           (:None (:trading::vocab::exit::phase::default-record))))
@@ -153,11 +153,11 @@
 
        ;; Step 3: range trend.
        ((last-range :f64)
-        (:wat::core::f64::-
+        (:wat::core::-
           (:trading::types::PhaseRecord/close-max last-rec)
           (:trading::types::PhaseRecord/close-min last-rec)))
        ((prev-range :f64)
-        (:wat::core::f64::-
+        (:wat::core::-
           (:trading::types::PhaseRecord/close-max prev-rec)
           (:trading::types::PhaseRecord/close-min prev-rec)))
        ((acc3 :trading::encoding::VocabEmission)
@@ -165,7 +165,7 @@
                         -> :trading::encoding::VocabEmission
           (:trading::vocab::exit::phase::append-ratio-round-2
             acc2 "phase-range-trend"
-            (:wat::core::f64::/ last-range prev-range))
+            (:wat::core::/ last-range prev-range))
           acc2))
 
        ;; Step 4: spacing trend.
@@ -180,7 +180,7 @@
                         -> :trading::encoding::VocabEmission
           (:trading::vocab::exit::phase::append-ratio-round-2
             acc3 "phase-spacing-trend"
-            (:wat::core::f64::/ last-duration prev-duration))
+            (:wat::core::/ last-duration prev-duration))
           acc3)))
       acc4)))
 
@@ -225,7 +225,7 @@
         ((Some r) r)
         (:None (:trading::vocab::exit::phase::default-record))))
      ((prev-rec :trading::types::PhaseRecord)
-      (:wat::core::match (:wat::core::get records (:wat::core::i64::- n 2))
+      (:wat::core::match (:wat::core::get records (:wat::core::- n 2))
                          -> :trading::types::PhaseRecord
         ((Some r) r)
         (:None (:trading::vocab::exit::phase::default-record))))
@@ -236,8 +236,8 @@
         (((last-avg :f64) (:trading::types::PhaseRecord/close-avg last-rec))
          ((trend :f64)
           (:trading::encoding::round-to-4
-            (:wat::core::f64::/
-              (:wat::core::f64::- last-avg prev-avg) prev-avg))))
+            (:wat::core::/
+              (:wat::core::- last-avg prev-avg) prev-avg))))
         (:trading::vocab::exit::phase::append-scaled-linear acc name trend))
       acc)))
 
@@ -306,8 +306,8 @@
   (:wat::core::let*
     (((avg :f64) (:trading::types::PhaseRecord/close-avg r)))
     (:wat::core::if (:wat::core::> avg 0.0) -> :f64
-      (:wat::core::f64::/
-        (:wat::core::f64::-
+      (:wat::core::/
+        (:wat::core::-
           (:trading::types::PhaseRecord/close-max r)
           (:trading::types::PhaseRecord/close-min r))
         avg)
@@ -320,8 +320,8 @@
   (:wat::core::let*
     (((open :f64) (:trading::types::PhaseRecord/close-open r)))
     (:wat::core::if (:wat::core::> open 0.0) -> :f64
-      (:wat::core::f64::/
-        (:wat::core::f64::-
+      (:wat::core::/
+        (:wat::core::-
           (:trading::types::PhaseRecord/close-final r) open)
         open)
       0.0)))
@@ -341,7 +341,7 @@
   (:wat::core::let*
     (((b-abs :f64) (:wat::core::f64::abs b)))
     (:wat::core::if (:wat::core::> b-abs 0.0001) -> :f64
-      (:wat::core::f64::/ (:wat::core::f64::- a b) b-abs)
+      (:wat::core::/ (:wat::core::- a b) b-abs)
       0.0)))
 
 ;; ─── same-label-and-direction? — user-enum predicate ───────────
@@ -460,7 +460,7 @@
       (:wat::core::if (:wat::core::> i 0) -> :wat::holon::Holons
         (:wat::core::let*
           (((prev :trading::types::PhaseRecord)
-            (:wat::core::match (:wat::core::get history (:wat::core::i64::- i 1))
+            (:wat::core::match (:wat::core::get history (:wat::core::- i 1))
                                -> :trading::types::PhaseRecord
               ((Some r) r)
               (:None (:trading::vocab::exit::phase::default-record))))
@@ -472,7 +472,7 @@
               (:trading::vocab::exit::phase::rel dur p-dur) -2.0 2.0))
            ((pm-fact :wat::holon::HolonAST)
             (:trading::vocab::exit::phase::thermometer-fact "prior-move-delta"
-              (:wat::core::f64::- mv p-mv) -0.1 0.1))
+              (:wat::core::- mv p-mv) -0.1 0.1))
            ((pv-fact :wat::holon::HolonAST)
             (:trading::vocab::exit::phase::thermometer-fact "prior-volume-delta"
               (:trading::vocab::exit::phase::rel vol p-vol) -2.0 2.0))
@@ -504,7 +504,7 @@
              ((s-vol :f64) (:trading::vocab::exit::phase::rec-volume same-rec))
              ((sm-fact :wat::holon::HolonAST)
               (:trading::vocab::exit::phase::thermometer-fact "same-move-delta"
-                (:wat::core::f64::- mv s-mv) -0.1 0.1))
+                (:wat::core::- mv s-mv) -0.1 0.1))
              ((sd-fact :wat::holon::HolonAST)
               (:trading::vocab::exit::phase::thermometer-fact "same-duration-delta"
                 (:trading::vocab::exit::phase::rel dur s-dur) -2.0 2.0))
@@ -561,13 +561,13 @@
 
        ;; Truncate to last (budget + 3) = 103 records.
        ((budget :i64) 100)
-       ((max-records :i64) (:wat::core::i64::+ budget 3))
+       ((max-records :i64) (:wat::core::+ budget 3))
        ((records-len :i64) (:wat::core::length all-records))
        ((records :Vec<wat::holon::HolonAST>)
         (:wat::core::if (:wat::core::> records-len max-records)
                         -> :Vec<wat::holon::HolonAST>
           (:wat::core::drop all-records
-            (:wat::core::i64::- records-len max-records))
+            (:wat::core::- records-len max-records))
           all-records))
 
        ;; window-3 → Sequential trigrams.
@@ -603,7 +603,7 @@
        ((trimmed-pairs :Vec<wat::holon::HolonAST>)
         (:wat::core::if (:wat::core::> pairs-len budget)
                         -> :Vec<wat::holon::HolonAST>
-          (:wat::core::drop pairs (:wat::core::i64::- pairs-len budget))
+          (:wat::core::drop pairs (:wat::core::- pairs-len budget))
           pairs))
 
        ;; Bundle the pairs.

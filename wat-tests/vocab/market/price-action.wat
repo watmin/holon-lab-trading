@@ -95,7 +95,7 @@
         (:trading::encoding::ScaleTracker::fresh) 1.0))
      ((scale :f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::f64::- 0.0 scale))
+     ((neg-scale :f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "gap")
@@ -177,15 +177,15 @@
 
      ((expected-value :f64)
       (:trading::encoding::round-to-2
-        (:wat::core::f64::/
-          (:wat::core::f64::abs (:wat::core::f64::- 102.0 100.0))
-          (:wat::core::f64::- 105.0 95.0))))
+        (:wat::core::/
+          (:wat::core::f64::abs (:wat::core::- 102.0 100.0))
+          (:wat::core::- 105.0 95.0))))
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) expected-value))
      ((scale :f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::f64::- 0.0 scale))
+     ((neg-scale :f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "body-ratio-pa")
@@ -215,15 +215,15 @@
 
      ((expected-value :f64)
       (:trading::encoding::round-to-2
-        (:wat::core::f64::/
-          (:wat::core::f64::- 105.0 (:wat::core::f64::max 100.0 102.0))
-          (:wat::core::f64::- 105.0 95.0))))
+        (:wat::core::/
+          (:wat::core::- 105.0 (:wat::core::f64::max 100.0 102.0))
+          (:wat::core::- 105.0 95.0))))
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) expected-value))
      ((scale :f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::f64::- 0.0 scale))
+     ((neg-scale :f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "upper-wick")
@@ -253,15 +253,15 @@
 
      ((expected-value :f64)
       (:trading::encoding::round-to-2
-        (:wat::core::f64::/
-          (:wat::core::f64::- (:wat::core::f64::min 100.0 102.0) 95.0)
-          (:wat::core::f64::- 105.0 95.0))))
+        (:wat::core::/
+          (:wat::core::- (:wat::core::f64::min 100.0 102.0) 95.0)
+          (:wat::core::- 105.0 95.0))))
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) expected-value))
      ((scale :f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::f64::- 0.0 scale))
+     ((neg-scale :f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "lower-wick")

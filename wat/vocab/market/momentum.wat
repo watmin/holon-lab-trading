@@ -65,27 +65,27 @@
      ;; Cross-sub-struct compute atoms — (close - sma) / close.
      ((close-sma20 :f64)
       (:trading::encoding::round-to-4
-        (:wat::core::f64::/
-          (:wat::core::f64::- close sma20) close)))
+        (:wat::core::/
+          (:wat::core::- close sma20) close)))
      ((close-sma50 :f64)
       (:trading::encoding::round-to-4
-        (:wat::core::f64::/
-          (:wat::core::f64::- close sma50) close)))
+        (:wat::core::/
+          (:wat::core::- close sma50) close)))
      ((close-sma200 :f64)
       (:trading::encoding::round-to-4
-        (:wat::core::f64::/
-          (:wat::core::f64::- close sma200) close)))
+        (:wat::core::/
+          (:wat::core::- close sma200) close)))
 
      ;; Cross-sub-struct compute — macd-hist / close.
      ((macd-hist :f64)
       (:trading::encoding::round-to-4
-        (:wat::core::f64::/ macd-hist-raw close)))
+        (:wat::core::/ macd-hist-raw close)))
 
      ;; Single-sub-struct compute — DMI spread normalized to (-1, 1).
      ((di-spread :f64)
       (:trading::encoding::round-to-2
-        (:wat::core::f64::/
-          (:wat::core::f64::- plus-di minus-di) 100.0)))
+        (:wat::core::/
+          (:wat::core::- plus-di minus-di) 100.0)))
 
      ;; atr-ratio: floor at 0.001 via substrate f64::max (wat-rs
      ;; arc 046), then round-to-4 (preserves the floor; round-to-2

@@ -23,7 +23,7 @@
        (:test::repeat-update
          (:trading::encoding::ScaleTracker::update t v)
          v
-         (:wat::core::i64::- n 1))))))
+         (:wat::core::- n 1))))))
 
 ;; ─── ::fresh — zero-tracker invariants ────────────────────────────
 

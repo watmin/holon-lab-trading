@@ -34,10 +34,10 @@
   (:wat::core::let*
     ;; Normalize stochastic %K/%D to [0, 1].
     (((k-norm :f64)
-      (:wat::core::f64::/
+      (:wat::core::/
         (:trading::types::Candle::Momentum/stoch-k m) 100.0))
      ((d-norm :f64)
-      (:wat::core::f64::/
+      (:wat::core::/
         (:trading::types::Candle::Momentum/stoch-d m) 100.0))
 
      ;; Four atom values, rounded.
@@ -45,7 +45,7 @@
      ((stoch-d :f64) (:trading::encoding::round-to-2 d-norm))
      ((stoch-kd-spread :f64)
       (:trading::encoding::round-to-2
-        (:wat::core::f64::- k-norm d-norm)))
+        (:wat::core::- k-norm d-norm)))
 
      ;; Clamp the cross-delta to [-1, 1] via substrate f64::clamp.
      ((raw-delta :f64)

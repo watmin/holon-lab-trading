@@ -42,7 +42,7 @@
         (:trading::types::Candle::Persistence/autocorrelation p)))
      ((adx :f64)
       (:trading::encoding::round-to-2
-        (:wat::core::f64::/
+        (:wat::core::/
           (:trading::types::Candle::Momentum/adx m) 100.0)))
 
      ;; Thread Scales through three scaled-linear calls — emission

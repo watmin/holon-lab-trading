@@ -30,7 +30,7 @@
           ((next :trading::encoding::Scales)
            (:wat::core::second result)))
          (:test::repeat-scaled-linear name v next
-           (:wat::core::i64::- n 1)))))))
+           (:wat::core::- n 1)))))))
 
 ;; ─── First call on empty scales creates a tracker ────────────────
 
@@ -105,7 +105,7 @@
         ((Some t) t)
         (:None (:trading::encoding::ScaleTracker::fresh)))))
     (:wat::test::assert-eq
-      (:wat::core::i64::+
+      (:wat::core::+
         (:trading::encoding::ScaleTracker/count rsi)
         (:trading::encoding::ScaleTracker/count stoch))
       3)))
@@ -156,7 +156,7 @@
      ((scale :f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
      ((neg-scale :f64)
-      (:wat::core::f64::- 0.0 scale))
+      (:wat::core::- 0.0 scale))
      ((rounded :f64)
       (:trading::encoding::round-to-2 0.5))
      ((expected :wat::holon::HolonAST)

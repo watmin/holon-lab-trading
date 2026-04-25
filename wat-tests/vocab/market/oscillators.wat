@@ -93,7 +93,7 @@
         (:trading::encoding::ScaleTracker::fresh) 55.0))
      ((scale :f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::f64::- 0.0 scale))
+     ((neg-scale :f64) (:wat::core::- 0.0 scale))
      ((rounded-rsi :f64) (:trading::encoding::round-to-2 55.0))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind

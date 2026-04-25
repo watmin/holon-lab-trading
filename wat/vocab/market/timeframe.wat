@@ -66,14 +66,14 @@
       (:wat::core::if (:wat::core::> tf-1h-body-raw 0.0) -> :f64
         1.0
         (:wat::core::if (:wat::core::< tf-1h-body-raw 0.0) -> :f64
-          (:wat::core::f64::- 0.0 1.0)
+          (:wat::core::- 0.0 1.0)
           0.0)))
      ((five-m-ret :f64)
-      (:wat::core::f64::/
-        (:wat::core::f64::- close open) close))
+      (:wat::core::/
+        (:wat::core::- close open) close))
      ((tf-5m-1h-align :f64)
       (:trading::encoding::round-to-4
-        (:wat::core::f64::* signum-1h five-m-ret)))
+        (:wat::core::* signum-1h five-m-ret)))
 
      ;; Thread Scales through six scaled-linear calls.
      ((e1 :trading::encoding::ScaleEmission)

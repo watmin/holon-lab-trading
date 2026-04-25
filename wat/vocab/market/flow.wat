@@ -68,33 +68,33 @@
       (:trading::encoding::round-to-4 vwap-distance-raw))
 
      ;; Range-conditional compute setup.
-     ((range :f64) (:wat::core::f64::- high low))
+     ((range :f64) (:wat::core::- high low))
      ((range-positive :bool) (:wat::core::> range 0.0))
 
      ;; buying-pressure: (close - low) / range else 0.5
      ((buying-pressure :f64)
       (:wat::core::if range-positive -> :f64
         (:trading::encoding::round-to-2
-          (:wat::core::f64::/
-            (:wat::core::f64::- close low) range))
+          (:wat::core::/
+            (:wat::core::- close low) range))
         0.5))
 
      ;; selling-pressure: (high - close) / range else 0.5
      ((selling-pressure :f64)
       (:wat::core::if range-positive -> :f64
         (:trading::encoding::round-to-2
-          (:wat::core::f64::/
-            (:wat::core::f64::- high close) range))
+          (:wat::core::/
+            (:wat::core::- high close) range))
         0.5))
 
      ;; body-ratio: abs(close - open) / range else 0.0. abs via
      ;; substrate f64::abs (wat-rs arc 046).
      ((abs-body :f64)
-      (:wat::core::f64::abs (:wat::core::f64::- close open)))
+      (:wat::core::f64::abs (:wat::core::- close open)))
      ((body-ratio :f64)
       (:wat::core::if range-positive -> :f64
         (:trading::encoding::round-to-2
-          (:wat::core::f64::/ abs-body range))
+          (:wat::core::/ abs-body range))
         0.0))
 
      ;; obv-slope via ReciprocalLog 10 of exp(slope) — Bind directly,

@@ -43,11 +43,11 @@
         (:trading::types::Candle::Regime/kama-er r)))
      ((choppiness :f64)
       (:trading::encoding::round-to-2
-        (:wat::core::f64::/
+        (:wat::core::/
           (:trading::types::Candle::Regime/choppiness r) 100.0)))
      ((dfa-alpha :f64)
       (:trading::encoding::round-to-2
-        (:wat::core::f64::/
+        (:wat::core::/
           (:trading::types::Candle::Regime/dfa-alpha r) 2.0)))
 
      ;; variance-ratio — one-sided floor at 0.001 via substrate
@@ -63,15 +63,15 @@
         (:trading::types::Candle::Regime/entropy-rate r)))
      ((aroon-up :f64)
       (:trading::encoding::round-to-2
-        (:wat::core::f64::/
+        (:wat::core::/
           (:trading::types::Candle::Regime/aroon-up r) 100.0)))
      ((aroon-down :f64)
       (:trading::encoding::round-to-2
-        (:wat::core::f64::/
+        (:wat::core::/
           (:trading::types::Candle::Regime/aroon-down r) 100.0)))
      ((fractal-dim :f64)
       (:trading::encoding::round-to-2
-        (:wat::core::f64::-
+        (:wat::core::-
           (:trading::types::Candle::Regime/fractal-dim r) 1.0)))
 
      ;; Thread Scales through seven scaled-linear calls. variance-

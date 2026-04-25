@@ -59,10 +59,10 @@
      ;; Cloud geometry — derived once, used by cloud-position +
      ;; cloud-thickness.
      ((cloud-mid :f64)
-      (:wat::core::f64::/
-        (:wat::core::f64::+ cloud-top cloud-bottom) 2.0))
+      (:wat::core::/
+        (:wat::core::+ cloud-top cloud-bottom) 2.0))
      ((cloud-width :f64)
-      (:wat::core::f64::- cloud-top cloud-bottom))
+      (:wat::core::- cloud-top cloud-bottom))
 
      ;; cloud-position — nested branch on cloud-width > 0.
      ;; Positive branch: scale by max(cloud-width, close * 0.001).
@@ -70,13 +70,13 @@
      ;; Both branches clamped to ±1, then round-to-2.
      ((cloud-position-raw :f64)
       (:wat::core::if (:wat::core::> cloud-width 0.0) -> :f64
-        (:wat::core::f64::/
-          (:wat::core::f64::- close cloud-mid)
+        (:wat::core::/
+          (:wat::core::- close cloud-mid)
           (:wat::core::f64::max cloud-width
-                                (:wat::core::f64::* close 0.001)))
-        (:wat::core::f64::/
-          (:wat::core::f64::- close cloud-mid)
-          (:wat::core::f64::* close 0.01))))
+                                (:wat::core::* close 0.001)))
+        (:wat::core::/
+          (:wat::core::- close cloud-mid)
+          (:wat::core::* close 0.01))))
      ((cloud-position :f64)
       (:trading::encoding::round-to-2
         (:wat::core::f64::clamp cloud-position-raw -1.0 1.0)))
@@ -84,7 +84,7 @@
      ;; cloud-thickness — floor at 0.0001 via substrate f64::max,
      ;; round-to-4, plain Log bounds (0.0001, 0.5).
      ((thickness-raw :f64)
-      (:wat::core::f64::/ cloud-width close))
+      (:wat::core::/ cloud-width close))
      ((cloud-thickness :f64)
       (:trading::encoding::round-to-4
         (:wat::core::f64::max thickness-raw 0.0001)))
@@ -96,27 +96,27 @@
 
      ;; tk-spread, tenkan-dist, kijun-dist — same shape: numerator
      ;; / (close × 0.01), clamp ±1, round-to-2. denom shared.
-     ((pct-denom :f64) (:wat::core::f64::* close 0.01))
+     ((pct-denom :f64) (:wat::core::* close 0.01))
 
      ((tk-spread :f64)
       (:trading::encoding::round-to-2
         (:wat::core::f64::clamp
-          (:wat::core::f64::/
-            (:wat::core::f64::- tenkan kijun) pct-denom)
+          (:wat::core::/
+            (:wat::core::- tenkan kijun) pct-denom)
           -1.0 1.0)))
 
      ((tenkan-dist :f64)
       (:trading::encoding::round-to-2
         (:wat::core::f64::clamp
-          (:wat::core::f64::/
-            (:wat::core::f64::- close tenkan) pct-denom)
+          (:wat::core::/
+            (:wat::core::- close tenkan) pct-denom)
           -1.0 1.0)))
 
      ((kijun-dist :f64)
       (:trading::encoding::round-to-2
         (:wat::core::f64::clamp
-          (:wat::core::f64::/
-            (:wat::core::f64::- close kijun) pct-denom)
+          (:wat::core::/
+            (:wat::core::- close kijun) pct-denom)
           -1.0 1.0)))
 
      ;; Thread Scales through five scaled-linear calls.

@@ -45,19 +45,19 @@
      ;; Fibonacci retracement distances from the 48-window position.
      ((fd-236 :f64)
       (:trading::encoding::round-to-2
-        (:wat::core::f64::- rp-48-raw 0.236)))
+        (:wat::core::- rp-48-raw 0.236)))
      ((fd-382 :f64)
       (:trading::encoding::round-to-2
-        (:wat::core::f64::- rp-48-raw 0.382)))
+        (:wat::core::- rp-48-raw 0.382)))
      ((fd-500 :f64)
       (:trading::encoding::round-to-2
-        (:wat::core::f64::- rp-48-raw 0.500)))
+        (:wat::core::- rp-48-raw 0.500)))
      ((fd-618 :f64)
       (:trading::encoding::round-to-2
-        (:wat::core::f64::- rp-48-raw 0.618)))
+        (:wat::core::- rp-48-raw 0.618)))
      ((fd-786 :f64)
       (:trading::encoding::round-to-2
-        (:wat::core::f64::- rp-48-raw 0.786)))
+        (:wat::core::- rp-48-raw 0.786)))
 
      ;; Thread Scales through eight scaled-linear calls.
      ((e1 :trading::encoding::ScaleEmission)

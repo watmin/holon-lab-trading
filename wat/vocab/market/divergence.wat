@@ -68,7 +68,7 @@
      ((bull-v :f64)   (:trading::encoding::round-to-2 bull))
      ((bear-v :f64)   (:trading::encoding::round-to-2 bear))
      ((spread-v :f64) (:trading::encoding::round-to-2
-                        (:wat::core::f64::- bull bear)))
+                        (:wat::core::- bull bear)))
 
      ;; Thread (holons, scales) through three maybe-emit steps.
      ((start :trading::encoding::VocabEmission)

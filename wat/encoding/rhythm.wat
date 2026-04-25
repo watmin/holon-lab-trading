@@ -32,7 +32,7 @@
   (:trading::encoding::rhythm::budget -> :i64)
   (:wat::core::match
     (:wat::core::f64::to-i64
-      (:wat::core::f64::* 1.0
+      (:wat::core::* 1.0
         (:wat::core::i64::to-f64 (:wat::config::dims))))
     -> :i64
     ;; f64::to-i64 returns Option; on Some use it, on None fall back
@@ -47,14 +47,14 @@
   (:trading::encoding::rhythm::isqrt (n :i64) -> :i64)
   (:wat::core::if (:wat::core::<= n 1) -> :i64
     n
-    (:trading::encoding::rhythm::isqrt-loop n (:wat::core::i64::/ n 2))))
+    (:trading::encoding::rhythm::isqrt-loop n (:wat::core::/ n 2))))
 
 (:wat::core::define
   (:trading::encoding::rhythm::isqrt-loop (n :i64) (x :i64) -> :i64)
   (:wat::core::let*
     (((x-next :i64)
-      (:wat::core::i64::/
-        (:wat::core::i64::+ x (:wat::core::i64::/ n x))
+      (:wat::core::/
+        (:wat::core::+ x (:wat::core::/ n x))
         2)))
     (:wat::core::if (:wat::core::>= x-next x) -> :i64
       x
@@ -77,8 +77,8 @@
     (delta-range :f64)
     -> :wat::holon::BundleResult)
   (:wat::core::let*
-    (((delta :f64) (:wat::core::f64::- value prev))
-     ((neg-range :f64) (:wat::core::f64::- 0.0 delta-range)))
+    (((delta :f64) (:wat::core::- value prev))
+     ((neg-range :f64) (:wat::core::- 0.0 delta-range)))
     (Ok
       (:wat::holon::Bind
         (:wat::holon::Atom "delta")
@@ -108,7 +108,7 @@
       (:wat::core::let*
         (((prev :f64)
           (:wat::core::match
-            (:wat::core::get values (:wat::core::i64::- i 1)) -> :f64
+            (:wat::core::get values (:wat::core::- i 1)) -> :f64
             ((Some v) v)
             (:None    0.0)))
          ((d-fact :wat::holon::BundleResult)
@@ -152,7 +152,7 @@
             i values vmin vmax delta-range))))
       (:trading::encoding::rhythm::build-holons-loop
         values vmin vmax delta-range
-        (:wat::core::i64::+ i 1) n
+        (:wat::core::+ i 1) n
         (:wat::core::conj acc f)))))
 
 ;; ─── build-trigrams: sliding window of 3 holons ─────────────────
@@ -163,7 +163,7 @@
     -> :wat::holon::Holons)
   (:wat::core::let*
     (((n :i64) (:wat::core::length holons))
-     ((last-start :i64) (:wat::core::i64::- n 3)))
+     ((last-start :i64) (:wat::core::- n 3)))
     (:wat::core::if (:wat::core::< last-start 0) -> :wat::holon::Holons
       (:wat::core::vec :wat::holon::HolonAST)
       (:trading::encoding::rhythm::build-trigrams-loop
@@ -185,12 +185,12 @@
           ((Some h) h)
           (:None    (:wat::holon::Atom "unreachable"))))
        ((f1 :wat::holon::HolonAST)
-        (:wat::core::match (:wat::core::get holons (:wat::core::i64::+ i 1))
+        (:wat::core::match (:wat::core::get holons (:wat::core::+ i 1))
                            -> :wat::holon::HolonAST
           ((Some h) h)
           (:None    (:wat::holon::Atom "unreachable"))))
        ((f2 :wat::holon::HolonAST)
-        (:wat::core::match (:wat::core::get holons (:wat::core::i64::+ i 2))
+        (:wat::core::match (:wat::core::get holons (:wat::core::+ i 2))
                            -> :wat::holon::HolonAST
           ((Some h) h)
           (:None    (:wat::holon::Atom "unreachable"))))
@@ -199,7 +199,7 @@
           (:wat::holon::Bind f0 (:wat::holon::Permute f1 1))
           (:wat::holon::Permute f2 2))))
       (:trading::encoding::rhythm::build-trigrams-loop
-        holons (:wat::core::i64::+ i 1) last-start
+        holons (:wat::core::+ i 1) last-start
         (:wat::core::conj acc trigram)))))
 
 ;; ─── build-pairs: sliding window of 2 trigrams ─────────────────
@@ -210,7 +210,7 @@
     -> :wat::holon::Holons)
   (:wat::core::let*
     (((n :i64) (:wat::core::length trigrams))
-     ((last-start :i64) (:wat::core::i64::- n 2)))
+     ((last-start :i64) (:wat::core::- n 2)))
     (:wat::core::if (:wat::core::< last-start 0) -> :wat::holon::Holons
       (:wat::core::vec :wat::holon::HolonAST)
       (:trading::encoding::rhythm::build-pairs-loop
@@ -232,13 +232,13 @@
           ((Some h) h)
           (:None    (:wat::holon::Atom "unreachable"))))
        ((t1 :wat::holon::HolonAST)
-        (:wat::core::match (:wat::core::get trigrams (:wat::core::i64::+ i 1))
+        (:wat::core::match (:wat::core::get trigrams (:wat::core::+ i 1))
                            -> :wat::holon::HolonAST
           ((Some h) h)
           (:None    (:wat::holon::Atom "unreachable"))))
        ((pair :wat::holon::HolonAST) (:wat::holon::Bind t0 t1)))
       (:trading::encoding::rhythm::build-pairs-loop
-        trigrams (:wat::core::i64::+ i 1) last-start
+        trigrams (:wat::core::+ i 1) last-start
         (:wat::core::conj acc pair)))))
 
 ;; ─── trim-tail: keep last N items of a Vec ─────────────────────
@@ -252,7 +252,7 @@
     (((len :i64) (:wat::core::length xs)))
     (:wat::core::if (:wat::core::<= len n) -> :Vec<T>
       xs
-      (:wat::core::drop xs (:wat::core::i64::- len n)))))
+      (:wat::core::drop xs (:wat::core::- len n)))))
 
 ;; ─── indicator-rhythm: the orchestrator ────────────────────────
 
@@ -266,7 +266,7 @@
     -> :wat::holon::BundleResult)
   (:wat::core::let*
     (((budget :i64) (:trading::encoding::rhythm::budget))
-     ((max-holons :i64) (:wat::core::i64::+ budget 3))
+     ((max-holons :i64) (:wat::core::+ budget 3))
      ;; Step 1: trim input to cap AST size
      ((trimmed :Vec<f64>)
       (:trading::encoding::rhythm::trim-tail values max-holons))

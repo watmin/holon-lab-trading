@@ -34,7 +34,7 @@
        extreme
        (:trading::types::Price/new entry)
        (:trading::types::Price/new
-         (:wat::core::f64::- entry (:wat::core::f64::* entry 0.10)))
+         (:wat::core::- entry (:wat::core::* entry 0.10)))
        signaled
        false
        age

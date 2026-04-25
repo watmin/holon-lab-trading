@@ -12,4 +12,4 @@
 
 (:wat::test::deftest :trading::test::test-scaffold-is-alive
   ()
-  (:wat::test::assert-eq (:wat::core::i64::+ 1 1) 2))
+  (:wat::test::assert-eq (:wat::core::+ 1 1) 2))

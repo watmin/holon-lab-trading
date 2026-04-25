@@ -41,35 +41,35 @@
         (:trading::types::Candle::Momentum/rsi m)))
      ((cci :f64)
       (:trading::encoding::round-to-2
-        (:wat::core::f64::/
+        (:wat::core::/
           (:trading::types::Candle::Momentum/cci m) 300.0)))
      ((mfi :f64)
       (:trading::encoding::round-to-2
-        (:wat::core::f64::/
+        (:wat::core::/
           (:trading::types::Candle::Momentum/mfi m) 100.0)))
      ((williams-r :f64)
       (:trading::encoding::round-to-2
-        (:wat::core::f64::/
-          (:wat::core::f64::+
+        (:wat::core::/
+          (:wat::core::+
             (:trading::types::Candle::Momentum/williams-r m) 100.0)
           100.0)))
 
      ;; Extract + normalize the four ratio-valued scalars.
      ((roc-1 :f64)
       (:trading::encoding::round-to-2
-        (:wat::core::f64::+ 1.0
+        (:wat::core::+ 1.0
           (:trading::types::Candle::RateOfChange/roc-1 r))))
      ((roc-3 :f64)
       (:trading::encoding::round-to-2
-        (:wat::core::f64::+ 1.0
+        (:wat::core::+ 1.0
           (:trading::types::Candle::RateOfChange/roc-3 r))))
      ((roc-6 :f64)
       (:trading::encoding::round-to-2
-        (:wat::core::f64::+ 1.0
+        (:wat::core::+ 1.0
           (:trading::types::Candle::RateOfChange/roc-6 r))))
      ((roc-12 :f64)
       (:trading::encoding::round-to-2
-        (:wat::core::f64::+ 1.0
+        (:wat::core::+ 1.0
           (:trading::types::Candle::RateOfChange/roc-12 r))))
 
      ;; Thread Scales through the four scaled-linear calls.

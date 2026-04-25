@@ -69,7 +69,7 @@
         (:trading::encoding::ScaleTracker::fresh) rounded))
      ((scale :f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::f64::- 0.0 scale))
+     ((neg-scale :f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "tf-1h-trend")
@@ -102,7 +102,7 @@
         (:trading::encoding::ScaleTracker::fresh) rounded))
      ((scale :f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::f64::- 0.0 scale))
+     ((neg-scale :f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "tf-1h-ret")
@@ -133,17 +133,17 @@
 
      ;; Recompute the expected value symmetrically.
      ((five-m-ret :f64)
-      (:wat::core::f64::/
-        (:wat::core::f64::- 105.0 100.0) 105.0))
+      (:wat::core::/
+        (:wat::core::- 105.0 100.0) 105.0))
      ((align :f64)
       (:trading::encoding::round-to-4
-        (:wat::core::f64::* 1.0 five-m-ret)))
+        (:wat::core::* 1.0 five-m-ret)))
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) align))
      ((scale :f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::f64::- 0.0 scale))
+     ((neg-scale :f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "tf-5m-1h-align")

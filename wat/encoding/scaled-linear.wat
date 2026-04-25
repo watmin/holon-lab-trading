@@ -78,7 +78,7 @@
      ((scale :f64)
       (:trading::encoding::ScaleTracker::scale updated-tracker))
      ((neg-scale :f64)
-      (:wat::core::f64::- 0.0 scale))
+      (:wat::core::- 0.0 scale))
      ((bucketed-value :f64)
       (:trading::encoding::ScaleTracker::bucket value scale))
      ((fact :wat::holon::HolonAST)

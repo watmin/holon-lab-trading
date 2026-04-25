@@ -71,7 +71,7 @@
      ((gap :f64)
       (:trading::encoding::round-to-4
         (:wat::core::f64::clamp
-          (:wat::core::f64::/ gap-raw 0.05)
+          (:wat::core::/ gap-raw 0.05)
           -1.0 1.0)))
 
      ;; consecutive-up / consecutive-down — count family. Floor at 1.0
@@ -79,23 +79,23 @@
      ((consecutive-up :f64)
       (:trading::encoding::round-to-2
         (:wat::core::f64::max
-          (:wat::core::f64::+ 1.0 consecutive-up-raw) 1.0)))
+          (:wat::core::+ 1.0 consecutive-up-raw) 1.0)))
      ((consecutive-down :f64)
       (:trading::encoding::round-to-2
         (:wat::core::f64::max
-          (:wat::core::f64::+ 1.0 consecutive-down-raw) 1.0)))
+          (:wat::core::+ 1.0 consecutive-down-raw) 1.0)))
 
      ;; Range-conditional setup (matches flow.wat's pattern, default 0.0).
-     ((range :f64) (:wat::core::f64::- high low))
+     ((range :f64) (:wat::core::- high low))
      ((range-positive :bool) (:wat::core::> range 0.0))
 
      ;; body-ratio-pa: abs(close - open) / range else 0.0.
      ((abs-body :f64)
-      (:wat::core::f64::abs (:wat::core::f64::- close open)))
+      (:wat::core::f64::abs (:wat::core::- close open)))
      ((body-ratio-pa :f64)
       (:wat::core::if range-positive -> :f64
         (:trading::encoding::round-to-2
-          (:wat::core::f64::/ abs-body range))
+          (:wat::core::/ abs-body range))
         0.0))
 
      ;; upper-wick: (high - max(open, close)) / range else 0.0.
@@ -104,8 +104,8 @@
      ((upper-wick :f64)
       (:wat::core::if range-positive -> :f64
         (:trading::encoding::round-to-2
-          (:wat::core::f64::/
-            (:wat::core::f64::- high body-top) range))
+          (:wat::core::/
+            (:wat::core::- high body-top) range))
         0.0))
 
      ;; lower-wick: (min(open, close) - low) / range else 0.0.
@@ -114,8 +114,8 @@
      ((lower-wick :f64)
       (:wat::core::if range-positive -> :f64
         (:trading::encoding::round-to-2
-          (:wat::core::f64::/
-            (:wat::core::f64::- body-bottom low) range))
+          (:wat::core::/
+            (:wat::core::- body-bottom low) range))
         0.0))
 
      ;; range-ratio via plain Log (fraction-of-price family).

@@ -59,12 +59,12 @@
      ;; Cross-sub-struct compute atoms — (close - kelt-band) / close.
      ((kelt-upper-dist :f64)
       (:trading::encoding::round-to-4
-        (:wat::core::f64::/
-          (:wat::core::f64::- close kelt-upper) close)))
+        (:wat::core::/
+          (:wat::core::- close kelt-upper) close)))
      ((kelt-lower-dist :f64)
       (:trading::encoding::round-to-4
-        (:wat::core::f64::/
-          (:wat::core::f64::- close kelt-lower) close)))
+        (:wat::core::/
+          (:wat::core::- close kelt-lower) close)))
 
      ;; Thread Scales through five scaled-linear calls. bb-width
      ;; (fact[1]) uses plain Log — no Scales.

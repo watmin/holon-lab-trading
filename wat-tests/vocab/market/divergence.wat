@@ -100,7 +100,7 @@
         (:trading::encoding::ScaleTracker::fresh) 0.5))
      ((scale :f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::f64::- 0.0 scale))
+     ((neg-scale :f64) (:wat::core::- 0.0 scale))
      ((rounded :f64) (:trading::encoding::round-to-2 0.5))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind

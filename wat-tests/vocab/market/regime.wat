@@ -55,7 +55,7 @@
         (:trading::encoding::ScaleTracker::fresh) rounded))
      ((scale :f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::f64::- 0.0 scale))
+     ((neg-scale :f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "kama-er")

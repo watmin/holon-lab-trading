@@ -63,23 +63,23 @@
     -> :trading::encoding::ScaleTracker)
   (:wat::core::let*
     (((new-count :i64)
-      (:wat::core::i64::+ (:trading::encoding::ScaleTracker/count tracker) 1))
+      (:wat::core::+ (:trading::encoding::ScaleTracker/count tracker) 1))
      ((denom :i64)
       (:wat::core::if (:wat::core::>= new-count 100) -> :i64
         new-count
         100))
      ((alpha :f64)
-      (:wat::core::f64::/ 1.0 (:wat::core::i64::to-f64 denom)))
+      (:wat::core::/ 1.0 (:wat::core::i64::to-f64 denom)))
      ((abs-value :f64)
       (:wat::core::if (:wat::core::>= value 0.0) -> :f64
         value
-        (:wat::core::f64::- 0.0 value)))
+        (:wat::core::- 0.0 value)))
      ((prev-ema :f64)
       (:trading::encoding::ScaleTracker/ema-abs tracker))
      ((new-ema :f64)
-      (:wat::core::f64::+
-        (:wat::core::f64::* (:wat::core::f64::- 1.0 alpha) prev-ema)
-        (:wat::core::f64::* alpha abs-value))))
+      (:wat::core::+
+        (:wat::core::* (:wat::core::- 1.0 alpha) prev-ema)
+        (:wat::core::* alpha abs-value))))
     (:trading::encoding::ScaleTracker/new new-ema new-count)))
 
 ;; Scale — 2 × EMA, floored at 0.001, rounded to 2 decimals.
@@ -98,7 +98,7 @@
     -> :f64)
   (:wat::core::let*
     (((raw :f64)
-      (:wat::core::f64::*
+      (:wat::core::*
         (:trading::encoding::ScaleTracker::COVERAGE)
         (:trading::encoding::ScaleTracker/ema-abs tracker)))
      ((floored :f64)
@@ -118,7 +118,7 @@
   (:trading::encoding::ScaleTracker::bucket-width
     (scale :f64)
     -> :f64)
-  (:wat::core::f64::* scale (:wat::config::noise-floor)))
+  (:wat::core::* scale (:wat::config::noise-floor)))
 
 ;; bucket — round `value` to the nearest multiple of bucket-width.
 ;; Arc 012's geometric bucketing rule. Replaces blind `round-to-2`
@@ -151,5 +151,5 @@
     (:wat::core::if degenerate -> :f64
       value
       (:wat::core::let*
-        (((idx :f64) (:wat::core::f64::round (:wat::core::f64::/ value bw) 0)))
-        (:wat::core::f64::* idx bw)))))
+        (((idx :f64) (:wat::core::f64::round (:wat::core::/ value bw) 0)))
+        (:wat::core::* idx bw)))))

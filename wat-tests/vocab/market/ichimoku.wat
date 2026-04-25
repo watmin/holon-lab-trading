@@ -82,7 +82,7 @@
         (:trading::encoding::ScaleTracker::fresh) 1.0))
      ((scale :f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::f64::- 0.0 scale))
+     ((neg-scale :f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "cloud-position")
@@ -118,7 +118,7 @@
         (:trading::encoding::ScaleTracker::fresh) 1.0))
      ((scale :f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::f64::- 0.0 scale))
+     ((neg-scale :f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "cloud-position")
@@ -210,16 +210,16 @@
      ((expected-value :f64)
       (:trading::encoding::round-to-2
         (:wat::core::f64::clamp
-          (:wat::core::f64::/
-            (:wat::core::f64::- 99.5 99.0)
-            (:wat::core::f64::* 100.0 0.01))
+          (:wat::core::/
+            (:wat::core::- 99.5 99.0)
+            (:wat::core::* 100.0 0.01))
           -1.0 1.0)))
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) expected-value))
      ((scale :f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::f64::- 0.0 scale))
+     ((neg-scale :f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "tk-spread")

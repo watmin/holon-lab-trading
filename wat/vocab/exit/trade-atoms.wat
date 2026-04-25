@@ -52,8 +52,8 @@
      ;; ─── Computed values per archive ──────────────────────────
      ((excursion :f64)
       (:wat::core::f64::abs
-        (:wat::core::f64::/
-          (:wat::core::f64::- extreme entry) entry)))
+        (:wat::core::/
+          (:wat::core::- extreme entry) entry)))
 
      ;; retracement: if excursion > 0.0001, |((extreme - cur) /
      ;; (extreme - entry)).min(1.0)|; else 0.0.
@@ -61,9 +61,9 @@
       (:wat::core::if (:wat::core::> excursion 0.0001) -> :f64
         (:wat::core::f64::min
           (:wat::core::f64::abs
-            (:wat::core::f64::/
-              (:wat::core::f64::- extreme current-price)
-              (:wat::core::f64::- extreme entry)))
+            (:wat::core::/
+              (:wat::core::- extreme current-price)
+              (:wat::core::- extreme entry)))
           1.0)
         0.0))
 
@@ -73,14 +73,14 @@
       (:wat::core::find-last-index price-history
         (:wat::core::lambda ((p :f64) -> :bool)
           (:wat::core::<
-            (:wat::core::f64::abs (:wat::core::f64::- p extreme))
+            (:wat::core::f64::abs (:wat::core::- p extreme))
             0.0000000001))))
      ((peak-age :f64)
       (:wat::core::match peak-idx-opt -> :f64
         ((Some i)
          (:wat::core::i64::to-f64
-           (:wat::core::i64::-
-             (:wat::core::i64::- (:wat::core::length price-history) 1)
+           (:wat::core::-
+             (:wat::core::- (:wat::core::length price-history) 1)
              i)))
         (:None 0.0)))
 
@@ -90,20 +90,20 @@
      ((initial-risk :f64) stop-distance)
      ((r-multiple :f64)
       (:wat::core::if (:wat::core::> initial-risk 0.0001) -> :f64
-        (:wat::core::f64::/ excursion initial-risk)
+        (:wat::core::/ excursion initial-risk)
         0.0))
 
      ;; remaining-profit = (excursion - retracement * excursion).max(0)
      ((remaining-profit :f64)
       (:wat::core::f64::max
-        (:wat::core::f64::-
+        (:wat::core::-
           excursion
-          (:wat::core::f64::* retracement excursion))
+          (:wat::core::* retracement excursion))
         0.0))
 
      ((heat :f64)
       (:wat::core::if (:wat::core::> remaining-profit 0.0001) -> :f64
-        (:wat::core::f64::/ trail-distance remaining-profit)
+        (:wat::core::/ trail-distance remaining-profit)
         1.0))
 
      ;; trail-cushion: if excursion > 0.0001,
@@ -111,11 +111,11 @@
      ((trail-cushion :f64)
       (:wat::core::if (:wat::core::> excursion 0.0001) -> :f64
         (:wat::core::f64::min
-          (:wat::core::f64::/
+          (:wat::core::/
             (:wat::core::f64::abs
-              (:wat::core::f64::- current-price trail-level))
+              (:wat::core::- current-price trail-level))
             (:wat::core::f64::abs
-              (:wat::core::f64::- extreme entry)))
+              (:wat::core::- extreme entry)))
           1.0)
         0.0))
 
@@ -162,14 +162,14 @@
            ((sum :f64)
             (:wat::core::foldl closes 0.0
               (:wat::core::lambda ((acc :f64) (x :f64) -> :f64)
-                (:wat::core::f64::+ acc x))))
+                (:wat::core::+ acc x))))
            ((avg :f64)
-            (:wat::core::f64::/
+            (:wat::core::/
               sum
               (:wat::core::i64::to-f64
                 (:wat::core::length phase-history)))))
-          (:wat::core::f64::/
-            (:wat::core::f64::- entry avg) entry))))
+          (:wat::core::/
+            (:wat::core::- entry avg) entry))))
 
      ;; ─── Encode the 13 atoms (archive order) ──────────────────
 
