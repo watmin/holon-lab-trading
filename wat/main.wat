@@ -35,6 +35,7 @@
 ;; arc 026 — IndicatorBank port (in flight; slice-by-slice).
 (:wat::load-file! "encoding/indicator-bank/primitives.wat")
 (:wat::load-file! "encoding/indicator-bank/oscillators.wat")
+(:wat::load-file! "encoding/indicator-bank/trend.wat")
 
 ;; arc 025 — paper lifecycle simulator (yardstick).
 (:wat::load-file! "sim/types.wat")

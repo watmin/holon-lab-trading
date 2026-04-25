@@ -168,7 +168,25 @@ Five indicators: RSI, Stochastic (k + d), CCI, MFI, Williams %R.
 
 ## Slice 3 — Trend (SMA + MACD + DMI/ADX)
 
-**Status: ready (after slice 1).**
+**Status: shipped 2026-04-25.** ~340 LOC delivered as
+`wat/encoding/indicator-bank/trend.wat` — MACD (three EmaState
+fast/slow/signal) + DMI/ADX (four WilderState plus_dm/minus_dm/
+tr/adx + prev high/low/close). 12 tests in
+`wat-tests/encoding/indicator-bank/trend.wat` (matching budget).
+Lab wat tests 210 → 222.
+
+**SMA20/50/200 not separately shipped** per BACKLOG — they're three
+SmaState instances at different periods, held as IndicatorBank
+fields in slice 12. SmaState mechanics are tested by slice 1.
+
+**Slice 2's WilderState refactor pays off.** DMI's four Wilder
+instances compose cleanly; no extra factoring needed.
+
+**No substrate uplifts surfaced.** Existing primitives covered:
+EmaState/WilderState/RingBuffer (slice 1 + arc 025), polymorphic
+arithmetic (arc 050), `f64::max`/`f64::abs`, `:wat::core::and`/`or`/
+`not`. The DMI's chained dependency (TR-smoother gates DX-smoother
+gates ADX-smoother) all expressed via let* + nested if branches.
 
 Three families:
 - SMA20/50/200 — three SmaState instances at different periods.
