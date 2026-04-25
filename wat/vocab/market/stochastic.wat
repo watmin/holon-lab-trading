@@ -14,11 +14,12 @@
 ;; (D < M for Divergence < Momentum). Emission order matches
 ;; archive semantic grouping (k, d, spread, cross-delta).
 ;;
-;; The stoch-cross-delta atom inline-clamps its raw value to
-;; [-1, 1] via nested if — archive uses .max(-1).min(1). Single
-;; use in this module; stdlib-as-blueprint keeps it inline until
-;; a second clamp caller surfaces (then extract to
-;; shared/helpers.wat per arc 006's conditional-emission pattern).
+;; The stoch-cross-delta atom calls `:wat::core::f64::clamp` —
+;; substrate primitive shipped via wat-rs arc 046 (lab arc 015
+;; surfaced the gap during ichimoku port; the framing question
+;; "userland or substrate?" landed on substrate, every wat user
+;; needs it). Migrated from arc 009's original inline two-arm-if
+;; in the same arc 015 sweep.
 
 (:wat::load-file! "../../types/candle.wat")
 (:wat::load-file! "../../encoding/scale-tracker.wat")
@@ -46,17 +47,12 @@
       (:trading::encoding::round-to-2
         (:wat::core::f64::- k-norm d-norm)))
 
-     ;; Inline clamp to [-1, 1] for the cross-delta.
+     ;; Clamp the cross-delta to [-1, 1] via substrate f64::clamp.
      ((raw-delta :f64)
       (:trading::types::Candle::Divergence/stoch-cross-delta d))
-     ((clamped-delta :f64)
-      (:wat::core::if (:wat::core::>= raw-delta 1.0) -> :f64
-        1.0
-        (:wat::core::if (:wat::core::<= raw-delta -1.0) -> :f64
-          (:wat::core::f64::- 0.0 1.0)
-          raw-delta)))
      ((stoch-cross-delta :f64)
-      (:trading::encoding::round-to-2 clamped-delta))
+      (:trading::encoding::round-to-2
+        (:wat::core::f64::clamp raw-delta -1.0 1.0)))
 
      ;; Thread Scales through four scaled-linear calls.
      ((e1 :trading::encoding::ScaleEmission)

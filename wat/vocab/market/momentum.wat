@@ -87,15 +87,13 @@
         (:wat::core::f64::/
           (:wat::core::f64::- plus-di minus-di) 100.0)))
 
-     ;; atr-ratio: floor at 0.001, then round-to-4 (preserves the
-     ;; floor; round-to-2 would collapse to 0.00). Encoded via plain
-     ;; Log with asymmetric bounds (0.001, 0.5).
-     ((atr-ratio-floored :f64)
-      (:wat::core::if (:wat::core::>= atr-ratio-raw 0.001) -> :f64
-        atr-ratio-raw
-        0.001))
+     ;; atr-ratio: floor at 0.001 via substrate f64::max (wat-rs
+     ;; arc 046), then round-to-4 (preserves the floor; round-to-2
+     ;; would collapse to 0.00). Encoded via plain Log with
+     ;; asymmetric bounds (0.001, 0.5).
      ((atr-ratio :f64)
-      (:trading::encoding::round-to-4 atr-ratio-floored))
+      (:trading::encoding::round-to-4
+        (:wat::core::f64::max atr-ratio-raw 0.001)))
 
      ;; Thread Scales through five scaled-linear calls. atr-ratio
      ;; (fact[5]) uses plain Log — no Scales involvement.

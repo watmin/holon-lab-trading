@@ -36,6 +36,7 @@
 ;;   arc 011 — market/timeframe (first Ohlcv read in a vocab)
 ;;   arc 013 — market/momentum (K=4 sub-structs, first plain-Log caller)
 ;;   arc 014 — market/flow (K=3, log-bound Thermometer for missing exp)
+;;   arc 015 — market/ichimoku (K=3, clamp extracted to shared/helpers)
 (:wat::load-file! "vocab/shared/helpers.wat")
 (:wat::load-file! "vocab/shared/time.wat")
 (:wat::load-file! "vocab/exit/time.wat")
@@ -48,6 +49,7 @@
 (:wat::load-file! "vocab/market/timeframe.wat")
 (:wat::load-file! "vocab/market/momentum.wat")
 (:wat::load-file! "vocab/market/flow.wat")
+(:wat::load-file! "vocab/market/ichimoku.wat")
 
 (:wat::core::define (:user::main
                      (stdin  :wat::io::IOReader)

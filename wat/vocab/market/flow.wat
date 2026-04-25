@@ -14,15 +14,15 @@
 ;; Ohlcv + Persistence). Signature alphabetical-by-leaf per arc
 ;; 011: M < O < P.
 ;;
-;; SUBSTRATE-GAP / ALGEBRAIC-EQUIVALENCE WORKAROUND. The archive
-;; encodes obv-slope and volume-ratio as `Log(exp(x))` chains —
-;; lift signed slope to positive via exp, encode as Log. wat-rs's
-;; :wat::std::math has ln/log/sin/cos/pi but no exp. Algebraic
-;; equivalence: `Log(exp(x), 1/N, N)` ≡ `Thermometer(x, -ln(N),
-;; ln(N))`. We encode the signed slope directly via Thermometer at
-;; log-bounds — semantically identical, zero substrate cost. N=10
-;; chosen to match arc 010 regime's variance-ratio precedent;
-;; ships as best-current-estimate, empirical refinement deferred.
+;; obv-slope and volume-ratio use the natural form
+;; `(ReciprocalLog 10.0 (exp x))` — exp lifts the signed slope to
+;; (0, ∞), ReciprocalLog 10 encodes via reciprocal bounds (0.1, 10).
+;; Originally arc 014 shipped these as `Thermometer x (-ln 10)
+;; (ln 10)` — algebraic equivalence to skip the missing exp
+;; primitive. wat-rs arc 046 added `:wat::std::math::exp`; arc 015
+;; sweeps the call sites to the natural form. N=10 matches arc 010
+;; regime's variance-ratio precedent (coarse-near-1, fine-across-
+;; range); empirical refinement deferred.
 ;;
 ;; RANGE-CONDITIONAL PATTERN. Three atoms (buying-pressure,
 ;; selling-pressure, body-ratio) guard `(field) / range` against
@@ -31,9 +31,11 @@
 ;; Different defaults (0.5 / 0.5 / 0.0) fight a shared helper;
 ;; stay inline per stdlib-as-blueprint.
 ;;
-;; abs(close - open) — single inline use for body-ratio. Two-arm
-;; if matches arc 011's signum + arc 009's clamp shape. Extract to
-;; shared/helpers.wat if a third caller surfaces.
+;; abs(close - open) — uses substrate `:wat::core::f64::abs`
+;; (wat-rs arc 046). Originally inline two-arm `if` here; the lab
+;; clamp-extraction conversation in arc 015 promoted the whole
+;; numeric basics family (max/min/abs/clamp + math::exp) to the
+;; substrate.
 
 (:wat::load-file! "../../types/candle.wat")
 (:wat::load-file! "../../types/ohlcv.wat")
@@ -61,13 +63,6 @@
      ((low :f64) (:trading::types::Ohlcv/low o))
      ((close :f64) (:trading::types::Ohlcv/close o))
 
-     ;; Log-bound Thermometer bounds (-ln 10, ln 10) ≈ (-2.3, 2.3).
-     ;; Equivalent to ReciprocalLog 10 of exp(value); the algebraic
-     ;; equivalence lets us skip exp (missing from wat-rs) by going
-     ;; straight to the Thermometer at log-bounds.
-     ((ln-N :f64) (:wat::std::math::ln 10.0))
-     ((neg-ln-N :f64) (:wat::core::f64::- 0.0 ln-N))
-
      ;; vwap-distance — direct scaled-linear at round-to-4.
      ((vwap-distance :f64)
       (:trading::encoding::round-to-4 vwap-distance-raw))
@@ -92,24 +87,24 @@
             (:wat::core::f64::- high close) range))
         0.5))
 
-     ;; body-ratio: abs(close - open) / range else 0.0.
-     ;; abs inline — single use, two-arm if (signum/clamp shape).
-     ((body :f64) (:wat::core::f64::- close open))
+     ;; body-ratio: abs(close - open) / range else 0.0. abs via
+     ;; substrate f64::abs (wat-rs arc 046).
      ((abs-body :f64)
-      (:wat::core::if (:wat::core::>= body 0.0) -> :f64
-        body
-        (:wat::core::f64::- 0.0 body)))
+      (:wat::core::f64::abs (:wat::core::f64::- close open)))
      ((body-ratio :f64)
       (:wat::core::if range-positive -> :f64
         (:trading::encoding::round-to-2
           (:wat::core::f64::/ abs-body range))
         0.0))
 
-     ;; obv-slope via log-bound Thermometer — Bind directly, no scales.
+     ;; obv-slope via ReciprocalLog 10 of exp(slope) — Bind directly,
+     ;; no scales. exp lifts signed slope to (0, ∞); ReciprocalLog 10
+     ;; encodes via reciprocal bounds (0.1, 10).
      ((h1 :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "obv-slope")
-        (:wat::holon::Thermometer obv-slope-12 neg-ln-N ln-N)))
+        (:wat::holon::ReciprocalLog 10.0
+          (:wat::std::math::exp obv-slope-12))))
 
      ;; vwap-distance via scaled-linear.
      ((e2 :trading::encoding::ScaleEmission)
@@ -129,11 +124,13 @@
      ((h4 :wat::holon::HolonAST) (:wat::core::first e4))
      ((s4 :trading::encoding::Scales) (:wat::core::second e4))
 
-     ;; volume-ratio via log-bound Thermometer — same shape as obv-slope.
+     ;; volume-ratio via ReciprocalLog 10 of exp(volume-accel) —
+     ;; same shape as obv-slope.
      ((h5 :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "volume-ratio")
-        (:wat::holon::Thermometer volume-accel neg-ln-N ln-N)))
+        (:wat::holon::ReciprocalLog 10.0
+          (:wat::std::math::exp volume-accel))))
 
      ;; body-ratio via scaled-linear.
      ((e6 :trading::encoding::ScaleEmission)

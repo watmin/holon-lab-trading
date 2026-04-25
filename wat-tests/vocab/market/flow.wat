@@ -55,11 +55,11 @@
       (:wat::core::length holons)
       6)))
 
-;; ─── 2. obv-slope log-bound shape — fact[0], algebraic-equivalence path
+;; ─── 2. obv-slope log-bound shape — fact[0], ReciprocalLog ∘ exp
 
 (:deftest :trading::test::vocab::market::flow::test-obv-slope-log-bound-shape
   (:wat::core::let*
-    (;; obv-slope-12 = 0.5 → Thermometer 0.5 (-ln 10) (ln 10)
+    (;; obv-slope-12 = 0.5 → ReciprocalLog 10 (exp 0.5)
      ((m :trading::types::Candle::Momentum)
       (:test::fresh-momentum 0.5 0.0))
      ((o :trading::types::Ohlcv) (:test::fresh-ohlcv 100.0 105.0 95.0 102.0))
@@ -75,12 +75,11 @@
         ((Some h) h)
         (:None (:wat::holon::Atom "unreachable"))))
 
-     ((ln-N :f64) (:wat::std::math::ln 10.0))
-     ((neg-ln-N :f64) (:wat::core::f64::- 0.0 ln-N))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "obv-slope")
-        (:wat::holon::Thermometer 0.5 neg-ln-N ln-N))))
+        (:wat::holon::ReciprocalLog 10.0
+          (:wat::std::math::exp 0.5)))))
     (:wat::test::assert-eq
       (:wat::holon::coincident? actual expected)
       true)))
@@ -197,7 +196,7 @@
 
 (:deftest :trading::test::vocab::market::flow::test-volume-ratio-log-bound-shape
   (:wat::core::let*
-    (;; volume-accel = -0.3 → Thermometer -0.3 (-ln 10) (ln 10)
+    (;; volume-accel = -0.3 → ReciprocalLog 10 (exp -0.3)
      ((m :trading::types::Candle::Momentum)
       (:test::fresh-momentum 0.0 -0.3))
      ((o :trading::types::Ohlcv) (:test::fresh-ohlcv 100.0 105.0 95.0 102.0))
@@ -213,12 +212,11 @@
         ((Some h) h)
         (:None (:wat::holon::Atom "unreachable"))))
 
-     ((ln-N :f64) (:wat::std::math::ln 10.0))
-     ((neg-ln-N :f64) (:wat::core::f64::- 0.0 ln-N))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "volume-ratio")
-        (:wat::holon::Thermometer -0.3 neg-ln-N ln-N))))
+        (:wat::holon::ReciprocalLog 10.0
+          (:wat::std::math::exp -0.3)))))
     (:wat::test::assert-eq
       (:wat::holon::coincident? actual expected)
       true)))

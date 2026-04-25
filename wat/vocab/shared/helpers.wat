@@ -46,3 +46,12 @@
   (:wat::holon::Bind
     (:wat::holon::Atom name)
     child))
+
+;; ─── basic numeric ops live in the substrate ───────────────────────
+;;
+;; `f64::max`, `f64::min`, `f64::abs`, `f64::clamp`, and `math::exp`
+;; ship at `:wat::core::f64::*` and `:wat::std::math::*` per wat-rs
+;; arc 046. Lab arc 015 surfaced the gap (it was about to ship
+;; `clamp` and `f64-max` here as userland helpers); the framing
+;; question caught the reach. Use the substrate forms directly at
+;; the callsite rather than wrapping them in lab-userland.

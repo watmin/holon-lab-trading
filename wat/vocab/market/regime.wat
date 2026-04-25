@@ -50,15 +50,13 @@
         (:wat::core::f64::/
           (:trading::types::Candle::Regime/dfa-alpha r) 2.0)))
 
-     ;; variance-ratio — one-sided floor at 0.001 then round.
+     ;; variance-ratio — one-sided floor at 0.001 via substrate
+     ;; f64::max (wat-rs arc 046), then round.
      ((vr-raw :f64)
       (:trading::types::Candle::Regime/variance-ratio r))
-     ((vr-floored :f64)
-      (:wat::core::if (:wat::core::>= vr-raw 0.001) -> :f64
-        vr-raw
-        0.001))
      ((variance-ratio :f64)
-      (:trading::encoding::round-to-2 vr-floored))
+      (:trading::encoding::round-to-2
+        (:wat::core::f64::max vr-raw 0.001)))
 
      ((entropy-rate :f64)
       (:trading::encoding::round-to-2
