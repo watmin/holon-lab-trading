@@ -238,6 +238,92 @@ wat-rs's own `:wat::*` type declarations — currently `:wat::holon::CapacityExc
 
 ---
 
+## INSCRIPTION — 2026-04-24 — Enum value construction + match pattern syntax pinned
+
+This proposal locked enum DECLARATIONS in 2026-04-18 and noted "polymorphism via enum wrapping" without pinning construction or pattern-match syntax for user enums. Only built-in `:Option<T>` and `:Result<T,E>` shipped with value support — the 2026-04-19 FOUNDATION-CHANGELOG entry called Option "the sole built-in enum." User enums via `(:wat::core::enum)` were declarable but uninstantiable. Wat-rs arc 048 (2026-04-24) closes the gap; this addendum captures what shipped.
+
+### Construction — `:Enum::Variant`, mirrors Rust
+
+**Unit variant** — bare keyword evaluates directly to the variant value:
+
+```scheme
+(:wat::core::enum :trading::types::PhaseLabel :Valley :Peak :Transition)
+
+(:wat::core::define (:my::current -> :trading::types::PhaseLabel)
+  :trading::types::PhaseLabel::Valley)
+```
+
+The keyword `:Enum::Variant` resolves through a substrate-side `unit_variants` map populated at startup; eval returns `Value::Enum { type_path, variant_name, fields: [] }` directly. Mirrors `:None`'s shortcut.
+
+**Tagged variant** — invocation form, fields positional:
+
+```scheme
+(:wat::core::enum :my::market::Event
+  (Candle  (open :f64) (close :f64))
+  (Deposit (amount :f64))
+  :Nothing)
+
+(:wat::core::define (:my::an-event -> :my::market::Event)
+  (:my::market::Event::Candle 100.0 105.0))
+```
+
+Each tagged variant gets an auto-synthesized `Function` entry at keyword path `:Enum::Variant` whose body is `(:wat::core::variant :Enum :Variant p1 p2 ... pn)`. The internal `:wat::core::variant` primitive is never user-facing — same role as `:wat::core::struct-new`.
+
+The `::` separator is canonical Rust namespace syntax (`MyEnum::Variant`); embodying the host language. Variants are PascalCase, matching Rust convention + built-in `Some`/`None`/`Ok`/`Err`.
+
+### Pattern matching — `:wat::core::match` extended
+
+Match generalizes from Option/Result to user enums uniformly:
+
+```scheme
+(:wat::core::define
+  (:my::summary (e :my::market::Event) -> :String)
+  (:wat::core::match e -> :String
+    ((:my::market::Event::Candle  o c)  (:wat::core::f64::to-string c))
+    ((:my::market::Event::Deposit amt)  "deposit")
+    (:my::market::Event::Nothing        "nothing")))
+```
+
+- Tagged-variant arm: `((:Enum::Variant binder1 binder2 ...) body)` — head is the full-path constructor; positional binders bind to the variant's fields, scoped to the body.
+- Unit-variant arm: `(:Enum::Variant body)` — bare keyword pattern, no binders.
+- Wildcard `_` covers any remaining variants.
+
+The match expression's TYPE is the unified type of all arm bodies (declared via `-> :T` after the scrutinee), NOT the scrutinee's enum type.
+
+The type checker enforces:
+- **Exhaustiveness**: every variant of the scrutinee's enum must be covered (or include a `_` arm). The diagnostic names exactly which variants are uncovered.
+- **Variant belongs to scrutinee enum**: pattern `(:OtherEnum::X ...)` on a `:Enum`-typed scrutinee errors clearly.
+- **Binder arity**: tagged-variant arms must provide one binder per declared field.
+- **Tagged-vs-unit shape**: a unit-variant pattern on a tagged variant (or vice versa) errors clearly.
+
+### Runtime representation
+
+At the Rust layer, user-enum instances live as `Value::Enum(Arc<EnumValue>)` with:
+
+```rust
+struct EnumValue {
+    type_path: String,       // ":trading::types::PhaseLabel"
+    variant_name: String,    // "Valley"
+    fields: Vec<Value>,      // empty for unit variants; positional for tagged
+}
+```
+
+One generic `Value::Enum` variant covers every user-declared enum. Built-in `:Option<T>` (`Value::Option`) and `:Result<T,E>` (`Value::Result`) keep their dedicated variants — substantial sweep cost to migrate them with no semantic gain. **Two representations coexist by design.**
+
+### What this inscription does NOT add
+
+- **Variants with named fields** (Rust's struct-style variants `MyEnum::V { x: u32 }`). 058-030's grammar uses tuple-style only; arc 048 ships positional construction. Add when a caller surfaces.
+- **Generic user enums.** Only `:Option<T>` and `:Result<T,E>` are parametric; user enums are monomorphic. Open its own arc if needed.
+- **Migrating Option/Result to `Value::Enum`.** Two representations coexist (same as Tuple-vs-Vec accessor split).
+- **Enum-value introspection** (`(:enum-of value)` to recover the type). Add only if a real caller needs it.
+
+### Implementation Reference
+
+- wat-rs commit (2026-04-24) — `Value::Enum`, `EnumValue`, `:wat::core::variant` primitive, `register_enum_methods` auto-synthesis, `SymbolTable.unit_variants`, `CheckEnv.unit_variant_types`, match-pattern + exhaustiveness extensions for `MatchShape::Enum`
+- `tests/wat_user_enums.rs` — 8 end-to-end cases covering unit + tagged construction, mixed match arms, exhaustiveness diagnostics, cross-enum rejection, arity mismatch, and tagged-vs-unit shape mismatch
+
+---
+
 ## The Candidate
 
 A **keyword-path-based type system** for the wat language, providing:

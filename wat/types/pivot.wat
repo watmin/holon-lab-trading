@@ -13,10 +13,11 @@
 ;; machinery that drives them.
 
 ;; What phase the market is in at this candle.
-(:wat::core::enum :trading::types::PhaseLabel :valley :peak :transition)
+;; Variants PascalCase per arc 048 (host-language Rust convention).
+(:wat::core::enum :trading::types::PhaseLabel :Valley :Peak :Transition)
 
 ;; Direction of movement within a phase.
-(:wat::core::enum :trading::types::PhaseDirection :up :down :none)
+(:wat::core::enum :trading::types::PhaseDirection :Up :Down :None)
 
 ;; A completed phase — appended to history when a phase closes.
 ;; Rust `usize` candle indices → wat `:i64`.
