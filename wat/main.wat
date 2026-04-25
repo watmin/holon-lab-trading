@@ -56,6 +56,7 @@
 (:wat::load-file! "vocab/market/keltner.wat")
 (:wat::load-file! "vocab/market/price-action.wat")
 (:wat::load-file! "vocab/market/standard.wat")
+(:wat::load-file! "vocab/exit/phase.wat")
 
 (:wat::core::define (:user::main
                      (stdin  :wat::io::IOReader)
