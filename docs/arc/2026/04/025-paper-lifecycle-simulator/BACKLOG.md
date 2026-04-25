@@ -9,6 +9,8 @@ INSCRIPTION + cross-link sixth.
 Each slice is independently mergeable. Slice 4 is the load-bearing
 chunk; slices 1–3 enable it; slices 5–6 close it.
 
+**See also:** [`slice-4-5-design-questions.md`](slice-4-5-design-questions.md) — Q10–Q14 resolved 2026-04-25 (Predictor stateless w.r.t. position, thinker emits surfaces in label-basis, two v1 thinkers `always-up-thinker` + `sma-cross-thinker`, slice 5 smoke-only, `Option<Paper>` unread in v1). Pins design choices that affect slice 4 (engine) and slice 5 (smoke). Read alongside DESIGN.md's Q1–Q9.
+
 **Arc-level status (2026-04-25): slices 1-4 shipped.** Arc 026
 (IndicatorBank port) closed at INSCRIPTION earlier today; the
 enriched `:trading::types::Candle` is produceable per tick via

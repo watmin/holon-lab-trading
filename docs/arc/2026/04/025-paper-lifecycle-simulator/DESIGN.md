@@ -282,6 +282,13 @@ owns lifecycle, gates 1-3, and the trail-back-fill at resolution.
 
 ## Decisions resolved
 
+**Q1–Q9 below.** Q10–Q14 resolved later (mid-slice-5 design pause)
+and live in their own doc:
+[`slice-4-5-design-questions.md`](slice-4-5-design-questions.md) —
+corner→Action map, surface basis, v1 thinker vocabularies, slice 5
+test scope, `Option<Paper>` use. Read both for the full design
+ledger.
+
 ### Q1 — Pull PhaseState forward, or use a placeholder?
 
 **Forward.** A placeholder phase-trigger ("every K candles") would
