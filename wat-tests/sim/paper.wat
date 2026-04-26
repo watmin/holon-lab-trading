@@ -255,10 +255,10 @@
             (:test::placeholder-surface)
             (:wat::core::vec :trading::sim::LabeledTrigger)))))
      ((label :wat::holon::HolonAST)
-      (:trading::sim::Outcome/paper-label first-outcome))
-     ;; Confirm the label is a real HolonAST (cosines > 0 against itself).
-     ((self-cos :f64) (:wat::holon::cosine label label)))
-    (:wat::test::assert-eq self-cos 1.0)))
+      (:trading::sim::Outcome/paper-label first-outcome)))
+    ;; Confirm the label is a real HolonAST — coincides with itself
+    ;; in HD space (geometry-aware equality, not f64 exact match).
+    (:wat::test::assert-coincident label label)))
 
 
 ;; ─── Predictor swap changes the aggregate (Ch.55 seam works) ──────

@@ -171,10 +171,11 @@
 ;; holon of exactly that shape.
 
 (:deftest :trading::test::encoding::rhythm::test-short-window-shape
-  ;; The <4 fallback uses the Little Schemer's '() lifted into an
-  ;; Atom and bundled as a single-element sentinel (see
-  ;; rhythm.wat). Hand-build the matching shape and confirm
-  ;; structural coincidence.
+  ;; Per arc 057, the <4 fallback uses a named keyword sentinel
+  ;; (`:short-window-sentinel`) instead of `(quote ())` — empty
+  ;; lists lower to zero-vector empty Bundles, which die under
+  ;; Bind. Hand-build the matching shape with the same sentinel
+  ;; and confirm geometric coincidence.
   (:wat::core::let*
     (((values :Vec<f64>) (:wat::core::vec :f64 0.5 0.6))
      ((r :wat::holon::BundleResult)
@@ -187,13 +188,11 @@
      ((r-sentinel :wat::holon::BundleResult)
       (:wat::holon::Bundle
         (:wat::core::vec :wat::holon::HolonAST
-          (:wat::holon::Atom (:wat::core::quote ())))))
+          (:wat::holon::Atom (:wat::core::quote :short-window-sentinel)))))
      ((sentinel :wat::holon::HolonAST)
       (:wat::core::match r-sentinel -> :wat::holon::HolonAST
         ((Ok h)  h)
         ((Err _) (:wat::holon::Atom "unreachable"))))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind (:wat::holon::Atom "rsi") sentinel)))
-    (:wat::test::assert-eq
-      (:wat::holon::coincident? actual expected)
-      true)))
+    (:wat::test::assert-coincident actual expected)))

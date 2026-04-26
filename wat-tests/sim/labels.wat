@@ -13,12 +13,9 @@
 ;; ─── Self-cosine — every corner is 1.0 against itself ────────────
 
 (:deftest :trading::test::sim::labels::test-corner-self-cosine
-  (:wat::core::let*
-    (((cos-self :f64)
-      (:wat::holon::cosine
-        (:trading::sim::corner-grace-up)
-        (:trading::sim::corner-grace-up))))
-    (:wat::test::assert-eq cos-self 1.0)))
+  (:wat::test::assert-coincident
+    (:trading::sim::corner-grace-up)
+    (:trading::sim::corner-grace-up)))
 
 
 ;; ─── Magnitude — paper-label near corner-grace-up cosines higher
@@ -60,9 +57,8 @@
 (:deftest :trading::test::sim::labels::test-paper-label-deterministic
   (:wat::core::let*
     (((a :wat::holon::HolonAST) (:trading::sim::paper-label 0.02 -0.01))
-     ((b :wat::holon::HolonAST) (:trading::sim::paper-label 0.02 -0.01))
-     ((cos-ab :f64) (:wat::holon::cosine a b)))
-    (:wat::test::assert-eq cos-ab 1.0)))
+     ((b :wat::holon::HolonAST) (:trading::sim::paper-label 0.02 -0.01)))
+    (:wat::test::assert-coincident a b)))
 
 
 ;; ─── Basis atoms — distinct ───────────────────────────────────────
@@ -86,7 +82,6 @@
         (:wat::core::vec :wat::holon::HolonAST
           (:wat::holon::Atom (:wat::core::quote :a))
           (:wat::holon::Atom (:wat::core::quote :b)))))
-     ((forced :wat::holon::HolonAST) (:trading::sim::force bundled))
-     ;; Round-trip — cosine forced AST against itself.
-     ((self-cos :f64) (:wat::holon::cosine forced forced)))
-    (:wat::test::assert-eq self-cos 1.0)))
+     ((forced :wat::holon::HolonAST) (:trading::sim::force bundled)))
+    ;; Round-trip — same AST coincides with itself in HD space.
+    (:wat::test::assert-coincident forced forced)))

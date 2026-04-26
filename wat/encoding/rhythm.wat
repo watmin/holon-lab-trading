@@ -273,15 +273,17 @@
      ((len :i64) (:wat::core::length trimmed)))
     (:wat::core::if (:wat::core::< len 4)
                     -> :wat::holon::BundleResult
-      ;; Short-window fallback. The vector-layer bundle primitive (holon-rs)
-      ;; panics on empty input; we lift Lisp's '() — the Little Schemer's null
-      ;; value — into an Atom and bundle that as a single-element sentinel.
+      ;; Short-window fallback. Per arc 057's quote-all-the-way-down,
+      ;; `(quote ())` lowers to an empty Bundle (algebra's identity
+      ;; element = zero vector) which dies under Bind composition. Use
+      ;; a named keyword sentinel instead — Symbol leaf has its own
+      ;; identity vector and composes cleanly under Bind.
       (:wat::core::let*
         (((empty-bundle :wat::holon::HolonAST)
           (:wat::core::try
             (:wat::holon::Bundle
               (:wat::core::vec :wat::holon::HolonAST
-                (:wat::holon::Atom (:wat::core::quote ())))))))
+                (:wat::holon::Atom (:wat::core::quote :short-window-sentinel)))))))
         (Ok
           (:wat::holon::Bind (:wat::holon::Atom name) empty-bundle)))
       ;; Normal path: holons → trigrams → pairs → bundle
