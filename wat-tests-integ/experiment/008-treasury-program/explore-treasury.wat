@@ -26,14 +26,24 @@
    ;; final State at shutdown so callers can verify counts via
    ;; join-result. Two fields for T3 — placeholder counts that prove
    ;; both reply-bearing and fire-and-forget variants update state.
+   ;;
+   ;; T1-T4a established the SHAPE with two placeholder counters.
+   ;; T5 starts adding real Treasury fields alongside — `last-price`
+   ;; tracks the most recent Tick. Future fields land here as the
+   ;; Treasury domain fills in: open-papers, treasury-balance, etc.
+   ;;
+   ;; State::fresh absorbs the new field — existing deftests that
+   ;; only check counters keep working unchanged.
    (:wat::core::struct :exp::State
      (tick-count :i64)
-     (ping-count :i64))
+     (ping-count :i64)
+     (last-price :Option<f64>))
 
-   ;; Convenience constructor — fresh State has zero counts.
+   ;; Convenience constructor — fresh State has zero counts and no
+   ;; observed price yet (:None until the first Tick).
    (:wat::core::define
      (:exp::State::fresh -> :exp::State)
-     (:exp::State/new 0 0))
+     (:exp::State/new 0 0 :None))
 
    ;; Reply channel — for T1 the worker only needs to ack receipt.
    ;; T4+ will swap () for real Verdict / PositionReceipt types.
@@ -119,11 +129,16 @@
            (((_ack :wat::kernel::Sent) (:wat::kernel::send reply-tx ())))
            (:exp::State/new
              (:exp::State/tick-count state)
-             (:wat::core::+ (:exp::State/ping-count state) 1))))
-       ((:exp::Request::Tick _price)
+             (:wat::core::+ (:exp::State/ping-count state) 1)
+             (:exp::State/last-price state))))
+       ;; T5: Tick now does real work — store the price as last-price
+       ;; alongside bumping tick-count. This is the first placeholder
+       ;; field that became domain.
+       ((:exp::Request::Tick price)
          (:exp::State/new
            (:wat::core::+ (:exp::State/tick-count state) 1)
-           (:exp::State/ping-count state)))
+           (:exp::State/ping-count state)
+           (Some price)))
        ((:exp::Request::Snapshot reply-tx)
          (:wat::core::let*
            (((_send :wat::kernel::Sent) (:wat::kernel::send reply-tx state)))
@@ -400,6 +415,88 @@
                 (:wat::core::if (:wat::core::= pc 1) -> :()
                   ()
                   (:wat::test::assert-eq "snap2 ping != 1" ""))))
+            (:None (:wat::test::assert-eq "no snap2" "")))))
+        ()))
+
+     ((_join :exp::State) (:wat::kernel::join driver)))
+    (:wat::test::assert-eq true true)))
+
+
+;; ─── T5 — first real domain field: last-price ─────────────────
+;;
+;; Tick handler now meaningfully uses its `price` arg — stores it as
+;; the State's `last-price` field. Send three Ticks at distinct prices,
+;; Snapshot in between, verify last-price tracks the most recent.
+;;
+;; This is the first placeholder-to-real transition: counters stay for
+;; the existing assertions, but a real Treasury field lives alongside.
+;; T6+ continues the pattern — replace placeholder fields with real
+;; ones, replace placeholder verbs with Treasury verbs.
+
+(:deftest :exp::t5-last-price-tracking
+  (:wat::core::let*
+    (((spawn :exp::Spawn) (:exp::Service 1))
+     ((pool :exp::ReqTxPool) (:wat::core::first spawn))
+     ((driver :wat::kernel::ProgramHandle<exp::State>) (:wat::core::second spawn))
+
+     ((_inner :())
+      (:wat::core::let*
+        (((req-tx :exp::ReqTx) (:wat::kernel::HandlePool::pop pool))
+         ((_finish :()) (:wat::kernel::HandlePool::finish pool))
+
+         ((snap-pair :wat::kernel::QueuePair<exp::State>)
+          (:wat::kernel::make-bounded-queue :exp::State 1))
+         ((snap-tx :wat::kernel::QueueSender<exp::State>)
+          (:wat::core::first snap-pair))
+         ((snap-rx :wat::kernel::QueueReceiver<exp::State>)
+          (:wat::core::second snap-pair))
+
+         ;; Pre-Tick: Snapshot should reveal last-price = :None.
+         ((_g0 :wat::kernel::Sent)
+          (:wat::kernel::send req-tx (:exp::Request::Snapshot snap-tx)))
+         ((snap0 :Option<exp::State>) (:wat::kernel::recv snap-rx))
+         ((_check0 :())
+          (:wat::core::match snap0 -> :()
+            ((Some s)
+              (:wat::core::match (:exp::State/last-price s) -> :()
+                (:None ())
+                ((Some _) (:wat::test::assert-eq "snap0 should be :None" ""))))
+            (:None (:wat::test::assert-eq "no snap0" ""))))
+
+         ;; Tick at 100.0; Snapshot; expect Some 100.0.
+         ((_t1 :wat::kernel::Sent)
+          (:wat::kernel::send req-tx (:exp::Request::Tick 100.0)))
+         ((_g1 :wat::kernel::Sent)
+          (:wat::kernel::send req-tx (:exp::Request::Snapshot snap-tx)))
+         ((snap1 :Option<exp::State>) (:wat::kernel::recv snap-rx))
+         ((_check1 :())
+          (:wat::core::match snap1 -> :()
+            ((Some s)
+              (:wat::core::match (:exp::State/last-price s) -> :()
+                ((Some p)
+                  (:wat::core::if (:wat::core::f64::= p 100.0) -> :()
+                    ()
+                    (:wat::test::assert-eq "snap1 last-price != 100.0" "")))
+                (:None (:wat::test::assert-eq "snap1 last-price is None" ""))))
+            (:None (:wat::test::assert-eq "no snap1" ""))))
+
+         ;; Two more Ticks at 101.0 and 102.0; final Snapshot; expect 102.0.
+         ((_t2 :wat::kernel::Sent)
+          (:wat::kernel::send req-tx (:exp::Request::Tick 101.0)))
+         ((_t3 :wat::kernel::Sent)
+          (:wat::kernel::send req-tx (:exp::Request::Tick 102.0)))
+         ((_g2 :wat::kernel::Sent)
+          (:wat::kernel::send req-tx (:exp::Request::Snapshot snap-tx)))
+         ((snap2 :Option<exp::State>) (:wat::kernel::recv snap-rx))
+         ((_check2 :())
+          (:wat::core::match snap2 -> :()
+            ((Some s)
+              (:wat::core::match (:exp::State/last-price s) -> :()
+                ((Some p)
+                  (:wat::core::if (:wat::core::f64::= p 102.0) -> :()
+                    ()
+                    (:wat::test::assert-eq "snap2 last-price != 102.0" "")))
+                (:None (:wat::test::assert-eq "snap2 last-price is None" ""))))
             (:None (:wat::test::assert-eq "no snap2" "")))))
         ()))
 
