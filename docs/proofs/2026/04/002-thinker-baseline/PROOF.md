@@ -200,3 +200,21 @@ Always-up: −0.6498. SMA-cross: −0.2791. The lifecycle responds
 to vocabulary. That's the foothold every later proof needs.
 
 PERSEVERARE.
+
+---
+
+## Addendum (2026-04-25, mid-arc-029)
+
+The shipped pair file split results across two DB files
+(`runs/proof-002-always-up-<epoch>.db` +
+`runs/proof-002-sma-cross-<epoch>.db`). User correction
+mid-arc-029: **one DB per run, with as many tables/columns
+inside as we need.** The schema's `thinker` column was always
+there; the file-split simply ignored it.
+
+Arc 029 slice 1 collapses proof 002 to one deftest writing
+one DB at `runs/proof-002-<epoch>.db`. The originally-shipped
+per-thinker DBs stay on disk as historical artifacts (per
+`feedback_never_delete_runs`). The numbers above are
+unchanged — they are the numbers the simulator produces; the
+storage shape is orthogonal.

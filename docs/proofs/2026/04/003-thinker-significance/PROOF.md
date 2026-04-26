@@ -52,43 +52,93 @@ work.
 
 ---
 
-## B — Schema reuse
+## B — Schema reuse, one DB
 
 The `paper_resolutions` table from arc 027 is reused unchanged.
-Window identity rides in the `run_name` column:
+**Per arc 029 Q8 (one DB per run, many tables/columns inside),
+proof 003 writes a single file** at `runs/proof-003-<epoch>.db`.
+Inside, 20 sub-runs (2 thinkers × 10 windows) ride two
+distinguishing columns:
 
-- always-up DB writes 10 run_names: `always-up-w0-<iso>`, …, `always-up-w9-<iso>`.
-- sma-cross DB writes 10 run_names: `sma-cross-w0-<iso>`, …, `sma-cross-w9-<iso>`.
+- `thinker` column — `"always-up"` vs `"sma-cross"`.
+- `run_name` column — `"<thinker>-w<i>-<iso>"` (e.g.,
+  `"always-up-w0-2026-04-25T...Z"`, ..., `"sma-cross-w9-..."`).
 
-Per-window slicing is then `GROUP BY run_name`. Sufficient —
-proof 003 does not need a schema migration. (Arc 029 makes
-`run_name` a per-message field on `log-paper`; that's the seam
-proof 003 walks 10 different run_names through one connection.)
+Cross-thinker queries: `GROUP BY thinker`.
+Cross-window queries: `GROUP BY run_name`.
+Both: `GROUP BY thinker, run_name`.
+
+No `ATTACH DATABASE` dance, no two-file split. Arc 029 makes
+`run_name` a per-message field on `log-paper`; the
+`:lab::rundb::Service` driver fans in 20 different run_names
+through one connection.
 
 ---
 
-## C — Two deftests
+## C — One deftest, one DB, twenty sub-runs
+
+Per arc 029:
+- **Q8** — one deftest per proof, one DB per run, all variants distinguished by columns.
+- **Q9** — communication unit is `:lab::log::LogEntry::PaperResolved`.
+- **Q10** — confirmed batch with ack; one primitive (`Service/batch-log`).
 
 ```scheme
-(:deftest :trading::test::proofs::003::always-up-multiwindow
-  ;; Open one DB, run always-up across 10 windows, log every Outcome.
-  ;; Assert: aggregate papers > 0; conservation holds across all 10.
-  )
-
-(:deftest :trading::test::proofs::003::sma-cross-multiwindow
-  ;; Same shape, sma-cross thinker.
-  )
+(:deftest :trading::test::proofs::003::thinker-significance
+  (:wat::core::let*
+    (((path :String) "data/btc_5m_raw.parquet")
+     ((cfg :trading::sim::Config) (:trading::sim::Config/new 288 0.01 35.0 14))
+     ((now :wat::time::Instant) (:wat::time::now))
+     ((epoch-str :String) (:wat::core::i64::to-string
+                            (:wat::time::epoch-seconds now)))
+     ((iso-str :String) (:wat::time::to-iso8601 now 3))
+     ((db-path :String)
+      (:wat::core::string::concat "runs/proof-003-" epoch-str ".db"))
+     ;; Spawn :lab::rundb::Service with N=1 client (single-thread
+     ;; deftest; future multi-thread version pops N>1 handles).
+     ((tup ...) (:lab::rundb::Service db-path 1))
+     ((pool ...) (:wat::core::first tup))
+     ((driver ...) (:wat::core::second tup))
+     ((req-tx ...) (:wat::kernel::HandlePool::pop pool))
+     ((_ :()) (:wat::kernel::HandlePool::finish pool))
+     ;; Client owns one ack channel reused across every batch.
+     ((ack-pair ...) (:wat::kernel::make-bounded-queue :() 1))
+     ((ack-tx ...) (:wat::core::first ack-pair))
+     ((ack-rx ...) (:wat::core::second ack-pair))
+     ;; Walk thinkers, walk windows. Each window resolves into a
+     ;; Vec<LogEntry::PaperResolved>, batch-log'd with one ack.
+     ;; Natural batch boundary = one window (per the message at
+     ;; the top of arc 029 Q10: "all outcomes of one window").
+     ((_run :())
+      (:wat::core::foldl
+        (:wat::core::vec :(String, :trading::sim::Thinker)
+          (:wat::core::tuple "always-up" (:trading::sim::always-up-thinker))
+          (:wat::core::tuple "sma-cross" (:trading::sim::sma-cross-thinker)))
+        ()
+        (:wat::core::lambda
+          ((acc :()) (pair :(String, :trading::sim::Thinker)) -> :())
+          (:trading::test::proofs::003::run-thinker-windows
+            req-tx ack-tx ack-rx path cfg pair iso-str))))
+     ((_ :()) (:wat::kernel::join driver)))
+    (:wat::test::assert-eq true true)))
 ```
 
-Both tests use the same Config as proof 002:
+Same Config as proof 002:
 `(:trading::sim::Config/new 288 0.01 35.0 14)` —
 288-candle deadline, 1% peak/valley thresholds, 35-candle
 lookback, 14-candle min life.
 
-The supporting program shares one helper, `run-window-and-log`,
-parameterized by `(stream-start, run-name, db, thinker, predictor)`
-and reusing proof 002's `log-outcome` walker on the
-`SimState/outcomes` vec.
+The supporting program ships two helpers:
+- `run-thinker-windows req-tx ack-tx ack-rx path cfg (thinker-name, thinker) iso-str`
+  — foldl over the 10 window starts; for each, calls
+  `run-window-and-log`.
+- `run-window-and-log req-tx ack-tx ack-rx path start n cfg thinker predictor thinker-name run-name`
+  — opens the bounded stream, skips to `start`, runs
+  `:trading::sim::run-loop`, **maps** `SimState/outcomes` to a
+  `Vec<:lab::log::LogEntry>` of `PaperResolved` variants
+  (one per Outcome), then calls
+  `(:lab::rundb::Service/batch-log req-tx ack-tx ack-rx entries)`
+  once per window — one ack per window batch, ~30-40 entries
+  per batch.
 
 ---
 
@@ -167,30 +217,53 @@ cd /home/watmin/work/holon/holon-lab-trading
 cargo test --release --features proof-003 --test proof_003 -- --nocapture
 ```
 
-Two SQLite databases land under `runs/`:
-`proof-003-always-up-<epoch>.db` and `proof-003-sma-cross-<epoch>.db`.
-Each holds 10 run_names, one per window.
+ONE SQLite database lands under `runs/`: `proof-003-<epoch>.db`.
+Inside, 20 sub-runs (2 thinkers × 10 windows) ride two
+distinguishing columns (`thinker`, `run_name`).
 
-Then the proof's anchoring queries:
+The proof's anchoring queries:
 
 ```sql
--- per-window summary, sma-cross
-SELECT run_name,
+-- per-thinker aggregate (one query, no ATTACH needed)
+SELECT thinker,
+       COUNT(*)                                    AS papers,
+       SUM(state='Grace')                           AS grace,
+       SUM(state='Violence')                        AS violence,
+       ROUND(SUM(state='Grace')*1.0/COUNT(*), 4)    AS grace_rate,
+       ROUND(SUM(residue), 4)                       AS total_residue,
+       ROUND(SUM(loss), 4)                          AS total_loss,
+       ROUND(SUM(residue) - SUM(loss), 4)           AS net_pnl
+FROM paper_resolutions
+GROUP BY thinker
+ORDER BY thinker;
+
+-- per-window per-thinker breakdown
+SELECT thinker, run_name,
        COUNT(*)              AS papers,
        SUM(state='Grace')    AS grace,
        SUM(state='Violence') AS violence,
-       ROUND(SUM(residue), 4) - ROUND(SUM(loss), 4) AS net_pnl
-FROM paper_resolutions
-GROUP BY run_name
-ORDER BY run_name;
-
--- aggregate, both DBs
-SELECT 'sma-cross' AS thinker, COUNT(*) AS papers,
-       SUM(state='Grace') AS grace, SUM(state='Violence') AS violence,
        ROUND(SUM(residue) - SUM(loss), 4) AS net_pnl
 FROM paper_resolutions
-UNION ALL
-SELECT 'always-up', ...;  -- against the other DB
+GROUP BY thinker, run_name
+ORDER BY thinker, run_name;
+
+-- per-window winner: did sma-cross beat always-up on this window?
+SELECT
+  s.run_name AS window_id,
+  ROUND(s.net_pnl - a.net_pnl, 4) AS sx_minus_au
+FROM
+  (SELECT SUBSTR(run_name, INSTR(run_name, '-w')) AS w,
+          run_name,
+          SUM(residue) - SUM(loss) AS net_pnl
+   FROM paper_resolutions WHERE thinker='sma-cross'
+   GROUP BY run_name) s
+JOIN
+  (SELECT SUBSTR(run_name, INSTR(run_name, '-w')) AS w,
+          SUM(residue) - SUM(loss) AS net_pnl
+   FROM paper_resolutions WHERE thinker='always-up'
+   GROUP BY run_name) a
+ON s.w = a.w
+ORDER BY window_id;
 ```
 
 The proof doc post-execution embeds these tables.

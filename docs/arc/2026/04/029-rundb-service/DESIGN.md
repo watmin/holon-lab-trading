@@ -54,12 +54,14 @@ the wrong abstraction.
 
 ## What ships
 
-Two surfaces.
+Three surfaces.
 
 ### Refactored shim (`src/shims.rs` + `wat/io/RunDb.wat`)
 
 `run_name` moves out of the `WatRunDb` struct's state and onto
-`log_paper`'s parameter list. Schema unchanged.
+`log_paper_resolved`'s parameter list. Schema setup moves OUT
+of `open()` (per Q9 — wat owns the schema definitions); shim
+gains a generic `execute_ddl` for wat to call at startup.
 
 ```rust
 pub struct WatRunDb {
@@ -67,9 +69,14 @@ pub struct WatRunDb {
     // run_name removed — was: run_name: String
 }
 
-pub fn open(path: String) -> Self;     // ← drops run_name arg
+pub fn open(path: String) -> Self;
+// — connection only; no schema. Caller responsible for ddl setup.
 
-pub fn log_paper(
+pub fn execute_ddl(&mut self, ddl_str: String);
+// — runs `conn.execute_batch(ddl_str)`. Used by wat to install
+//   schemas (one per LogEntry variant) at service startup.
+
+pub fn log_paper_resolved(
     &mut self,
     run_name: String,                  // ← new first param
     thinker: String, predictor: String,
@@ -77,41 +84,82 @@ pub fn log_paper(
     opened_at: i64, resolved_at: i64,
     state: String, residue: f64, loss: f64,
 );
+// — INSERT one row into paper_resolutions. Renamed from
+//   log_paper to align with the LogEntry::PaperResolved
+//   variant name. Future variants add log_telemetry,
+//   log_broker_snapshot, etc., each ~10 LOC.
 ```
 
 ```scheme
-(:lab::rundb::open path) -> :lab::rundb::RunDb
-(:lab::rundb::log-paper db run-name thinker predictor paper-id ...) -> :()
+(:lab::rundb::open path)                         -> :lab::rundb::RunDb
+(:lab::rundb::execute-ddl db ddl-str)            -> :()
+(:lab::rundb::log-paper-resolved db run-name ...) -> :()
 ```
 
-### New wat service (`wat/io/RunDbService.wat`)
-
-Fire-and-forget driver loop. One thread owns one `RunDb`
-connection. N clients each get a `Sender<Resolution>` handle.
-Each Resolution is a 10-tuple carrying the full row payload
-(run_name included). Drop cascade closes the connection
-cleanly.
+### LogEntry sum + schema (`wat/io/log/`)
 
 ```scheme
-(:wat::core::typealias :lab::rundb::Service::Resolution
-  :(String,String,String,i64,String,i64,i64,String,f64,f64))
+;; wat/io/log/LogEntry.wat — the unit of communication.
+(:wat::core::enum :lab::log::LogEntry
+  (PaperResolved
+    (run-name :String) (thinker :String) (predictor :String)
+    (paper-id :i64) (direction :String)
+    (opened-at :i64) (resolved-at :i64)
+    (state :String) (residue :f64) (loss :f64)))
 
-;; Setup: spawns the driver, returns (HandlePool, ProgramHandle).
+;; wat/io/log/schema.wat — DDL strings, one per variant's table.
+;; A single :lab::log::all-schemas Vec<String> the service
+;; iterates at startup so growth is "add string + register".
+
+(:wat::core::define
+  (:lab::log::schema-paper-resolved -> :String)
+  "CREATE TABLE IF NOT EXISTS paper_resolutions (...)"))
+
+(:wat::core::define
+  (:lab::log::all-schemas -> :Vec<String>)
+  (:wat::core::vec :String
+    (:lab::log::schema-paper-resolved)
+    ;; future: (:lab::log::schema-telemetry), ...
+    ))
+```
+
+### Service (`wat/io/RunDbService.wat`)
+
+CacheService-style request/reply driver. Each request carries
+its own ack-tx. One thread owns the connection; N clients
+each get a request-Tx handle; each client also owns one ack
+channel reused across batches.
+
+```scheme
+(:wat::core::typealias :lab::rundb::Service::AckTx
+  :rust::crossbeam_channel::Sender<()>)
+(:wat::core::typealias :lab::rundb::Service::AckRx
+  :rust::crossbeam_channel::Receiver<()>)
+(:wat::core::typealias :lab::rundb::Service::Request
+  :(Vec<lab::log::LogEntry>, lab::rundb::Service::AckTx))
+
+;; Setup: opens RunDb in driver thread, executes all schemas,
+;;   spawns the loop. Returns the standard (pool, driver-handle).
 (:lab::rundb::Service path count)
-  -> :(HandlePool<Service::Tx>, ProgramHandle<()>)
+  -> :(HandlePool<Sender<Service::Request>>, ProgramHandle<()>)
 
-;; Client helper: fire-and-forget, swallows :None on disconnect.
-(:lab::rundb::Service/log handle
-  run-name thinker predictor paper-id direction
-  opened-at resolved-at state residue loss)
-  -> :()
+;; Client helper — one primitive. Single-entry callers pass
+;; (vec :LogEntry entry).
+(:lab::rundb::Service/batch-log req-tx ack-tx ack-rx entries) -> :()
+
+;; Internal dispatcher (wat-side):
+(:lab::rundb::Service/dispatch db entry :LogEntry)
+  ;; (match entry :LogEntry -> :()
+  ;;   ((PaperResolved run-name thinker ... loss)
+  ;;     (:lab::rundb::log-paper-resolved db run-name ... loss))
+  ;;   ;; future: ((Telemetry ...) (:lab::rundb::log-telemetry db ...)))
 ```
 
 Lifecycle mirrors Console + CacheService: caller spawns the
 service, pops handles, distributes, calls `HandlePool::finish`,
-clients log via `Service/log`, handles drop, driver's last `Rx`
-disconnects, loop exits, connection drops, `(join driver)`
-confirms clean exit.
+clients log via `batch-log` (blocked-on-ack), handles drop,
+driver's last `Rx` disconnects, loop exits, connection drops,
+`(join driver)` confirms clean exit.
 
 ---
 
@@ -214,6 +262,233 @@ This isn't a layering compromise — both shapes are first-class.
 The shim is the resource; the service is a CSP wrapper that
 adds one capability (run_name routing) and one architectural
 guarantee (mutex-free multi-writer lifecycle).
+
+### Q8 — One DB per run, many tables
+
+Builder direction 2026-04-25, mid-arc-029:
+
+> "i think we should have one database per run with as many
+> tables as we need... one db per run - that db can have as
+> many tables as you want - that db contains everything we
+> could want to review the run - we'll grow more tables later"
+
+(Q9 below extends this principle to the *unit of communication*
+crossing the channel.)
+
+A "run" is one proof execution. ONE DB file per run; inside
+the DB, schema grows as concerns surface. Today: just
+`paper_resolutions`. Tomorrow: `aggregate_metrics`, `windows`,
+`thinkers`, `runs` (top-level metadata), whatever future
+proofs need.
+
+What this rules out: splitting at the file level. v0 proof 002
+opened `runs/proof-002-always-up-<epoch>.db` AND
+`runs/proof-002-sma-cross-<epoch>.db` — two files for one
+investigation, requiring `ATTACH DATABASE` for cross-thinker
+queries. Wrong cut.
+
+What this implies: one deftest per proof (not per thinker);
+all variants of an experiment write into the same DB,
+distinguished by columns (`thinker`, `run_name`, future
+columns). The schema's `thinker` column was always there
+(arc 027 left the door open) — proof 002's file-split simply
+ignored it.
+
+For proof 003: one DB at `runs/proof-003-<epoch>.db`. Inside,
+20 sub-runs (2 thinkers × 10 windows) distinguished by
+`(thinker, run_name)`. Cross-thinker queries are `GROUP BY
+thinker`. Cross-window queries are `GROUP BY run_name`. No
+ATTACH dance.
+
+For arc 029's service: nothing in the service surface forces
+or forbids this — `:lab::rundb::Service` takes one path; what
+the caller passes is the caller's choice. The principle is
+enforced at the proof layer, not the infra layer. The arc's
+slice-1 proof-002 migration consolidates the two-deftest shape
+into one.
+
+Future proofs that span asset pairs (multi-asset enterprise)
+might revisit: one DB per asset? One DB per session-of-runs?
+That decision lives with whichever proof surfaces it.
+
+### Q9 — `LogEntry` as the unit of communication
+
+Builder direction 2026-04-25:
+
+> "do you wanna review how the archived rust did database
+> writes?.. the request pattern?.... it was very nice... i
+> want to repeat that... the metrics we had and the records-
+> as-logs system was phenomenal - we modeled it like a mini
+> cloudwatch"
+
+The archive's pattern (`archived/pre-wat-native/src/types/log_entry.rs`,
+`archived/pre-wat-native/src/domain/ledger.rs`,
+`archived/pre-wat-native/src/programs/telemetry.rs`):
+
+- **`LogEntry`** is a discriminated union — 13 variants in the
+  shipped enterprise. Each variant represents one *kind of
+  thing that happened*: `ProposalSubmitted`, `TradeSettled`,
+  `PaperResolved`, `Diagnostic` (per-candle perf timing
+  breakdown), `Telemetry` (CloudWatch-style:
+  `{namespace, id, dimensions, timestamp_ns, metric_name,
+  metric_value, metric_unit}`), `ObserverSnapshot`,
+  `BrokerSnapshot`, `PhaseSnapshot`, etc.
+- Programs accumulate `Vec<LogEntry>` locally per candle,
+  then flush in a confirmed batch.
+- The driver `match`es on the variant and routes to the right
+  table. `ObserverSnapshot` → `observer_snapshots`,
+  `Telemetry` → `telemetry`, `BrokerSnapshot` →
+  `broker_snapshots`, etc. **One enum, one DB, many tables.**
+
+This arc adopts the same shape, with one wat-native twist:
+**the variant dispatch lives in wat**, not Rust. The shim
+exposes minimal primitives; wat owns the schema definitions
+and the variant→table routing.
+
+**Initial sum (this arc ships only this much):**
+
+```scheme
+(:wat::core::enum :lab::log::LogEntry
+  (PaperResolved
+    (run-name :String) (thinker :String) (predictor :String)
+    (paper-id :i64) (direction :String)
+    (opened-at :i64) (resolved-at :i64)
+    (state :String) (residue :f64) (loss :f64)))
+;; Future variants land as future proofs surface them:
+;;   Telemetry, BrokerSnapshot, Diagnostic, PhaseSnapshot, ...
+```
+
+**Layering:**
+
+- **Shim** (Rust, in `src/shims.rs`):
+  - `RunDb::open(path)` — open the connection. No schema yet.
+  - `RunDb::execute_ddl(conn, ddl_str)` — run a DDL string
+    (CREATE TABLE, etc.). Wat calls this once per known
+    variant at service startup.
+  - `RunDb::log_<variant_snake>(conn, ...)` — one method per
+    table, typed parameters. v1 ships only `log_paper_resolved`
+    (matching the sole `PaperResolved` variant). Each new
+    variant adds ~10 LOC of Rust later.
+- **Wat** (in `wat/io/log/LogEntry.wat`, `wat/io/log/schema.wat`,
+  `wat/io/RunDbService.wat`):
+  - `LogEntry` sum.
+  - Schema DDL constants per variant (one CREATE TABLE per
+    variant), and a `:lab::log::all-schemas` Vec<String> the
+    service iterates at startup.
+  - The dispatcher: `(match entry → call shim's log_<variant>
+    with the variant's fields)`.
+
+**Adding a variant later** (e.g., when proof 005 wants
+Telemetry rows for cosine similarity tracking):
+1. Add the variant constructor in `wat/io/log/LogEntry.wat`.
+2. Add the table DDL constant in `wat/io/log/schema.wat`,
+   register it in `:lab::log::all-schemas`.
+3. Add the wat dispatcher arm.
+4. Add the shim method `log_telemetry` (~10 LOC).
+5. No callers break — sum types are open at the variant
+   level; existing matches stay exhaustive on the variants
+   they handle and pattern-match-fail on novel variants
+   (or use a catch-all `_` arm).
+
+**Why the dispatch in wat, not Rust** (per builder
+direction "as much as we can in wat"):
+- Schema lives next to the variant constructor — read-locality.
+- Adding a variant doesn't require a Rust commit unless a
+  new typed insert wrapper is genuinely needed (it usually
+  is — but the *dispatch* is a wat concern).
+- The wat enum + match are first-class language constructs;
+  no `#[wat_dispatch]` ceremony for the dispatch logic
+  itself.
+
+The cost: every new variant still touches Rust (the typed
+shim wrapper). A future arc could collapse that to a single
+generic `RunDb::execute(conn, sql, params)` taking a wat
+`Vec<Param>` (sum of i64/f64/String) — but that needs a
+`Param` heterogeneous-vec substrate primitive that doesn't
+exist today. Out of scope for v1; revisit when the variant
+count makes per-method codegen tedious (probably ≥10).
+
+### Q10 — Batched send + ack (CSP confirmed-write)
+
+Builder direction 2026-04-25 (in same exchange):
+
+> "batch with ack - the perf matters"
+
+The archive's `DatabaseHandle<T>::batch_send(entries)` sent
+a `Vec<T>` and *blocked on a one-shot ack channel* until the
+driver had committed the batch. This gave callers a
+back-pressure signal: a slow driver throttles upstream
+producers naturally. No silent drops, no unbounded queue
+growth.
+
+This arc replicates that, with the CacheService-style "reply
+channel per request" pattern (each request carries its own
+ack-tx, so the driver doesn't need to track per-client
+ack-tx state):
+
+```scheme
+(:wat::core::typealias :lab::rundb::Service::AckTx
+  :rust::crossbeam_channel::Sender<()>)
+(:wat::core::typealias :lab::rundb::Service::AckRx
+  :rust::crossbeam_channel::Receiver<()>)
+(:wat::core::typealias :lab::rundb::Service::Request
+  :(Vec<lab::log::LogEntry>, lab::rundb::Service::AckTx))
+```
+
+Driver loop:
+1. `select` across N request receivers.
+2. On `Some((batch, ack-tx))`:
+   - `BEGIN TRANSACTION`
+   - `foldl` over `batch`, dispatching each `LogEntry` to its
+     shim method.
+   - `COMMIT`
+   - `(:wat::kernel::send ack-tx ())` — driver-side `send`
+     swallows `:None` if the client is already gone.
+3. Loop.
+
+Client helper builds its ack channel once at setup, reuses
+for every batch:
+
+```scheme
+(:lab::rundb::Service/batch-log
+  (req-tx :Sender<Request>)
+  (ack-tx :AckTx)         ; client-owned, reused
+  (ack-rx :AckRx)         ; client-owned, reused
+  (entries :Vec<LogEntry>)
+  -> :())
+;; sends (entries, ack-tx) on req-tx; recv on ack-rx; returns ()
+```
+
+**One primitive, no sugar.** Callers with a single entry pass
+`(:wat::core::vec :lab::log::LogEntry entry)`. Builder
+direction 2026-04-25:
+
+> "only batch - if the user has one message its an array-of-one"
+
+This keeps the surface honest (one verb to learn, one
+contract to remember) and aligns with
+`feedback_verbose_is_honest` — sugar that hides "this is
+always a batch" would obscure the back-pressure semantics
+callers need to reason about.
+
+**Trade-off vs fire-and-forget (Console pattern):**
+- + Back-pressure. Slow disks slow producers.
+- + Atomic batch commits. A `Vec<LogEntry>` becomes one
+  SQLite transaction; reads see all-or-nothing.
+- + Throughput at scale. One BEGIN + N INSERTs + COMMIT is
+  much faster than N auto-commit statements (the archive
+  measured this — auto-commit was the bottleneck; batching
+  unlocked thousands of writes/sec).
+- − Client blocks on every `batch-log`. Single-thread
+  callers (proof 003 v1) see ~1 ack per batch latency;
+  acceptable.
+
+**Batch boundaries are caller-defined.** Proof 003 will
+naturally batch one window's outcomes (all PaperResolved
+for w_i across the simulator loop, flushed once when the
+window completes). Future per-candle telemetry will batch
+all-Telemetry-for-this-candle. The service doesn't impose
+a boundary; it just flushes whatever arrives.
 
 ---
 
