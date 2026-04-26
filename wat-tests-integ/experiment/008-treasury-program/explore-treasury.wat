@@ -44,16 +44,21 @@
    ;; can route responses without a sender-index map. CacheService
    ;; uses this exact shape in wat-rs/crates/wat-lru/wat/lru/CacheService.wat.
    ;;
-   ;; Mixed reply shapes:
-   ;;   Ping(reply-tx)  — request/response; caller blocks on its reply-rx
-   ;;   Tick(price)     — fire-and-forget; no reply, no embedded tx
+   ;; Three reply shapes prove the dispatch table can hold any
+   ;; combination — every in-memory request/reply service is some
+   ;; permutation of these three:
+   ;;   Ping(reply-tx)     — request/response with unit ack
+   ;;   Tick(price)        — fire-and-forget; no reply channel
+   ;;   Snapshot(reply-tx) — read-only state query; reply carries the
+   ;;                        full domain state struct
    ;;
    ;; Treasury's real verbs will follow the same split: SubmitPaper /
-   ;; SubmitExit carry reply-tx for receipts; Tick is the silent clock
-   ;; that integrates state without acknowledging.
+   ;; SubmitExit carry reply-tx for receipts; Tick is the silent clock;
+   ;; an inspect/get-treasury verb will follow the Snapshot pattern.
    (:wat::core::enum :exp::Request
-     (Ping (reply-tx :exp::ReplyTx))
-     (Tick (price :f64)))
+     (Ping     (reply-tx :exp::ReplyTx))
+     (Tick     (price :f64))
+     (Snapshot (reply-tx :wat::kernel::QueueSender<exp::State>)))
 
    ;; Per-broker request channel typealiases.
    (:wat::core::typealias :exp::ReqTx :wat::kernel::QueueSender<exp::Request>)
@@ -99,8 +104,10 @@
    ;;
    ;; T1 added Ping → ack on embedded reply-tx.
    ;; T2 added Tick → no-op (silent integration).
-   ;; T3 lifts both arms to return a NEW state with a counter bumped
-   ;; (placeholder until T4+ replaces with real Treasury logic).
+   ;; T3 lifted both arms to return a NEW state with a counter bumped.
+   ;; T4a adds Snapshot → send the current state on reply-tx and
+   ;; return state UNCHANGED (read-only verb; the read does not bump
+   ;; any counter).
    (:wat::core::define
      (:exp::Service/handle
        (req :exp::Request)
@@ -116,7 +123,11 @@
        ((:exp::Request::Tick _price)
          (:exp::State/new
            (:wat::core::+ (:exp::State/tick-count state) 1)
-           (:exp::State/ping-count state)))))
+           (:exp::State/ping-count state)))
+       ((:exp::Request::Snapshot reply-tx)
+         (:wat::core::let*
+           (((_send :Option<()>) (:wat::kernel::send reply-tx state)))
+           state))))
 
    ;; ─── Service constructor ─────────────────────────────────────
    ;;
@@ -308,3 +319,89 @@
                 (:wat::core::i64::to-string pc))
               ""))))
       ((Err _) (:wat::test::assert-eq "driver-died" "")))))
+
+
+;; ─── T4a — state-reading verb (Snapshot reply carries the State) ─
+;;
+;; Drive state to a known shape (1 Tick, 1 Ping), then ask for a
+;; Snapshot — the reply rides back as a full :exp::State struct.
+;; Assert the snapshot fields match. Then issue another Tick and
+;; another Snapshot — the second snapshot should reflect the bump,
+;; proving Snapshot reads LIVE state (not a frozen capture).
+;;
+;; New shape this proves: a reply channel whose payload is a domain
+;; struct, not just () or a scalar. The caller's reply-pair carries
+;; :exp::State end-to-end. Pattern lifts directly to Treasury verbs
+;; that hand back PositionReceipt / Verdict / TreasuryRecord.
+
+(:deftest :exp::t4a-snapshot
+  (:wat::core::let*
+    (((spawn :exp::Spawn) (:exp::Service 1))
+     ((pool :exp::ReqTxPool) (:wat::core::first spawn))
+     ((driver :wat::kernel::ProgramHandle<exp::State>) (:wat::core::second spawn))
+
+     ((_inner :())
+      (:wat::core::let*
+        (((req-tx :exp::ReqTx) (:wat::kernel::HandlePool::pop pool))
+         ((_finish :()) (:wat::kernel::HandlePool::finish pool))
+
+         ;; Ack channel for Ping.
+         ((ack-pair :wat::kernel::QueuePair<()>)
+          (:wat::kernel::make-bounded-queue :() 1))
+         ((ack-tx :exp::ReplyTx) (:wat::core::first ack-pair))
+         ((ack-rx :exp::ReplyRx) (:wat::core::second ack-pair))
+
+         ;; Snapshot channel — carries the full State.
+         ((snap-pair :wat::kernel::QueuePair<exp::State>)
+          (:wat::kernel::make-bounded-queue :exp::State 1))
+         ((snap-tx :wat::kernel::QueueSender<exp::State>)
+          (:wat::core::first snap-pair))
+         ((snap-rx :wat::kernel::QueueReceiver<exp::State>)
+          (:wat::core::second snap-pair))
+
+         ;; Drive state: 1 Tick + 1 Ping.
+         ((_t1 :Option<()>) (:wat::kernel::send req-tx (:exp::Request::Tick 100.0)))
+         ((_p1 :Option<()>) (:wat::kernel::send req-tx (:exp::Request::Ping ack-tx)))
+         ((_a1 :Option<()>) (:wat::kernel::recv ack-rx))
+
+         ;; First Snapshot — expect (tick=1, ping=1).
+         ((_s1 :Option<()>) (:wat::kernel::send req-tx (:exp::Request::Snapshot snap-tx)))
+         ((snap1 :Option<exp::State>) (:wat::kernel::recv snap-rx))
+         ((_check1 :())
+          (:wat::core::match snap1 -> :()
+            ((Some s)
+              (:wat::core::let*
+                (((tc :i64) (:exp::State/tick-count s))
+                 ((pc :i64) (:exp::State/ping-count s))
+                 ((_t :())
+                  (:wat::core::if (:wat::core::= tc 1) -> :()
+                    ()
+                    (:wat::test::assert-eq "snap1 tick != 1" ""))))
+                (:wat::core::if (:wat::core::= pc 1) -> :()
+                  ()
+                  (:wat::test::assert-eq "snap1 ping != 1" ""))))
+            (:None (:wat::test::assert-eq "no snap1" ""))))
+
+         ;; One more Tick, then Snapshot again — expect (tick=2, ping=1).
+         ;; Confirms Snapshot reads LIVE state, not a frozen value.
+         ((_t2 :Option<()>) (:wat::kernel::send req-tx (:exp::Request::Tick 101.0)))
+         ((_s2 :Option<()>) (:wat::kernel::send req-tx (:exp::Request::Snapshot snap-tx)))
+         ((snap2 :Option<exp::State>) (:wat::kernel::recv snap-rx))
+         ((_check2 :())
+          (:wat::core::match snap2 -> :()
+            ((Some s)
+              (:wat::core::let*
+                (((tc :i64) (:exp::State/tick-count s))
+                 ((pc :i64) (:exp::State/ping-count s))
+                 ((_t :())
+                  (:wat::core::if (:wat::core::= tc 2) -> :()
+                    ()
+                    (:wat::test::assert-eq "snap2 tick != 2" ""))))
+                (:wat::core::if (:wat::core::= pc 1) -> :()
+                  ()
+                  (:wat::test::assert-eq "snap2 ping != 1" ""))))
+            (:None (:wat::test::assert-eq "no snap2" "")))))
+        ()))
+
+     ((_join :exp::State) (:wat::kernel::join driver)))
+    (:wat::test::assert-eq true true)))
