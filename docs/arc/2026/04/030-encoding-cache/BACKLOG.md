@@ -258,7 +258,20 @@ cargo test --release --test test 2>&1 | grep -E "telemetry|FAILED"
 
 ## Slice 2 — Encoding cache + corners pre-encode + cache emits
 
-**Status: not started.** Depends on slice 1.
+**Status: ready 2026-04-25** (was BLOCKED on wat-rs arc 057;
+substrate-unblocked at wat-rs commit `0bf01bc` — `hashmap_key`
+accepts `HolonAST` via the now-derivable structural Hash, the
+wat-lru shim no longer panics on non-primitive keys, and
+`LocalCache<wat::holon::HolonAST, wat::holon::Vector>` works
+directly per `crates/wat-lru/wat-tests/lru/HolonKey.wat`'s
+structural-equal deftest). Depends on slice 1 (shipped).
+Implementation can begin per the steps below.
+
+The substrate audit (Q8 / step 2a) is largely answered by arc 057's
+`:wat::holon::encode` polymorphism (arc 052) — `cosine` already
+accepts `(Vector, Vector)`, so the cache-stored Vector composes
+without re-encoding. Path (a) "new substrate arm" wasn't needed
+in the end; arc 052 had already shipped the right shape.
 
 Adds `:wat::lru::LocalCache<HolonAST, Vector>`-backed encode
 caching to `cosine-vs-corners-predictor`. Pre-encodes the four
