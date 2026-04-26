@@ -36,8 +36,9 @@
    ;;
    ;; T1-T4a established the SHAPE with two placeholder counters.
    ;; T5 added `last-price` (real Treasury field — tracks most recent Tick).
-   ;; T6 adds `open-papers` (the papers themselves) and `next-paper-id`
-   ;; (monotonic ID source — next ID to hand out).
+   ;; T6 added `open-papers` and `next-paper-id` (mintable registry).
+   ;; T7 adds `closed-papers` — closed papers persist on the driver as
+   ;; an in-memory ledger; the audit trail for what's been settled.
    ;;
    ;; State::fresh absorbs new fields — existing deftests that only
    ;; check counters keep working unchanged.
@@ -46,13 +47,15 @@
      (ping-count    :i64)
      (last-price    :Option<f64>)
      (open-papers   :Vec<exp::Paper>)
-     (next-paper-id :i64))
+     (next-paper-id :i64)
+     (closed-papers :Vec<exp::Paper>))
 
    ;; Convenience constructor — zero counts, no observed price, no
-   ;; open papers, ID counter starts at 0.
+   ;; open or closed papers, ID counter starts at 0.
    (:wat::core::define
      (:exp::State::fresh -> :exp::State)
-     (:exp::State/new 0 0 :None (:wat::core::vec :exp::Paper) 0))
+     (:exp::State/new 0 0 :None
+       (:wat::core::vec :exp::Paper) 0 (:wat::core::vec :exp::Paper)))
 
    ;; Reply channel — for T1 the worker only needs to ack receipt.
    ;; T4+ will swap () for real Verdict / PositionReceipt types.
@@ -75,11 +78,13 @@
    ;; SubmitExit carry reply-tx for receipts; Tick is the silent clock;
    ;; an inspect/get-treasury verb will follow the Snapshot pattern.
    (:wat::core::enum :exp::Request
-     (Ping      (reply-tx :exp::ReplyTx))
-     (Tick      (price :f64))
-     (Snapshot  (reply-tx :wat::kernel::QueueSender<exp::State>))
-     (OpenPaper (amount :i64)
-                (reply-tx :wat::kernel::QueueSender<i64>)))
+     (Ping       (reply-tx :exp::ReplyTx))
+     (Tick       (price :f64))
+     (Snapshot   (reply-tx :wat::kernel::QueueSender<exp::State>))
+     (OpenPaper  (amount :i64)
+                 (reply-tx :wat::kernel::QueueSender<i64>))
+     (ClosePaper (id :i64)
+                 (reply-tx :wat::kernel::QueueSender<Option<exp::Paper>>)))
 
    ;; Per-broker request channel typealiases.
    (:wat::core::typealias :exp::ReqTx :wat::kernel::QueueSender<exp::Request>)
@@ -143,7 +148,8 @@
              (:wat::core::+ (:exp::State/ping-count state) 1)
              (:exp::State/last-price state)
              (:exp::State/open-papers state)
-             (:exp::State/next-paper-id state))))
+             (:exp::State/next-paper-id state)
+             (:exp::State/closed-papers state))))
        ;; T5: Tick now does real work — store the price as last-price
        ;; alongside bumping tick-count. This is the first placeholder
        ;; field that became domain.
@@ -153,7 +159,8 @@
            (:exp::State/ping-count state)
            (Some price)
            (:exp::State/open-papers state)
-           (:exp::State/next-paper-id state)))
+           (:exp::State/next-paper-id state)
+           (:exp::State/closed-papers state)))
        ((:exp::Request::Snapshot reply-tx)
          (:wat::core::let*
            (((_send :wat::kernel::Sent) (:wat::kernel::send reply-tx state)))
@@ -175,7 +182,48 @@
              (:exp::State/ping-count state)
              (:exp::State/last-price state)
              papers'
-             (:wat::core::+ id 1))))))
+             (:wat::core::+ id 1)
+             (:exp::State/closed-papers state))))
+       ;; T7: ClosePaper — inverse of OpenPaper.
+       ;;   - Look up the paper by id in open-papers (filter by id == target)
+       ;;   - If found: remove from open-papers (filter by id != target),
+       ;;     append to closed-papers, send Some(paper) on reply-tx,
+       ;;     return new state with updated open + closed.
+       ;;   - If not found: send :None on reply-tx, return state unchanged.
+       ;;
+       ;; Two filters over the same Vec is the smallest-step lookup +
+       ;; remove pattern. A `partition` primitive would do it in one
+       ;; pass; not yet a substrate verb. Add one if it becomes hot.
+       ((:exp::Request::ClosePaper id reply-tx)
+         (:wat::core::let*
+           (((matches :Vec<exp::Paper>)
+             (:wat::core::filter (:exp::State/open-papers state)
+               (:wat::core::lambda ((p :exp::Paper) -> :bool)
+                 (:wat::core::= (:exp::Paper/id p) id))))
+            ((found :Option<exp::Paper>) (:wat::core::first matches)))
+           (:wat::core::match found -> :exp::State
+             ((Some paper)
+               (:wat::core::let*
+                 (((remaining :Vec<exp::Paper>)
+                   (:wat::core::filter (:exp::State/open-papers state)
+                     (:wat::core::lambda ((p :exp::Paper) -> :bool)
+                       (:wat::core::not= (:exp::Paper/id p) id))))
+                  ((closed' :Vec<exp::Paper>)
+                   (:wat::core::conj (:exp::State/closed-papers state) paper))
+                  ((_send :wat::kernel::Sent)
+                   (:wat::kernel::send reply-tx (Some paper))))
+                 (:exp::State/new
+                   (:exp::State/tick-count state)
+                   (:exp::State/ping-count state)
+                   (:exp::State/last-price state)
+                   remaining
+                   (:exp::State/next-paper-id state)
+                   closed')))
+             (:None
+               (:wat::core::let*
+                 (((_send :wat::kernel::Sent)
+                   (:wat::kernel::send reply-tx :None)))
+                 state)))))))
 
    ;; ─── Service constructor ─────────────────────────────────────
    ;;
@@ -644,6 +692,132 @@
                       (:wat::core::i64::to-string next-id))
                     ""))))
             (:None (:wat::test::assert-eq "no snap" "")))))
+        ()))
+
+     ((_join :exp::State) (:wat::kernel::join driver)))
+    (:wat::test::assert-eq true true)))
+
+
+;; ─── T7 — ClosePaper: lookup-by-id + open→closed transition ───
+;;
+;; Open three papers (ids 0, 1, 2). Close id=1 — expect Some(Paper)
+;; with id=1 amount=200 in the reply. Snapshot afterwards: expect
+;; open-papers length = 2 (ids 0 and 2 remain), closed-papers length = 1
+;; (the id=1 paper). Then attempt to close a non-existent id (99);
+;; expect :None reply, state unchanged.
+;;
+;; New tools surfacing here:
+;;   - filter-by-predicate as the lookup primitive
+;;   - filter-by-not-predicate as the remove primitive
+;;   - first(matches) :Option<T> as the at-most-one query reduction
+;;   - Result-style reply via Option<DomainStruct>
+
+(:deftest :exp::t7-close-paper
+  (:wat::core::let*
+    (((spawn :exp::Spawn) (:exp::Service 1))
+     ((pool :exp::ReqTxPool) (:wat::core::first spawn))
+     ((driver :wat::kernel::ProgramHandle<exp::State>) (:wat::core::second spawn))
+
+     ((_inner :())
+      (:wat::core::let*
+        (((req-tx :exp::ReqTx) (:wat::kernel::HandlePool::pop pool))
+         ((_finish :()) (:wat::kernel::HandlePool::finish pool))
+
+         ;; OpenPaper reply channel — carries paper-id.
+         ((id-pair :wat::kernel::QueuePair<i64>)
+          (:wat::kernel::make-bounded-queue :i64 1))
+         ((id-tx :wat::kernel::QueueSender<i64>) (:wat::core::first id-pair))
+         ((id-rx :wat::kernel::QueueReceiver<i64>) (:wat::core::second id-pair))
+
+         ;; ClosePaper reply channel — carries Option<Paper>.
+         ((close-pair :wat::kernel::QueuePair<Option<exp::Paper>>)
+          (:wat::kernel::make-bounded-queue :Option<exp::Paper> 1))
+         ((close-tx :wat::kernel::QueueSender<Option<exp::Paper>>)
+          (:wat::core::first close-pair))
+         ((close-rx :wat::kernel::QueueReceiver<Option<exp::Paper>>)
+          (:wat::core::second close-pair))
+
+         ;; Snapshot channel.
+         ((snap-pair :wat::kernel::QueuePair<exp::State>)
+          (:wat::kernel::make-bounded-queue :exp::State 1))
+         ((snap-tx :wat::kernel::QueueSender<exp::State>)
+          (:wat::core::first snap-pair))
+         ((snap-rx :wat::kernel::QueueReceiver<exp::State>)
+          (:wat::core::second snap-pair))
+
+         ;; Open three papers (amounts 100, 200, 300 → ids 0, 1, 2).
+         ((_o1 :wat::kernel::Sent)
+          (:wat::kernel::send req-tx (:exp::Request::OpenPaper 100 id-tx)))
+         ((_id1 :Option<i64>) (:wat::kernel::recv id-rx))
+         ((_o2 :wat::kernel::Sent)
+          (:wat::kernel::send req-tx (:exp::Request::OpenPaper 200 id-tx)))
+         ((_id2 :Option<i64>) (:wat::kernel::recv id-rx))
+         ((_o3 :wat::kernel::Sent)
+          (:wat::kernel::send req-tx (:exp::Request::OpenPaper 300 id-tx)))
+         ((_id3 :Option<i64>) (:wat::kernel::recv id-rx))
+
+         ;; Close id=1 — expect Some(Paper id=1 amount=200).
+         ((_c1 :wat::kernel::Sent)
+          (:wat::kernel::send req-tx (:exp::Request::ClosePaper 1 close-tx)))
+         ((closed1 :Option<Option<exp::Paper>>) (:wat::kernel::recv close-rx))
+         ((_check-c1 :())
+          (:wat::core::match closed1 -> :()
+            ((Some maybe-paper)
+              (:wat::core::match maybe-paper -> :()
+                ((Some p)
+                  (:wat::core::let*
+                    (((pid :i64) (:exp::Paper/id p))
+                     ((amt :i64) (:exp::Paper/amount p))
+                     ((_ :())
+                      (:wat::core::if (:wat::core::= pid 1) -> :()
+                        ()
+                        (:wat::test::assert-eq "closed1 paper id != 1" ""))))
+                    (:wat::core::if (:wat::core::= amt 200) -> :()
+                      ()
+                      (:wat::test::assert-eq "closed1 amount != 200" ""))))
+                (:None (:wat::test::assert-eq "close1 returned :None — expected Some" ""))))
+            (:None (:wat::test::assert-eq "no close1" ""))))
+
+         ;; Snapshot — expect open=[id 0, id 2] (length 2), closed=[id 1] (length 1).
+         ((_g1 :wat::kernel::Sent)
+          (:wat::kernel::send req-tx (:exp::Request::Snapshot snap-tx)))
+         ((snap1 :Option<exp::State>) (:wat::kernel::recv snap-rx))
+         ((_check-snap1 :())
+          (:wat::core::match snap1 -> :()
+            ((Some s)
+              (:wat::core::let*
+                (((open-len :i64)
+                  (:wat::core::length (:exp::State/open-papers s)))
+                 ((closed-len :i64)
+                  (:wat::core::length (:exp::State/closed-papers s)))
+                 ((_ :())
+                  (:wat::core::if (:wat::core::= open-len 2) -> :()
+                    ()
+                    (:wat::test::assert-eq
+                      (:wat::core::string::concat
+                        "expected 2 open papers, got "
+                        (:wat::core::i64::to-string open-len))
+                      ""))))
+                (:wat::core::if (:wat::core::= closed-len 1) -> :()
+                  ()
+                  (:wat::test::assert-eq
+                    (:wat::core::string::concat
+                      "expected 1 closed paper, got "
+                      (:wat::core::i64::to-string closed-len))
+                    ""))))
+            (:None (:wat::test::assert-eq "no snap1" ""))))
+
+         ;; Close non-existent id 99 — expect :None.
+         ((_c2 :wat::kernel::Sent)
+          (:wat::kernel::send req-tx (:exp::Request::ClosePaper 99 close-tx)))
+         ((closed2 :Option<Option<exp::Paper>>) (:wat::kernel::recv close-rx))
+         ((_check-c2 :())
+          (:wat::core::match closed2 -> :()
+            ((Some maybe-paper)
+              (:wat::core::match maybe-paper -> :()
+                ((Some _) (:wat::test::assert-eq "close 99 returned Some — expected :None" ""))
+                (:None ())))
+            (:None (:wat::test::assert-eq "no close2" "")))))
         ()))
 
      ((_join :exp::State) (:wat::kernel::join driver)))
