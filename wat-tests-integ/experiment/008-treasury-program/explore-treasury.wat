@@ -20,8 +20,23 @@
 ;;       one at a time.
 
 (:wat::test::make-deftest :deftest
-  (;; Reply channel — for T1 the worker only needs to ack receipt.
-   ;; T3+ will swap () for real Verdict / PositionReceipt types.
+  (;; State — what the Service driver carries between iterations.
+   ;; Each handler returns a NEW State (values discipline; no in-place
+   ;; mutation, per the AtrWindow::push idiom). The worker returns the
+   ;; final State at shutdown so callers can verify counts via
+   ;; join-result. Two fields for T3 — placeholder counts that prove
+   ;; both reply-bearing and fire-and-forget variants update state.
+   (:wat::core::struct :exp::State
+     (tick-count :i64)
+     (ping-count :i64))
+
+   ;; Convenience constructor — fresh State has zero counts.
+   (:wat::core::define
+     (:exp::State::fresh -> :exp::State)
+     (:exp::State/new 0 0))
+
+   ;; Reply channel — for T1 the worker only needs to ack receipt.
+   ;; T4+ will swap () for real Verdict / PositionReceipt types.
    (:wat::core::typealias :exp::ReplyTx :wat::kernel::QueueSender<()>)
    (:wat::core::typealias :exp::ReplyRx :wat::kernel::QueueReceiver<()>)
 
@@ -44,52 +59,64 @@
    (:wat::core::typealias :exp::ReqTx :wat::kernel::QueueSender<exp::Request>)
    (:wat::core::typealias :exp::ReqRx :wat::kernel::QueueReceiver<exp::Request>)
    (:wat::core::typealias :exp::ReqTxPool :wat::kernel::HandlePool<exp::ReqTx>)
+   ;; Spawn — what the constructor returns. The driver's ProgramHandle
+   ;; is parameterized by State (T3 lift): join-result yields the
+   ;; final State so callers can read its fields.
    (:wat::core::typealias :exp::Spawn
-     :(exp::ReqTxPool,wat::kernel::ProgramHandle<()>))
+     :(exp::ReqTxPool,wat::kernel::ProgramHandle<exp::State>))
 
 
    ;; ─── Service driver loop ─────────────────────────────────────
    ;;
    ;; select over Vec<ReqRx>; on Some(req) match the Request variant
-   ;; and dispatch (T1: Ping ⇒ send () on reply-tx, then recurse on
-   ;; same Vec); on :None for any rx, prune that channel and recurse;
-   ;; exit when the Vec is empty (all callers' scopes have exited).
-   ;;
-   ;; The driver IS stateless in T1 — no accumulator parameter. T3
-   ;; lifts this into a struct-carrying loop (the explore-handles
-   ;; step 8 shape). For now the pattern is pure substrate-step-5+7.
+   ;; and dispatch — handler returns a NEW state that carries forward
+   ;; into the next iteration. On :None for any rx, prune that channel
+   ;; and recurse with state unchanged. Exit when the Vec is empty;
+   ;; return the final state via the spawn-thread's return value, so
+   ;; callers reading via join-result can verify what happened.
    (:wat::core::define
-     (:exp::Service/loop (req-rxs :Vec<exp::ReqRx>) -> :())
-     (:wat::core::if (:wat::core::empty? req-rxs) -> :()
-       ()
+     (:exp::Service/loop
+       (req-rxs :Vec<exp::ReqRx>)
+       (state :exp::State)
+       -> :exp::State)
+     (:wat::core::if (:wat::core::empty? req-rxs) -> :exp::State
+       state
        (:wat::core::let*
          (((chosen :wat::kernel::Chosen<exp::Request>) (:wat::kernel::select req-rxs))
           ((idx :i64) (:wat::core::first chosen))
           ((maybe :Option<exp::Request>) (:wat::core::second chosen)))
-         (:wat::core::match maybe -> :()
+         (:wat::core::match maybe -> :exp::State
            ((Some req)
              (:wat::core::let*
-               (((_handled :()) (:exp::Service/handle req)))
-               (:exp::Service/loop req-rxs)))
+               (((next :exp::State) (:exp::Service/handle req state)))
+               (:exp::Service/loop req-rxs next)))
            (:None
-             (:exp::Service/loop (:wat::std::list::remove-at req-rxs idx)))))))
+             (:exp::Service/loop (:wat::std::list::remove-at req-rxs idx) state))))))
 
-   ;; Per-request dispatch — match the Request variant and execute its
-   ;; placeholder body. Lives as a separate define so each variant's
+   ;; Per-request dispatch — match the Request variant, do its work,
+   ;; return the new state. Lives as a separate define so each variant's
    ;; body grows independently as we fill them in.
    ;;
    ;; T1 added Ping → ack on embedded reply-tx.
-   ;; T2 adds Tick → no-op (silent integration; placeholder for the
-   ;; real per-Tick state update that lands at T3+).
+   ;; T2 added Tick → no-op (silent integration).
+   ;; T3 lifts both arms to return a NEW state with a counter bumped
+   ;; (placeholder until T4+ replaces with real Treasury logic).
    (:wat::core::define
-     (:exp::Service/handle (req :exp::Request) -> :())
-     (:wat::core::match req -> :()
+     (:exp::Service/handle
+       (req :exp::Request)
+       (state :exp::State)
+       -> :exp::State)
+     (:wat::core::match req -> :exp::State
        ((:exp::Request::Ping reply-tx)
          (:wat::core::let*
            (((_ack :Option<()>) (:wat::kernel::send reply-tx ())))
-           ()))
+           (:exp::State/new
+             (:exp::State/tick-count state)
+             (:wat::core::+ (:exp::State/ping-count state) 1))))
        ((:exp::Request::Tick _price)
-         ())))
+         (:exp::State/new
+           (:wat::core::+ (:exp::State/tick-count state) 1)
+           (:exp::State/ping-count state)))))
 
    ;; ─── Service constructor ─────────────────────────────────────
    ;;
@@ -119,8 +146,8 @@
         ((pool :exp::ReqTxPool)
          (:wat::kernel::HandlePool::new "treasury" req-txs))
 
-        ((driver :wat::kernel::ProgramHandle<()>)
-         (:wat::kernel::spawn :exp::Service/loop req-rxs)))
+        ((driver :wat::kernel::ProgramHandle<exp::State>)
+         (:wat::kernel::spawn :exp::Service/loop req-rxs (:exp::State::fresh))))
        (:wat::core::tuple pool driver)))))
 
 
@@ -137,7 +164,7 @@
   (:wat::core::let*
     (((spawn :exp::Spawn) (:exp::Service 1))
      ((pool :exp::ReqTxPool) (:wat::core::first spawn))
-     ((driver :wat::kernel::ProgramHandle<()>) (:wat::core::second spawn))
+     ((driver :wat::kernel::ProgramHandle<exp::State>) (:wat::core::second spawn))
 
      ;; Inner scope owns the popped handle and the reply channel.
      ;; All client-side Senders die when this scope exits.
@@ -164,7 +191,7 @@
      ;; Inner scope exited → req-tx + reply-tx dropped → driver's only
      ;; ReqRx disconnected → Service/loop pruned the rx, Vec empty,
      ;; loop exited. join is the bookend.
-     ((_join :()) (:wat::kernel::join driver)))
+     ((_join :exp::State) (:wat::kernel::join driver)))
     (:wat::test::assert-eq true true)))
 
 
@@ -180,7 +207,7 @@
   (:wat::core::let*
     (((spawn :exp::Spawn) (:exp::Service 1))
      ((pool :exp::ReqTxPool) (:wat::core::first spawn))
-     ((driver :wat::kernel::ProgramHandle<()>) (:wat::core::second spawn))
+     ((driver :wat::kernel::ProgramHandle<exp::State>) (:wat::core::second spawn))
 
      ((_inner :())
       (:wat::core::let*
@@ -213,5 +240,71 @@
           (:wat::kernel::send req-tx (:exp::Request::Tick 101.0))))
         ()))
 
-     ((_join :()) (:wat::kernel::join driver)))
+     ((_join :exp::State) (:wat::kernel::join driver)))
     (:wat::test::assert-eq true true)))
+
+
+;; ─── T3 — state struct accumulator: counts survive shutdown ───
+;;
+;; Send 3 Ticks + 2 Pings. Use join-result instead of join so we can
+;; read the final State and assert on its fields. Expect:
+;;   tick-count = 3
+;;   ping-count = 2
+;;
+;; Same nested-scope shutdown story; the only new thing is that the
+;; spawn-thread's return value is the carry-along State, observable
+;; once all client-side Senders have dropped.
+
+(:deftest :exp::t3-state-accumulator
+  (:wat::core::let*
+    (((spawn :exp::Spawn) (:exp::Service 1))
+     ((pool :exp::ReqTxPool) (:wat::core::first spawn))
+     ((driver :wat::kernel::ProgramHandle<exp::State>) (:wat::core::second spawn))
+
+     ((_inner :())
+      (:wat::core::let*
+        (((req-tx :exp::ReqTx) (:wat::kernel::HandlePool::pop pool))
+         ((_finish :()) (:wat::kernel::HandlePool::finish pool))
+
+         ((reply-pair :wat::kernel::QueuePair<()>)
+          (:wat::kernel::make-bounded-queue :() 1))
+         ((reply-tx :exp::ReplyTx) (:wat::core::first reply-pair))
+         ((reply-rx :exp::ReplyRx) (:wat::core::second reply-pair))
+
+         ;; 3 Ticks (fire-and-forget — bumps tick-count each time).
+         ((_t1 :Option<()>) (:wat::kernel::send req-tx (:exp::Request::Tick 100.0)))
+         ((_t2 :Option<()>) (:wat::kernel::send req-tx (:exp::Request::Tick 101.0)))
+         ((_t3 :Option<()>) (:wat::kernel::send req-tx (:exp::Request::Tick 102.0)))
+
+         ;; 2 Pings — each acks AND bumps ping-count. Recv ack between
+         ;; sends so reply-tx isn't backpressuring.
+         ((_p1 :Option<()>) (:wat::kernel::send req-tx (:exp::Request::Ping reply-tx)))
+         ((_a1 :Option<()>) (:wat::kernel::recv reply-rx))
+         ((_p2 :Option<()>) (:wat::kernel::send req-tx (:exp::Request::Ping reply-tx)))
+         ((_a2 :Option<()>) (:wat::kernel::recv reply-rx)))
+        ()))
+
+     ;; Inner exited; client Senders dropped; loop returned final State.
+     ((result :Result<exp::State,wat::kernel::ThreadDiedError>)
+      (:wat::kernel::join-result driver)))
+    (:wat::core::match result -> :()
+      ((Ok state)
+        (:wat::core::let*
+          (((tc :i64) (:exp::State/tick-count state))
+           ((pc :i64) (:exp::State/ping-count state))
+           ((_check-tc :())
+            (:wat::core::if (:wat::core::= tc 3) -> :()
+              ()
+              (:wat::test::assert-eq
+                (:wat::core::string::concat
+                  "expected tick-count 3, got "
+                  (:wat::core::i64::to-string tc))
+                ""))))
+          (:wat::core::if (:wat::core::= pc 2) -> :()
+            ()
+            (:wat::test::assert-eq
+              (:wat::core::string::concat
+                "expected ping-count 2, got "
+                (:wat::core::i64::to-string pc))
+              ""))))
+      ((Err _) (:wat::test::assert-eq "driver-died" "")))))
