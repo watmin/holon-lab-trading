@@ -59,6 +59,17 @@
     -> :lab::rundb::RunDb)
   (:rust::lab::RunDb::open path))
 
+;; Run an arbitrary DDL string (CREATE TABLE, CREATE INDEX, etc.).
+;; The slice-2 :lab::rundb::Service driver iterates :lab::log::all-
+;; schemas at startup and execute-ddl's each. Idempotent — schemas
+;; use CREATE TABLE IF NOT EXISTS.
+(:wat::core::define
+  (:lab::rundb::execute-ddl
+    (db :lab::rundb::RunDb)
+    (ddl-str :String)
+    -> :())
+  (:rust::lab::RunDb::execute_ddl db ddl-str))
+
 ;; Insert one row into `paper_resolutions` under the given run-name.
 ;; Auto-commit; no batching; idempotent on the (run-name, paper-id)
 ;; primary key.

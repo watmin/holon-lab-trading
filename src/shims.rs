@@ -271,7 +271,11 @@ impl WatRunDb {
     /// database at `path` and ensure the `paper_resolutions` schema
     /// exists. Panics on any rusqlite error (bad path, permission,
     /// schema creation failure). Arc 029 dropped the `run_name`
-    /// parameter — it now rides per-call on `log_paper`.
+    /// parameter — it now rides per-call on `log_paper_resolved`.
+    /// Auto-schema-on-open stays for backward compat with direct-
+    /// shim callers (proof 002); service-mode callers (slice 2)
+    /// install schemas explicitly via `execute_ddl`. Both paths
+    /// CREATE TABLE IF NOT EXISTS — re-installs are no-ops.
     pub fn open(path: String) -> Self {
         let conn = Connection::open(&path).unwrap_or_else(|e| {
             panic!(":rust::lab::RunDb::open: cannot open {path}: {e}")
@@ -280,6 +284,19 @@ impl WatRunDb {
             panic!(":rust::lab::RunDb::open: schema creation failed at {path}: {e}")
         });
         Self { conn }
+    }
+
+    /// `:rust::lab::RunDb::execute-ddl db ddl_str` — run a DDL
+    /// string (CREATE TABLE, CREATE INDEX, etc.). Used by the
+    /// slice-2 `:lab::rundb::Service` driver at startup to install
+    /// schemas from `:lab::log::all-schemas`. Idempotent — every
+    /// schema string uses CREATE TABLE IF NOT EXISTS so re-installs
+    /// are no-ops. Panics on rusqlite errors (syntax, permission,
+    /// etc.).
+    pub fn execute_ddl(&mut self, ddl_str: String) {
+        self.conn.execute_batch(&ddl_str).unwrap_or_else(|e| {
+            panic!(":rust::lab::RunDb::execute-ddl: {e}")
+        });
     }
 
     /// `:rust::lab::RunDb::log-paper-resolved db run_name ...` —
@@ -345,6 +362,18 @@ pub fn wat_sources() -> &'static [WatSource] {
         WatSource {
             path: "io/RunDb.wat",
             source: include_str!("../wat/io/RunDb.wat"),
+        },
+        WatSource {
+            path: "io/log/LogEntry.wat",
+            source: include_str!("../wat/io/log/LogEntry.wat"),
+        },
+        WatSource {
+            path: "io/log/schema.wat",
+            source: include_str!("../wat/io/log/schema.wat"),
+        },
+        WatSource {
+            path: "io/RunDbService.wat",
+            source: include_str!("../wat/io/RunDbService.wat"),
         },
     ];
     FILES

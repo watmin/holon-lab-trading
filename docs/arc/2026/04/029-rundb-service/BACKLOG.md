@@ -213,7 +213,7 @@ and doc addendum.
 
 ## Slice 2 — `LogEntry` sum + service (batch-log + ack)
 
-**Status: not started.** Depends on slice 1.
+**Status: shipped 2026-04-25.** Depends on slice 1.
 
 Three new wat files (sum + schema + service) and one shim
 addition (`execute_ddl`). Mirrors the archive's
