@@ -35,4 +35,13 @@
     (run-name :String) (thinker :String) (predictor :String)
     (paper-id :i64) (direction :String)
     (opened-at :i64) (resolved-at :i64)
-    (state :String) (residue :f64) (loss :f64)))
+    (state :String) (residue :f64) (loss :f64))
+  ;; Telemetry — CloudWatch-style metric observation (arc 030).
+  ;; Field order matches `:trading::rundb::log-telemetry` after
+  ;; `db`: namespace, id, dimensions, timestamp-ns, metric-name,
+  ;; metric-value, metric-unit. `dimensions` is JSON-encoded to
+  ;; avoid needing a Map<String,String> in the sum.
+  (Telemetry
+    (namespace :String) (id :String) (dimensions :String)
+    (timestamp-ns :i64)
+    (metric-name :String) (metric-value :f64) (metric-unit :String)))

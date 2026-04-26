@@ -347,6 +347,47 @@ impl WatRunDb {
             });
     }
 
+    /// `:rust::trading::RunDb::log-telemetry db ...` — insert one row
+    /// into the `telemetry` table. CloudWatch-style payload:
+    /// `(namespace, id, dimensions, timestamp_ns, metric_name,
+    /// metric_value, metric_unit)`. No PRIMARY KEY on the table —
+    /// every emit is a unique observation; SQLite's implicit rowid
+    /// distinguishes them. Mirrors the archive's
+    /// `archived/pre-wat-native/src/types/log_entry.rs::LogEntry::Telemetry`
+    /// shape; arc 030 brings it into the wat surface as the second
+    /// LogEntry variant.
+    #[allow(clippy::too_many_arguments)]
+    pub fn log_telemetry(
+        &mut self,
+        namespace: String,
+        id: String,
+        dimensions: String,
+        timestamp_ns: i64,
+        metric_name: String,
+        metric_value: f64,
+        metric_unit: String,
+    ) {
+        self.conn
+            .execute(
+                "INSERT INTO telemetry \
+                 (namespace, id, dimensions, timestamp_ns, \
+                  metric_name, metric_value, metric_unit) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![
+                    namespace,
+                    id,
+                    dimensions,
+                    timestamp_ns,
+                    metric_name,
+                    metric_value,
+                    metric_unit,
+                ],
+            )
+            .unwrap_or_else(|e| {
+                panic!(":rust::trading::RunDb::log-telemetry: insert failed: {e}")
+            });
+    }
+
 }
 
 /// wat-side wrappers contributed by this shim. The deps mechanism
@@ -370,6 +411,10 @@ pub fn wat_sources() -> &'static [WatSource] {
         WatSource {
             path: "io/log/schema.wat",
             source: include_str!("../wat/io/log/schema.wat"),
+        },
+        WatSource {
+            path: "io/log/telemetry.wat",
+            source: include_str!("../wat/io/log/telemetry.wat"),
         },
         WatSource {
             path: "io/RunDbService.wat",

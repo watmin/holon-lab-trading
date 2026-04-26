@@ -114,7 +114,13 @@
       (:trading::rundb::log-paper-resolved
         db run-name thinker predictor paper-id
         direction opened-at resolved-at
-        state residue loss))))
+        state residue loss))
+    ((:trading::log::LogEntry::Telemetry
+        namespace id dimensions timestamp-ns
+        metric-name metric-value metric-unit)
+      (:trading::rundb::log-telemetry
+        db namespace id dimensions timestamp-ns
+        metric-name metric-value metric-unit))))
 
 
 ;; ─── Driver entry — opens, installs schemas, enters loop ─────────

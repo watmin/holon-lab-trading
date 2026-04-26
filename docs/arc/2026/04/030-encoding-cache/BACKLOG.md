@@ -42,8 +42,7 @@ Builder direction (2026-04-25, after proof 003 baseline showed
 
 ## Slice 1 — `LogEntry::Telemetry` variant + `emit-metric`
 
-**Status: not started.** Priority — Treasury (experiment 008)
-needs this before it can ship.
+**Status: shipped 2026-04-25.** Treasury (experiment 008) unblocked.
 
 Adds the second variant on the arc 029 sum. The LogEntry,
 schema, dispatcher, shim wrapper, and a `wat/io/log/telemetry.wat`

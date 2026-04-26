@@ -32,9 +32,29 @@
    );")
 
 
+;; Telemetry table — CloudWatch-style metric observations. No
+;; PRIMARY KEY: every row is a unique observation; SQLite's
+;; implicit rowid distinguishes them. `dimensions` is JSON-encoded
+;; per the LogEntry::Telemetry shape (avoids needing a separate
+;; key-value table for v1; full normalization waits for a future
+;; arc when query patterns surface).
+(:wat::core::define
+  (:trading::log::schema-telemetry -> :String)
+  "CREATE TABLE IF NOT EXISTS telemetry (
+     namespace     TEXT NOT NULL,
+     id            TEXT NOT NULL,
+     dimensions    TEXT NOT NULL,
+     timestamp_ns  INTEGER NOT NULL,
+     metric_name   TEXT NOT NULL,
+     metric_value  REAL NOT NULL,
+     metric_unit   TEXT NOT NULL
+   );")
+
+
 ;; The registry. The service installs every entry at startup.
-;; Future variants append: (:trading::log::schema-telemetry), etc.
+;; Future variants append: (:trading::log::schema-broker-snapshot), etc.
 (:wat::core::define
   (:trading::log::all-schemas -> :Vec<String>)
   (:wat::core::vec :String
-    (:trading::log::schema-paper-resolved)))
+    (:trading::log::schema-paper-resolved)
+    (:trading::log::schema-telemetry)))

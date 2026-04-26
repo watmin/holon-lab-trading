@@ -15,6 +15,7 @@
 (:wat::load-file! "io/RunDb.wat")
 (:wat::load-file! "io/log/LogEntry.wat")
 (:wat::load-file! "io/log/schema.wat")
+(:wat::load-file! "io/log/telemetry.wat")
 (:wat::load-file! "io/RunDbService.wat")
 
 ;; Phase 1 — types

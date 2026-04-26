@@ -90,3 +90,23 @@
   (:rust::trading::RunDb::log_paper_resolved
     db run-name thinker predictor paper-id direction
     opened-at resolved-at state residue loss))
+
+;; Insert one row into the `telemetry` table — CloudWatch-style
+;; (namespace, id, dimensions, timestamp_ns, metric_name,
+;;  metric_value, metric_unit). Auto-commit. Arc 030 slice 1.
+;; Backed by `LogEntry::Telemetry`; the slice-2 service routes
+;; that variant here through `Service/dispatch`.
+(:wat::core::define
+  (:trading::rundb::log-telemetry
+    (db :trading::rundb::RunDb)
+    (namespace :String)
+    (id :String)
+    (dimensions :String)
+    (timestamp-ns :i64)
+    (metric-name :String)
+    (metric-value :f64)
+    (metric-unit :String)
+    -> :())
+  (:rust::trading::RunDb::log_telemetry
+    db namespace id dimensions
+    timestamp-ns metric-name metric-value metric-unit))
