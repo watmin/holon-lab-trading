@@ -102,11 +102,10 @@
 (:wat::load-file! "vocab/broker/portfolio.wat")
 (:wat::load-file! "vocab/exit/trade-atoms.wat")
 
-;; experiment 008 — Treasury (Proposal 055). Types + lib helpers.
-;; Service program (wat/services/treasury.wat) lands once the
-;; service-topology questions are settled.
+;; experiment 008 — Treasury (Proposal 055). Types + lib + service.
 (:wat::load-file! "treasury/types.wat")
 (:wat::load-file! "treasury/treasury.wat")
+(:wat::load-file! "services/treasury.wat")
 
 (:wat::core::define (:user::main
                      (stdin  :wat::io::IOReader)
