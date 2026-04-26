@@ -97,7 +97,7 @@ Three surfaces.
 
 ```scheme
 ;; wat/io/log/LogEntry.wat — second variant added.
-(:wat::core::enum :lab::log::LogEntry
+(:wat::core::enum :trading::log::LogEntry
   (PaperResolved
     ...)
   (Telemetry
@@ -113,7 +113,7 @@ Three surfaces.
 ```scheme
 ;; wat/io/log/schema.wat — new DDL constant + registry entry.
 (:wat::core::define
-  (:lab::log::schema-telemetry -> :String)
+  (:trading::log::schema-telemetry -> :String)
   "CREATE TABLE IF NOT EXISTS telemetry (
      namespace     TEXT NOT NULL,
      id            TEXT NOT NULL,
@@ -125,10 +125,10 @@ Three surfaces.
    );")
 
 (:wat::core::define
-  (:lab::log::all-schemas -> :Vec<String>)
+  (:trading::log::all-schemas -> :Vec<String>)
   (:wat::core::vec :String
-    (:lab::log::schema-paper-resolved)
-    (:lab::log::schema-telemetry)))   ; ← added
+    (:trading::log::schema-paper-resolved)
+    (:trading::log::schema-telemetry)))   ; ← added
 ```
 
 Shim adds `log_telemetry`:
@@ -153,12 +153,12 @@ Mirrors `archived/.../programs/telemetry.rs`:
 ;; wat/io/log/telemetry.wat — convenience wrappers.
 
 (:wat::core::define
-  (:lab::log::emit-metric
+  (:trading::log::emit-metric
     (namespace :String) (id :String) (dimensions :String)
     (timestamp-ns :i64)
     (metric-name :String) (metric-value :f64) (metric-unit :String)
-    -> :lab::log::LogEntry)
-  (:lab::log::LogEntry::Telemetry
+    -> :trading::log::LogEntry)
+  (:trading::log::LogEntry::Telemetry
     namespace id dimensions timestamp-ns
     metric-name metric-value metric-unit))
 
@@ -166,7 +166,7 @@ Mirrors `archived/.../programs/telemetry.rs`:
 ;; Used by the cache (and other emitters) to throttle metric emission
 ;; rather than firing on every operation.
 (:wat::core::define
-  (:lab::log::make-rate-gate
+  (:trading::log::make-rate-gate
     (interval-ms :i64)
     -> :wat::core::lambda<() -> bool>)
   ...)
@@ -255,7 +255,7 @@ unchanged. Implementer's call.)
 
 Inside `encode-cached`: on lookup, increment internal counters
 (hit / miss). After every N operations OR when a rate gate
-opens, emit a Telemetry batch via `:lab::rundb::Service/batch-log`
+opens, emit a Telemetry batch via `:trading::rundb::Service/batch-log`
 (if a service handle is in scope) or accumulate locally for
 later flush.
 

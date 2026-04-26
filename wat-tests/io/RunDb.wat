@@ -1,7 +1,7 @@
 ;; wat-tests/io/RunDb.wat — smoke tests for the SQLite paper-resolution shim.
 ;;
 ;; Three direct `:wat::test::deftest` exercises against the
-;; `:rust::lab::RunDb` dispatch:
+;; `:rust::trading::RunDb` dispatch:
 ;;   1. open + reopen at the same path (idempotent schema creation)
 ;;   2. open + log-paper one row (no crash)
 ;;   3. open + log-paper ten rows (no crash, exercises the loop shape)
@@ -20,19 +20,19 @@
 ;; Pattern: empty-prelude `:wat::test::deftest` (mirror
 ;; `wat-tests/io/CandleStream.wat`). The shim's `wat_sources()`
 ;; auto-registers `wat/io/RunDb.wat` via `deps: [shims]` in
-;; `tests/test.rs`, so `:lab::rundb::*` is in scope at startup.
+;; `tests/test.rs`, so `:trading::rundb::*` is in scope at startup.
 
 ;; ─── deftest: open creates schema, reopen succeeds ────────────────
 (:wat::test::deftest :trading::test::io::rundb::test-open-creates-schema
   ()
   (:wat::core::let*
-    (((db1 :lab::rundb::RunDb)
-      (:lab::rundb::open "/tmp/rundb-test-001.db"))
+    (((db1 :trading::rundb::RunDb)
+      (:trading::rundb::open "/tmp/rundb-test-001.db"))
      ;; Open a second handle on the same file. CREATE TABLE IF NOT
      ;; EXISTS makes this idempotent; the binding shadows the first,
      ;; which drops at let* exit.
-     ((db2 :lab::rundb::RunDb)
-      (:lab::rundb::open "/tmp/rundb-test-001.db")))
+     ((db2 :trading::rundb::RunDb)
+      (:trading::rundb::open "/tmp/rundb-test-001.db")))
     (:wat::test::assert-eq true true)))
 
 
@@ -40,10 +40,10 @@
 (:wat::test::deftest :trading::test::io::rundb::test-log-paper-one-row
   ()
   (:wat::core::let*
-    (((db :lab::rundb::RunDb)
-      (:lab::rundb::open "/tmp/rundb-test-002.db"))
+    (((db :trading::rundb::RunDb)
+      (:trading::rundb::open "/tmp/rundb-test-002.db"))
      ((u1 :())
-      (:lab::rundb::log-paper-resolved db
+      (:trading::rundb::log-paper-resolved db
         "single-row-run"
         "always-up" "cosine-vs-corners"
         1 "Up"
@@ -59,21 +59,21 @@
 (:wat::test::deftest :trading::test::io::rundb::test-log-paper-multiple-rows
   ()
   (:wat::core::let*
-    (((db :lab::rundb::RunDb)
-      (:lab::rundb::open "/tmp/rundb-test-003.db"))
+    (((db :trading::rundb::RunDb)
+      (:trading::rundb::open "/tmp/rundb-test-003.db"))
      ((u1 :())
-      (:lab::rundb::log-paper-resolved db "multi-row-up" "always-up" "cosine"
+      (:trading::rundb::log-paper-resolved db "multi-row-up" "always-up" "cosine"
         1 "Up"  100 388 "Grace"    0.04  0.0))
      ((u2 :())
-      (:lab::rundb::log-paper-resolved db "multi-row-up" "always-up" "cosine"
+      (:trading::rundb::log-paper-resolved db "multi-row-up" "always-up" "cosine"
         2 "Up"  400 688 "Violence" 0.0   0.02))
      ((u3 :())
-      (:lab::rundb::log-paper-resolved db "multi-row-up" "always-up" "cosine"
+      (:trading::rundb::log-paper-resolved db "multi-row-up" "always-up" "cosine"
         3 "Up"  700 988 "Grace"    0.03  0.0))
      ((u4 :())
-      (:lab::rundb::log-paper-resolved db "multi-row-down" "sma-cross" "cosine"
+      (:trading::rundb::log-paper-resolved db "multi-row-down" "sma-cross" "cosine"
         4 "Down" 1000 1288 "Grace" 0.025 0.0))
      ((u5 :())
-      (:lab::rundb::log-paper-resolved db "multi-row-down" "sma-cross" "cosine"
+      (:trading::rundb::log-paper-resolved db "multi-row-down" "sma-cross" "cosine"
         5 "Down" 1300 1588 "Violence" 0.0 0.018)))
     (:wat::test::assert-eq true true)))

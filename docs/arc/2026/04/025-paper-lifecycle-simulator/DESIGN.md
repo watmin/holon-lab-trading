@@ -84,7 +84,7 @@ archive did, every slice is parity-by-faith.
 The yardstick this arc ships is the substitute for that faith.
 Given:
 
-- a candle source (Phase 0's `:lab::candles::Stream`, shipped),
+- a candle source (Phase 0's `:trading::candles::Stream`, shipped),
 - a thinker — any wat function `(window → :Up | :Down)` —,
 - a deadline + minimum-residue config,
 
@@ -243,7 +243,7 @@ owns lifecycle, gates 1-3, and the trail-back-fill at resolution.
 ```scheme
 (:wat::core::define
   (:trading::sim::run
-    (stream      :lab::candles::Stream)
+    (stream      :trading::candles::Stream)
     (thinker     :trading::sim::Thinker)        ; surface builder (vocabulary)
     (predictor   :trading::sim::Predictor)      ; surface → Action (learner slot)
     (config      :trading::sim::Config)

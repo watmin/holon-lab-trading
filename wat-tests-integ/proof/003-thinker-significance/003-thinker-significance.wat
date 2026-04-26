@@ -29,8 +29,8 @@
 ;;
 ;; ── Architecture (per arc 029) ──
 ;;   - Q8: one DB per run, many tables/columns inside. ✓ one file.
-;;   - Q9: communication unit is :lab::log::LogEntry::PaperResolved.
-;;   - Q10: confirmed batch + ack via :lab::rundb::Service/batch-log.
+;;   - Q9: communication unit is :trading::log::LogEntry::PaperResolved.
+;;   - Q10: confirmed batch + ack via :trading::rundb::Service/batch-log.
 ;;
 ;; ── Lifetime discipline (Console multi-writer pattern) ──
 ;; The driver loop converges to empty only when every ReqRx has
@@ -44,7 +44,7 @@
 ;; `wat-tests/io/RunDbService.wat` test-multi-client-fan-in.
 ;;
 ;; ── Window scheme ──
-;; `:lab::candles::open-bounded path n` caps total emissions from
+;; `:trading::candles::open-bounded path n` caps total emissions from
 ;; row 0. To reach window w_i: open with n = start_i + 10_000,
 ;; then `next!` × start_i to discard, then run-loop the next 10k.
 ;; Skip cost is parquet streaming-reads — negligible vs simulator
@@ -70,14 +70,14 @@
    ;; skip — w9 with start=587,348).
    (:wat::core::define
      (:trading::test::proofs::003::skip-n
-       (s :lab::candles::Stream)
+       (s :trading::candles::Stream)
        (n :i64)
        -> :())
      (:wat::core::if (:wat::core::<= n 0) -> :()
        ()
        (:wat::core::let*
          (((_ :Option<(i64,f64,f64,f64,f64,f64)>)
-           (:lab::candles::next! s)))
+           (:trading::candles::next! s)))
          (:trading::test::proofs::003::skip-n s (:wat::core::- n 1)))))
 
    ;; Map a Vec<Outcome> → Vec<LogEntry> using the schema's
@@ -94,13 +94,13 @@
        (run-name :String)
        (thinker-name :String)
        (predictor-name :String)
-       -> :Vec<lab::log::LogEntry>)
+       -> :Vec<trading::log::LogEntry>)
      (:wat::core::foldl outcomes
-       (:wat::core::vec :lab::log::LogEntry)
+       (:wat::core::vec :trading::log::LogEntry)
        (:wat::core::lambda
-         ((acc :Vec<lab::log::LogEntry>)
+         ((acc :Vec<trading::log::LogEntry>)
           (out :trading::sim::Outcome)
-          -> :Vec<lab::log::LogEntry>)
+          -> :Vec<trading::log::LogEntry>)
          (:wat::core::let*
            (((paper :trading::sim::Paper) (:trading::sim::Outcome/paper out))
             ((paper-id :i64)              (:trading::sim::Paper/id paper))
@@ -112,16 +112,16 @@
                                           (:trading::sim::Paper/state paper))
             ((final-residue :f64)         (:trading::sim::Outcome/final-residue out))
             ((dir-str :String)            (:trading::test::proofs::003::dir-str dir)))
-           (:wat::core::match state -> :Vec<lab::log::LogEntry>
+           (:wat::core::match state -> :Vec<trading::log::LogEntry>
              ((:trading::sim::PositionState::Grace _r)
                (:wat::core::conj acc
-                 (:lab::log::LogEntry::PaperResolved
+                 (:trading::log::LogEntry::PaperResolved
                    run-name thinker-name predictor-name
                    paper-id dir-str entry-candle closed-at
                    "Grace" final-residue 0.0)))
              (:trading::sim::PositionState::Violence
                (:wat::core::conj acc
-                 (:lab::log::LogEntry::PaperResolved
+                 (:trading::log::LogEntry::PaperResolved
                    run-name thinker-name predictor-name
                    paper-id dir-str entry-candle closed-at
                    "Violence" 0.0 (:wat::core::f64::abs final-residue))))
@@ -133,9 +133,9 @@
    ;; per batch).
    (:wat::core::define
      (:trading::test::proofs::003::run-window
-       (req-tx :lab::rundb::Service::ReqTx)
-       (ack-tx :lab::rundb::Service::AckTx)
-       (ack-rx :lab::rundb::Service::AckRx)
+       (req-tx :trading::rundb::Service::ReqTx)
+       (ack-tx :trading::rundb::Service::AckTx)
+       (ack-rx :trading::rundb::Service::AckRx)
        (path :String)
        (start :i64)
        (n :i64)
@@ -147,8 +147,8 @@
        (predictor-name :String)
        -> :())
      (:wat::core::let*
-       (((stream :lab::candles::Stream)
-         (:lab::candles::open-bounded path (:wat::core::+ start n)))
+       (((stream :trading::candles::Stream)
+         (:trading::candles::open-bounded path (:wat::core::+ start n)))
         ((_skip :())
          (:trading::test::proofs::003::skip-n stream start))
         ((final-state :trading::sim::SimState)
@@ -157,18 +157,18 @@
            stream cfg thinker predictor))
         ((outcomes :trading::sim::Outcomes)
          (:trading::sim::SimState/outcomes final-state))
-        ((entries :Vec<lab::log::LogEntry>)
+        ((entries :Vec<trading::log::LogEntry>)
          (:trading::test::proofs::003::outcomes-to-entries
            outcomes run-name thinker-name predictor-name)))
-       (:lab::rundb::Service/batch-log req-tx ack-tx ack-rx entries)))
+       (:trading::rundb::Service/batch-log req-tx ack-tx ack-rx entries)))
 
    ;; Walk 0..10 (window indices). For each i: start = i * stride,
    ;; run-window with run-name "<thinker>-w<i>-<iso>".
    (:wat::core::define
      (:trading::test::proofs::003::run-thinker-windows
-       (req-tx :lab::rundb::Service::ReqTx)
-       (ack-tx :lab::rundb::Service::AckTx)
-       (ack-rx :lab::rundb::Service::AckRx)
+       (req-tx :trading::rundb::Service::ReqTx)
+       (ack-tx :trading::rundb::Service::AckTx)
+       (ack-rx :trading::rundb::Service::AckRx)
        (path :String)
        (cfg :trading::sim::Config)
        (thinker :trading::sim::Thinker)
@@ -210,8 +210,8 @@
 
      ;; Spawn the service with N=1 client (single-thread deftest;
      ;; future multi-thread version would pop N>1 handles).
-     ((spawn :lab::rundb::Service::Spawn) (:lab::rundb::Service db-path 1))
-     ((pool :lab::rundb::Service::ReqTxPool) (:wat::core::first spawn))
+     ((spawn :trading::rundb::Service::Spawn) (:trading::rundb::Service db-path 1))
+     ((pool :trading::rundb::Service::ReqTxPool) (:wat::core::first spawn))
      ((driver :wat::kernel::ProgramHandle<()>) (:wat::core::second spawn))
 
      ;; Inner let*: every client-side ReqTx + ack channel lives only
@@ -219,13 +219,13 @@
      ;; disconnects → loop exits → outer (join driver) unblocks.
      ((_inner :())
       (:wat::core::let*
-        (((req-tx :lab::rundb::Service::ReqTx)
+        (((req-tx :trading::rundb::Service::ReqTx)
           (:wat::kernel::HandlePool::pop pool))
          ((_finish :()) (:wat::kernel::HandlePool::finish pool))
-         ((ack-channel :lab::rundb::Service::AckChannel)
+         ((ack-channel :trading::rundb::Service::AckChannel)
           (:wat::kernel::make-bounded-queue :() 1))
-         ((ack-tx :lab::rundb::Service::AckTx) (:wat::core::first ack-channel))
-         ((ack-rx :lab::rundb::Service::AckRx) (:wat::core::second ack-channel))
+         ((ack-tx :trading::rundb::Service::AckTx) (:wat::core::first ack-channel))
+         ((ack-rx :trading::rundb::Service::AckRx) (:wat::core::second ack-channel))
 
          ;; Always-up across 10 windows.
          ((_run-up :())

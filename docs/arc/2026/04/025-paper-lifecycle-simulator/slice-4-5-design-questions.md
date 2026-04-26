@@ -197,8 +197,8 @@ slice 5," that was over-eager. Revert to slice-5-as-smoke:
 (:wat::test::deftest :trading::test::sim::integration::ten-thousand-candles
   ()
   (:wat::core::let*
-    (((stream :lab::candles::Stream)
-      (:lab::candles::open-bounded "data/btc_5m_raw.parquet" 10000))
+    (((stream :trading::candles::Stream)
+      (:trading::candles::open-bounded "data/btc_5m_raw.parquet" 10000))
      ((thinker :trading::sim::Thinker)        <always-up-thinker>)
      ((predictor :trading::sim::Predictor)    <cosine-vs-corners-predictor>)
      ((config :trading::sim::Config)          <default-config>)

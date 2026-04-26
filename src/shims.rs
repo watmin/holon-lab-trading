@@ -5,15 +5,15 @@
 //!
 //! Shipped surfaces:
 //!
-//! - `:rust::lab::CandleStream` — a thread-owned parquet OHLCV reader.
-//!   Expressed at the wat surface as `:lab::candles::Stream` via
+//! - `:rust::trading::CandleStream` — a thread-owned parquet OHLCV reader.
+//!   Expressed at the wat surface as `:trading::candles::Stream` via
 //!   `wat/io/CandleStream.wat`. Mirrors the archived
 //!   `archived/pre-wat-native/src/domain/candle_stream.rs` reader,
 //!   cut down to a 6-field tuple emit (asset metadata is wat-side
 //!   configuration, not a parquet payload).
-//! - `:rust::lab::RunDb` — a thread-owned SQLite writer for
+//! - `:rust::trading::RunDb` — a thread-owned SQLite writer for
 //!   per-paper resolution rows. Expressed at the wat surface as
-//!   `:lab::rundb::*` via `wat/io/RunDb.wat`. Single in-crate shim;
+//!   `:trading::rundb::*` via `wat/io/RunDb.wat`. Single in-crate shim;
 //!   `archived/pre-wat-native/src/programs/stdlib/database.rs`'s
 //!   627-LOC CSP-style writer is deliberately out of scope for v1
 //!   (Phase 7's `wat-rusqlite` sibling crate territory).
@@ -41,7 +41,7 @@ struct Row {
     volume: f64,
 }
 
-/// `:rust::lab::CandleStream` — eager-batch parquet OHLCV iterator.
+/// `:rust::trading::CandleStream` — eager-batch parquet OHLCV iterator.
 ///
 /// Holds one record-batch's worth of rows in `buffer`; refills from
 /// the underlying reader on exhaust. `pos` is the read cursor inside
@@ -64,11 +64,11 @@ pub struct WatCandleStream {
 }
 
 #[wat_dispatch(
-    path = ":rust::lab::CandleStream",
+    path = ":rust::trading::CandleStream",
     scope = "thread_owned"
 )]
 impl WatCandleStream {
-    /// `:rust::lab::CandleStream::open path` — open a parquet file by
+    /// `:rust::trading::CandleStream::open path` — open a parquet file by
     /// path. Schema requirement: columns `ts` (Timestamp µs or ms),
     /// `open`, `high`, `low`, `close`, `volume` (all f64). Panics if
     /// the file is missing or the schema doesn't match — same posture
@@ -78,23 +78,23 @@ impl WatCandleStream {
         let p = Path::new(&path);
         let total = {
             let f = std::fs::File::open(p).unwrap_or_else(|e| {
-                panic!(":rust::lab::CandleStream::open: cannot open {path}: {e}")
+                panic!(":rust::trading::CandleStream::open: cannot open {path}: {e}")
             });
             let builder = ParquetRecordBatchReaderBuilder::try_new(f).unwrap_or_else(|e| {
-                panic!(":rust::lab::CandleStream::open: not a parquet file ({path}): {e}")
+                panic!(":rust::trading::CandleStream::open: not a parquet file ({path}): {e}")
             });
             builder.metadata().file_metadata().num_rows()
         };
         let f = std::fs::File::open(p).unwrap_or_else(|e| {
-            panic!(":rust::lab::CandleStream::open: cannot reopen {path}: {e}")
+            panic!(":rust::trading::CandleStream::open: cannot reopen {path}: {e}")
         });
         let reader = ParquetRecordBatchReaderBuilder::try_new(f)
             .unwrap_or_else(|e| {
-                panic!(":rust::lab::CandleStream::open: builder failed ({path}): {e}")
+                panic!(":rust::trading::CandleStream::open: builder failed ({path}): {e}")
             })
             .build()
             .unwrap_or_else(|e| {
-                panic!(":rust::lab::CandleStream::open: build failed ({path}): {e}")
+                panic!(":rust::trading::CandleStream::open: build failed ({path}): {e}")
             });
         Self {
             reader,
@@ -105,7 +105,7 @@ impl WatCandleStream {
         }
     }
 
-    /// `:rust::lab::CandleStream::open-bounded path n` — open a parquet
+    /// `:rust::trading::CandleStream::open-bounded path n` — open a parquet
     /// file capped at `n` row emissions. After `n` successful `next`
     /// pulls, subsequent `next` calls return `None` regardless of the
     /// parquet's remaining content. Used by tests + cheap exploratory
@@ -120,7 +120,7 @@ impl WatCandleStream {
         s
     }
 
-    /// `:rust::lab::CandleStream::next stream` — pull the next OHLCV row.
+    /// `:rust::trading::CandleStream::next stream` — pull the next OHLCV row.
     /// Returns `(ts_us, open, high, low, close, volume)` wrapped in
     /// `Option`; `None` when the stream is exhausted OR when the
     /// `open_bounded` row-cap has been reached.
@@ -137,7 +137,7 @@ impl WatCandleStream {
         Some((r.ts_us, r.open, r.high, r.low, r.close, r.volume))
     }
 
-    /// `:rust::lab::CandleStream::len stream` — total row count from the
+    /// `:rust::trading::CandleStream::len stream` — total row count from the
     /// parquet metadata. Captured at open; constant across the stream's
     /// lifetime.
     pub fn len(&self) -> i64 {
@@ -159,7 +159,7 @@ impl WatCandleStream {
                     }
                     let ts_col = batch
                         .column_by_name("ts")
-                        .expect(":rust::lab::CandleStream: parquet missing 'ts' column");
+                        .expect(":rust::trading::CandleStream: parquet missing 'ts' column");
                     let open_col = batch.column_by_name("open").expect("missing 'open'");
                     let high_col = batch.column_by_name("high").expect("missing 'high'");
                     let low_col = batch.column_by_name("low").expect("missing 'low'");
@@ -176,7 +176,7 @@ impl WatCandleStream {
                         (0..arr.len()).map(|i| arr.value(i) * 1_000).collect()
                     } else {
                         panic!(
-                            ":rust::lab::CandleStream: 'ts' column must be Timestamp(µs) or Timestamp(ms)"
+                            ":rust::trading::CandleStream: 'ts' column must be Timestamp(µs) or Timestamp(ms)"
                         );
                     };
 
@@ -215,14 +215,14 @@ impl WatCandleStream {
                     }
                     return true;
                 }
-                Some(Err(e)) => panic!(":rust::lab::CandleStream: parquet read error: {e}"),
+                Some(Err(e)) => panic!(":rust::trading::CandleStream: parquet read error: {e}"),
                 None => return false,
             }
         }
     }
 }
 
-/// `:rust::lab::RunDb` — thread-owned SQLite writer.
+/// `:rust::trading::RunDb` — thread-owned SQLite writer.
 ///
 /// Holds an open `Connection`. Schema (`paper_resolutions`) is
 /// created if absent; every `log_paper` call inserts one row,
@@ -234,7 +234,7 @@ impl WatCandleStream {
 ///
 /// Arc 029 refactored `run_name` from a struct field into a
 /// per-call parameter — lets one shim handle drive multiple run
-/// names, which is the prerequisite for the `:lab::rundb::Service`
+/// names, which is the prerequisite for the `:trading::rundb::Service`
 /// CSP wrapper that fans in N clients (each with its own
 /// run_name) onto one underlying connection.
 ///
@@ -263,11 +263,11 @@ CREATE TABLE IF NOT EXISTS paper_resolutions (
 ";
 
 #[wat_dispatch(
-    path = ":rust::lab::RunDb",
+    path = ":rust::trading::RunDb",
     scope = "thread_owned"
 )]
 impl WatRunDb {
-    /// `:rust::lab::RunDb::open path` — open or create a SQLite
+    /// `:rust::trading::RunDb::open path` — open or create a SQLite
     /// database at `path` and ensure the `paper_resolutions` schema
     /// exists. Panics on any rusqlite error (bad path, permission,
     /// schema creation failure). Arc 029 dropped the `run_name`
@@ -278,28 +278,28 @@ impl WatRunDb {
     /// CREATE TABLE IF NOT EXISTS — re-installs are no-ops.
     pub fn open(path: String) -> Self {
         let conn = Connection::open(&path).unwrap_or_else(|e| {
-            panic!(":rust::lab::RunDb::open: cannot open {path}: {e}")
+            panic!(":rust::trading::RunDb::open: cannot open {path}: {e}")
         });
         conn.execute_batch(RUNDB_SCHEMA).unwrap_or_else(|e| {
-            panic!(":rust::lab::RunDb::open: schema creation failed at {path}: {e}")
+            panic!(":rust::trading::RunDb::open: schema creation failed at {path}: {e}")
         });
         Self { conn }
     }
 
-    /// `:rust::lab::RunDb::execute-ddl db ddl_str` — run a DDL
+    /// `:rust::trading::RunDb::execute-ddl db ddl_str` — run a DDL
     /// string (CREATE TABLE, CREATE INDEX, etc.). Used by the
-    /// slice-2 `:lab::rundb::Service` driver at startup to install
-    /// schemas from `:lab::log::all-schemas`. Idempotent — every
+    /// slice-2 `:trading::rundb::Service` driver at startup to install
+    /// schemas from `:trading::log::all-schemas`. Idempotent — every
     /// schema string uses CREATE TABLE IF NOT EXISTS so re-installs
     /// are no-ops. Panics on rusqlite errors (syntax, permission,
     /// etc.).
     pub fn execute_ddl(&mut self, ddl_str: String) {
         self.conn.execute_batch(&ddl_str).unwrap_or_else(|e| {
-            panic!(":rust::lab::RunDb::execute-ddl: {e}")
+            panic!(":rust::trading::RunDb::execute-ddl: {e}")
         });
     }
 
-    /// `:rust::lab::RunDb::log-paper-resolved db run_name ...` —
+    /// `:rust::trading::RunDb::log-paper-resolved db run_name ...` —
     /// insert one row into `paper_resolutions` under the given
     /// `run_name`. `INSERT OR REPLACE` semantics — the same
     /// `(run_name, paper_id)` re-logged overwrites the prior row.
@@ -308,7 +308,7 @@ impl WatRunDb {
     /// variant the slice-2 service wraps and (b) promoted
     /// `run_name` from struct field to first parameter so one shim
     /// handle can drive multiple run names (the prerequisite for
-    /// per-message routing through `:lab::rundb::Service`).
+    /// per-message routing through `:trading::rundb::Service`).
     #[allow(clippy::too_many_arguments)]
     pub fn log_paper_resolved(
         &mut self,
@@ -343,7 +343,7 @@ impl WatRunDb {
                 ],
             )
             .unwrap_or_else(|e| {
-                panic!(":rust::lab::RunDb::log-paper-resolved: insert failed: {e}")
+                panic!(":rust::trading::RunDb::log-paper-resolved: insert failed: {e}")
             });
     }
 

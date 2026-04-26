@@ -27,7 +27,7 @@ It is. Below are the numbers.
 
 Two arcs paved the way:
 
-- [`docs/arc/2026/04/027-rundb-shim/`](../../../arc/2026/04/027-rundb-shim/DESIGN.md) shipped `:lab::rundb::open` / `:lab::rundb::log-paper` — the SQLite-logging seam. `close` was dropped (Drop on the thread-owned cell handles file-handle release; rusqlite auto-commits per statement).
+- [`docs/arc/2026/04/027-rundb-shim/`](../../../arc/2026/04/027-rundb-shim/DESIGN.md) shipped `:trading::rundb::open` / `:trading::rundb::log-paper` — the SQLite-logging seam. `close` was dropped (Drop on the thread-owned cell handles file-handle release; rusqlite auto-commits per statement).
 - [`wat-rs` arc 056](../../../../../wat-rs/docs/arc/2026/04/056-time-instant/BACKLOG.md) shipped `:wat::time::*` primitives — `(:wat::time::now)`, `epoch-seconds`, `to-iso8601`. The pair file uses these to mint unique-per-execution DB filenames so re-runs accumulate (`runs/proof-002-<thinker>-<epoch>.db`) rather than PK-violate.
 
 The seam exposed by the simulator: per-paper Outcomes weren't on `:trading::sim::run`'s return type — only the rolled-up Aggregate. The pair file drops to `:trading::sim::run-loop` + `SimState/outcomes` (both already public) and walks the resulting `:Outcomes` vec via `foldl` for the side effect of logging. No simulator-side change required.

@@ -32,7 +32,7 @@ pub struct WatRunDb {
     run_name: String,
 }
 
-#[wat_dispatch(path = ":rust::lab::RunDb", scope = "thread_owned")]
+#[wat_dispatch(path = ":rust::trading::RunDb", scope = "thread_owned")]
 impl WatRunDb {
     pub fn open(path: String, run_name: String) -> Self {
         // open or create at path; ensure schema; bind run_name.
@@ -89,32 +89,32 @@ Verify: `cargo build --release` clean.
 as `wat/io/CandleStream.wat`:
 
 ```scheme
-(:wat::core::use! :rust::lab::RunDb)
-(:wat::core::typealias :lab::rundb::RunDb :rust::lab::RunDb)
+(:wat::core::use! :rust::trading::RunDb)
+(:wat::core::typealias :trading::rundb::RunDb :rust::trading::RunDb)
 
 (:wat::core::define
-  (:lab::rundb::open
+  (:trading::rundb::open
     (path :String) (run-name :String)
-    -> :lab::rundb::RunDb)
-  (:rust::lab::RunDb::open path run-name))
+    -> :trading::rundb::RunDb)
+  (:rust::trading::RunDb::open path run-name))
 
 (:wat::core::define
-  (:lab::rundb::log-paper
-    (db :lab::rundb::RunDb)
+  (:trading::rundb::log-paper
+    (db :trading::rundb::RunDb)
     (thinker :String) (predictor :String)
     (paper-id :i64) (direction :String)
     (opened-at :i64) (resolved-at :i64)
     (state :String)
     (residue :f64) (loss :f64)
     -> :())
-  (:rust::lab::RunDb::log-paper db thinker predictor paper-id direction
+  (:rust::trading::RunDb::log-paper db thinker predictor paper-id direction
                                  opened-at resolved-at state residue loss))
 
 (:wat::core::define
-  (:lab::rundb::close
-    (db :lab::rundb::RunDb)
+  (:trading::rundb::close
+    (db :trading::rundb::RunDb)
     -> :())
-  (:rust::lab::RunDb::close db))
+  (:rust::trading::RunDb::close db))
 ```
 
 `wat/main.wat` — add load line in Phase 0 section (near
@@ -145,14 +145,14 @@ on every `cargo test --test test`.
 
 (:deftest :trading::test::io::rundb::test-open-creates-schema
   (:wat::core::let*
-    (((db :lab::rundb::RunDb)
-      (:lab::rundb::open "/tmp/rundb-test-001.db" "test-run"))
-     ((_ :()) (:lab::rundb::close db)))
+    (((db :trading::rundb::RunDb)
+      (:trading::rundb::open "/tmp/rundb-test-001.db" "test-run"))
+     ((_ :()) (:trading::rundb::close db)))
     ;; Reopening should not error → schema persists.
     (:wat::core::let*
-      (((db2 :lab::rundb::RunDb)
-        (:lab::rundb::open "/tmp/rundb-test-001.db" "test-run-2")))
-      (:lab::rundb::close db2))
+      (((db2 :trading::rundb::RunDb)
+        (:trading::rundb::open "/tmp/rundb-test-001.db" "test-run-2")))
+      (:trading::rundb::close db2))
     (:wat::test::assert-eq true true)))
 
 (:deftest :trading::test::io::rundb::test-log-paper-round-trip
@@ -161,17 +161,17 @@ on every `cargo test --test test`.
   ;; log-paper doesn't crash. Future arc adds read API + tighter
   ;; round-trip assertion.)
   (:wat::core::let*
-    (((db :lab::rundb::RunDb)
-      (:lab::rundb::open "/tmp/rundb-test-002.db" "test-run-rt"))
-     ((_ :()) (:lab::rundb::log-paper db "always-up" "cosine"
+    (((db :trading::rundb::RunDb)
+      (:trading::rundb::open "/tmp/rundb-test-002.db" "test-run-rt"))
+     ((_ :()) (:trading::rundb::log-paper db "always-up" "cosine"
                                        1 "Up" 100 388 "Grace" 0.04 0.0))
-     ((_ :()) (:lab::rundb::close db)))
+     ((_ :()) (:trading::rundb::close db)))
     (:wat::test::assert-eq true true)))
 
 (:deftest :trading::test::io::rundb::test-multiple-rows
   (:wat::core::let*
-    (((db :lab::rundb::RunDb)
-      (:lab::rundb::open "/tmp/rundb-test-003.db" "test-run-multi")))
+    (((db :trading::rundb::RunDb)
+      (:trading::rundb::open "/tmp/rundb-test-003.db" "test-run-multi")))
     ;; Log 10 rows in a tight loop. No crash = pass.
     ;; (foldl over a vec of 10 ids would be cleaner; this is the
     ;; minimum-viable shape.)

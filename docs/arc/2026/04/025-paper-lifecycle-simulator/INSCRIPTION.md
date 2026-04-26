@@ -130,7 +130,7 @@ translation tests joined.
 
 Original plan: a `run-bounded` engine variant taking a max-candles
 parameter. Shipped instead: a producer-side cap via
-`(:lab::candles::open-bounded path n)`. The engine has no
+`(:trading::candles::open-bounded path n)`. The engine has no
 max-candles knob — `run-loop` terminates on the stream's natural
 end-of-stream. Streaming semantics preserved (one record-batch
 at a time from disk; the cap just changes when the producer signals

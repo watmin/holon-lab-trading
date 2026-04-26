@@ -806,8 +806,8 @@ After all slices land:
 
 ```scheme
 (:wat::core::let*
-  (((stream :lab::candles::Stream)
-    (:lab::candles::open "data/btc_5m_raw.parquet"))
+  (((stream :trading::candles::Stream)
+    (:trading::candles::open "data/btc_5m_raw.parquet"))
    ((bank-fresh :trading::encoding::IndicatorBank)
     (:trading::encoding::indicator-bank-fresh)))
   ;; Loop: pull ohlcv from stream; tick bank; extract candle.

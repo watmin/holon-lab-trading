@@ -1,7 +1,7 @@
 # Proof 003 — Thinker Significance
 
 **Date:** opened 2026-04-25, shipped 2026-04-25.
-**Status:** **SHIPPED.** Pair file at `wat-tests-integ/proof/003-thinker-significance/`. Test passes in 586s (~9.8 min). Per thinker: 100,000 candles examined (10 windows × 10k each, ~1.15 months per window). Per proof: 200,000 simulator-tick invocations (2 thinkers × 100k). The 10 windows are *scattered* across 5.7 years via stride ≈ 65k candles (~7.6 months); we sample regimes, not contiguous coverage. Logged via `:lab::rundb::Service` (single client, batch+ack, one batch per window). Numbers below.
+**Status:** **SHIPPED.** Pair file at `wat-tests-integ/proof/003-thinker-significance/`. Test passes in 586s (~9.8 min). Per thinker: 100,000 candles examined (10 windows × 10k each, ~1.15 months per window). Per proof: 200,000 simulator-tick invocations (2 thinkers × 100k). The 10 windows are *scattered* across 5.7 years via stride ≈ 65k candles (~7.6 months); we sample regimes, not contiguous coverage. Logged via `:trading::rundb::Service` (single client, batch+ack, one batch per window). Numbers below.
 **Pair file (planned):** [`wat-tests-integ/proof/003-thinker-significance/003-thinker-significance.wat`](../../../../wat-tests-integ/proof/003-thinker-significance/003-thinker-significance.wat).
 **Predecessor:** [Proof 002 — Thinker Baseline](../002-thinker-baseline/PROOF.md).
 **Unblocking arc:** [`docs/arc/2026/04/029-rundb-service/`](../../../arc/2026/04/029-rundb-service/DESIGN.md).
@@ -49,7 +49,7 @@ regimes show up: w2 catches the COVID crash recovery, w3 the
 the post-FTX bottom, w8 the spot ETF approval week, w9 the
 late-2024 chop.
 
-**No infra change.** `:lab::candles::open-bounded path n` caps
+**No infra change.** `:trading::candles::open-bounded path n` caps
 total emissions from row 0. To reach window `w_i`:
 1. Open with `n = start_i + 10_000`.
 2. `next!` × `start_i` to discard.
@@ -79,7 +79,7 @@ Both: `GROUP BY thinker, run_name`.
 
 No `ATTACH DATABASE` dance, no two-file split. Arc 029 makes
 `run_name` a per-message field on `log-paper`; the
-`:lab::rundb::Service` driver fans in 20 different run_names
+`:trading::rundb::Service` driver fans in 20 different run_names
 through one connection.
 
 ---
@@ -88,7 +88,7 @@ through one connection.
 
 Per arc 029:
 - **Q8** — one deftest per proof, one DB per run, all variants distinguished by columns.
-- **Q9** — communication unit is `:lab::log::LogEntry::PaperResolved`.
+- **Q9** — communication unit is `:trading::log::LogEntry::PaperResolved`.
 - **Q10** — confirmed batch with ack; one primitive (`Service/batch-log`).
 
 ```scheme
@@ -102,9 +102,9 @@ Per arc 029:
      ((iso-str :String) (:wat::time::to-iso8601 now 3))
      ((db-path :String)
       (:wat::core::string::concat "runs/proof-003-" epoch-str ".db"))
-     ;; Spawn :lab::rundb::Service with N=1 client (single-thread
+     ;; Spawn :trading::rundb::Service with N=1 client (single-thread
      ;; deftest; future multi-thread version pops N>1 handles).
-     ((tup ...) (:lab::rundb::Service db-path 1))
+     ((tup ...) (:trading::rundb::Service db-path 1))
      ((pool ...) (:wat::core::first tup))
      ((driver ...) (:wat::core::second tup))
      ((req-tx ...) (:wat::kernel::HandlePool::pop pool))
@@ -143,9 +143,9 @@ The supporting program ships two helpers:
 - `run-window-and-log req-tx ack-tx ack-rx path start n cfg thinker predictor thinker-name run-name`
   — opens the bounded stream, skips to `start`, runs
   `:trading::sim::run-loop`, **maps** `SimState/outcomes` to a
-  `Vec<:lab::log::LogEntry>` of `PaperResolved` variants
+  `Vec<:trading::log::LogEntry>` of `PaperResolved` variants
   (one per Outcome), then calls
-  `(:lab::rundb::Service/batch-log req-tx ack-tx ack-rx entries)`
+  `(:trading::rundb::Service/batch-log req-tx ack-tx ack-rx entries)`
   once per window — one ack per window batch, ~30-40 entries
   per batch.
 

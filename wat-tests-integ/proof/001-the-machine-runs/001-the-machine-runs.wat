@@ -10,7 +10,7 @@
 ;; Run via: `cargo test --release --test test -- --nocapture | grep proofs`
 ;;
 ;; Why a wat-tests file rather than a standalone runnable: the
-;; lab's deftest harness already wires `:lab::candles::*` (parquet
+;; lab's deftest harness already wires `:trading::candles::*` (parquet
 ;; shim) + `:trading::*` (full domain) into the sandbox.
 ;; Adding a new bin target would duplicate that wiring; the test
 ;; suite already has it. The trade is: numbers come out via
@@ -44,8 +44,8 @@
 
 (:deftest :trading::test::proofs::001::always-up-10k
   (:wat::core::let*
-    (((stream :lab::candles::Stream)
-      (:lab::candles::open-bounded "data/btc_5m_raw.parquet" 10000))
+    (((stream :trading::candles::Stream)
+      (:trading::candles::open-bounded "data/btc_5m_raw.parquet" 10000))
      ((cfg :trading::sim::Config)
       (:trading::sim::Config/new 288 0.01 35.0 14))
      ((agg :trading::sim::Aggregate)
@@ -82,8 +82,8 @@
 
 (:deftest :trading::test::proofs::001::sma-cross-10k
   (:wat::core::let*
-    (((stream :lab::candles::Stream)
-      (:lab::candles::open-bounded "data/btc_5m_raw.parquet" 10000))
+    (((stream :trading::candles::Stream)
+      (:trading::candles::open-bounded "data/btc_5m_raw.parquet" 10000))
      ((cfg :trading::sim::Config)
       (:trading::sim::Config/new 288 0.01 35.0 14))
      ((agg :trading::sim::Aggregate)

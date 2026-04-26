@@ -2,7 +2,7 @@
 ;;
 ;; Real-data smoke test: the simulator runs end-to-end against
 ;; `data/btc_5m_raw.parquet`, bounded to 10,000 candles via
-;; `:lab::candles::open-bounded`, with the v1 always-up-thinker +
+;; `:trading::candles::open-bounded`, with the v1 always-up-thinker +
 ;; cosine-vs-corners-predictor.
 ;;
 ;; Per slice-4-5-design-questions.md Q13 this is smoke only —
@@ -28,8 +28,8 @@
 
 (:deftest :trading::test::sim::integration::ten-thousand-candles-smoke
   (:wat::core::let*
-    (((stream :lab::candles::Stream)
-      (:lab::candles::open-bounded "data/btc_5m_raw.parquet" 10000))
+    (((stream :trading::candles::Stream)
+      (:trading::candles::open-bounded "data/btc_5m_raw.parquet" 10000))
      ((cfg :trading::sim::Config)
       (:trading::sim::Config/new 288 0.01 35.0 14))
      ((agg :trading::sim::Aggregate)

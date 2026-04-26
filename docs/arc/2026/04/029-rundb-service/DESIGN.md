@@ -5,7 +5,7 @@
 **Consumer:** [`docs/proofs/2026/04/003-thinker-significance/PROOF.md`](../../proofs/2026/04/003-thinker-significance/PROOF.md).
 
 Builder direction (2026-04-25), after I tried to hack 10
-sequential `:lab::rundb::open` calls into proof 003:
+sequential `:trading::rundb::open` calls into proof 003:
 
 > "hold on - we need a db service for this... go study the
 > archived rust and wat's service pattern (console service,
@@ -91,16 +91,16 @@ pub fn log_paper_resolved(
 ```
 
 ```scheme
-(:lab::rundb::open path)                         -> :lab::rundb::RunDb
-(:lab::rundb::execute-ddl db ddl-str)            -> :()
-(:lab::rundb::log-paper-resolved db run-name ...) -> :()
+(:trading::rundb::open path)                         -> :trading::rundb::RunDb
+(:trading::rundb::execute-ddl db ddl-str)            -> :()
+(:trading::rundb::log-paper-resolved db run-name ...) -> :()
 ```
 
 ### LogEntry sum + schema (`wat/io/log/`)
 
 ```scheme
 ;; wat/io/log/LogEntry.wat — the unit of communication.
-(:wat::core::enum :lab::log::LogEntry
+(:wat::core::enum :trading::log::LogEntry
   (PaperResolved
     (run-name :String) (thinker :String) (predictor :String)
     (paper-id :i64) (direction :String)
@@ -108,18 +108,18 @@ pub fn log_paper_resolved(
     (state :String) (residue :f64) (loss :f64)))
 
 ;; wat/io/log/schema.wat — DDL strings, one per variant's table.
-;; A single :lab::log::all-schemas Vec<String> the service
+;; A single :trading::log::all-schemas Vec<String> the service
 ;; iterates at startup so growth is "add string + register".
 
 (:wat::core::define
-  (:lab::log::schema-paper-resolved -> :String)
+  (:trading::log::schema-paper-resolved -> :String)
   "CREATE TABLE IF NOT EXISTS paper_resolutions (...)"))
 
 (:wat::core::define
-  (:lab::log::all-schemas -> :Vec<String>)
+  (:trading::log::all-schemas -> :Vec<String>)
   (:wat::core::vec :String
-    (:lab::log::schema-paper-resolved)
-    ;; future: (:lab::log::schema-telemetry), ...
+    (:trading::log::schema-paper-resolved)
+    ;; future: (:trading::log::schema-telemetry), ...
     ))
 ```
 
@@ -131,28 +131,28 @@ each get a request-Tx handle; each client also owns one ack
 channel reused across batches.
 
 ```scheme
-(:wat::core::typealias :lab::rundb::Service::AckTx
+(:wat::core::typealias :trading::rundb::Service::AckTx
   :rust::crossbeam_channel::Sender<()>)
-(:wat::core::typealias :lab::rundb::Service::AckRx
+(:wat::core::typealias :trading::rundb::Service::AckRx
   :rust::crossbeam_channel::Receiver<()>)
-(:wat::core::typealias :lab::rundb::Service::Request
-  :(Vec<lab::log::LogEntry>, lab::rundb::Service::AckTx))
+(:wat::core::typealias :trading::rundb::Service::Request
+  :(Vec<trading::log::LogEntry>, trading::rundb::Service::AckTx))
 
 ;; Setup: opens RunDb in driver thread, executes all schemas,
 ;;   spawns the loop. Returns the standard (pool, driver-handle).
-(:lab::rundb::Service path count)
+(:trading::rundb::Service path count)
   -> :(HandlePool<Sender<Service::Request>>, ProgramHandle<()>)
 
 ;; Client helper — one primitive. Single-entry callers pass
 ;; (vec :LogEntry entry).
-(:lab::rundb::Service/batch-log req-tx ack-tx ack-rx entries) -> :()
+(:trading::rundb::Service/batch-log req-tx ack-tx ack-rx entries) -> :()
 
 ;; Internal dispatcher (wat-side):
-(:lab::rundb::Service/dispatch db entry :LogEntry)
+(:trading::rundb::Service/dispatch db entry :LogEntry)
   ;; (match entry :LogEntry -> :()
   ;;   ((PaperResolved run-name thinker ... loss)
-  ;;     (:lab::rundb::log-paper-resolved db run-name ... loss))
-  ;;   ;; future: ((Telemetry ...) (:lab::rundb::log-telemetry db ...)))
+  ;;     (:trading::rundb::log-paper-resolved db run-name ... loss))
+  ;;   ;; future: ((Telemetry ...) (:trading::rundb::log-telemetry db ...)))
 ```
 
 Lifecycle mirrors Console + CacheService: caller spawns the
@@ -301,7 +301,7 @@ thinker`. Cross-window queries are `GROUP BY run_name`. No
 ATTACH dance.
 
 For arc 029's service: nothing in the service surface forces
-or forbids this — `:lab::rundb::Service` takes one path; what
+or forbids this — `:trading::rundb::Service` takes one path; what
 the caller passes is the caller's choice. The principle is
 enforced at the proof layer, not the infra layer. The arc's
 slice-1 proof-002 migration consolidates the two-deftest shape
@@ -348,7 +348,7 @@ and the variant→table routing.
 **Initial sum (this arc ships only this much):**
 
 ```scheme
-(:wat::core::enum :lab::log::LogEntry
+(:wat::core::enum :trading::log::LogEntry
   (PaperResolved
     (run-name :String) (thinker :String) (predictor :String)
     (paper-id :i64) (direction :String)
@@ -373,7 +373,7 @@ and the variant→table routing.
   `wat/io/RunDbService.wat`):
   - `LogEntry` sum.
   - Schema DDL constants per variant (one CREATE TABLE per
-    variant), and a `:lab::log::all-schemas` Vec<String> the
+    variant), and a `:trading::log::all-schemas` Vec<String> the
     service iterates at startup.
   - The dispatcher: `(match entry → call shim's log_<variant>
     with the variant's fields)`.
@@ -382,7 +382,7 @@ and the variant→table routing.
 Telemetry rows for cosine similarity tracking):
 1. Add the variant constructor in `wat/io/log/LogEntry.wat`.
 2. Add the table DDL constant in `wat/io/log/schema.wat`,
-   register it in `:lab::log::all-schemas`.
+   register it in `:trading::log::all-schemas`.
 3. Add the wat dispatcher arm.
 4. Add the shim method `log_telemetry` (~10 LOC).
 5. No callers break — sum types are open at the variant
@@ -427,12 +427,12 @@ ack-tx, so the driver doesn't need to track per-client
 ack-tx state):
 
 ```scheme
-(:wat::core::typealias :lab::rundb::Service::AckTx
+(:wat::core::typealias :trading::rundb::Service::AckTx
   :rust::crossbeam_channel::Sender<()>)
-(:wat::core::typealias :lab::rundb::Service::AckRx
+(:wat::core::typealias :trading::rundb::Service::AckRx
   :rust::crossbeam_channel::Receiver<()>)
-(:wat::core::typealias :lab::rundb::Service::Request
-  :(Vec<lab::log::LogEntry>, lab::rundb::Service::AckTx))
+(:wat::core::typealias :trading::rundb::Service::Request
+  :(Vec<trading::log::LogEntry>, trading::rundb::Service::AckTx))
 ```
 
 Driver loop:
@@ -450,7 +450,7 @@ Client helper builds its ack channel once at setup, reuses
 for every batch:
 
 ```scheme
-(:lab::rundb::Service/batch-log
+(:trading::rundb::Service/batch-log
   (req-tx :Sender<Request>)
   (ack-tx :AckTx)         ; client-owned, reused
   (ack-rx :AckRx)         ; client-owned, reused
@@ -460,7 +460,7 @@ for every batch:
 ```
 
 **One primitive, no sugar.** Callers with a single entry pass
-`(:wat::core::vec :lab::log::LogEntry entry)`. Builder
+`(:wat::core::vec :trading::log::LogEntry entry)`. Builder
 direction 2026-04-25:
 
 > "only batch - if the user has one message its an array-of-one"
@@ -499,7 +499,7 @@ Three slices, tracked in [`BACKLOG.md`](BACKLOG.md):
 - **Slice 1** — refactor `WatRunDb` (Rust + wat surface). Update
   proof 002's pair file and verify it produces the same numbers
   as the shipped run.
-- **Slice 2** — build `:lab::rundb::Service` as a wat program in
+- **Slice 2** — build `:trading::rundb::Service` as a wat program in
   `wat/io/RunDbService.wat`. Three smoke tests at
   `wat-tests/io/RunDbService.wat`. Wire into the shim's
   `wat_sources()`.

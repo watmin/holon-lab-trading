@@ -351,7 +351,7 @@ plan stays on disk as the honest record of the restart per
 **Bounded-run divergence — producer-side cap, not engine-side.**
 The plan envisioned a `run-bounded` variant of `run` taking a
 max-candles parameter. Shipped instead is a producer-side cap:
-`(:lab::candles::open-bounded path n)` constructs a stream that
+`(:trading::candles::open-bounded path n)` constructs a stream that
 emits at most `n` rows before returning `:None`. The engine has
 no max-candles knob — `run-loop` terminates on the stream's
 natural end-of-stream. Streaming semantics preserved (one record
@@ -475,7 +475,7 @@ This is the load-bearing slice.
 
 **Status: ready (after slice 4 shipped 2026-04-25).** Slice 4
 is green; integration smoke can now consume real parquet
-candles via `:lab::candles::open-bounded`. Per
+candles via `:trading::candles::open-bounded`. Per
 slice-4-5-design-questions.md Q13 the slice stays
 smoke-only — one test, ~50 LOC. Tests 18-23 stay in slice 4
 with synthetic fixtures.
@@ -494,7 +494,7 @@ Slice 5 ships:
   (10k bounded), asserting `papers > 0` and finite total-residue.
 
 `wat-tests/sim/integration.wat` — opens
-`data/btc_5m_raw.parquet` via `:lab::candles::Stream` (Phase 0
+`data/btc_5m_raw.parquet` via `:trading::candles::Stream` (Phase 0
 shim), runs over the first 10,000 candles with a hand-coded
 thinker, asserts the simulator runs end-to-end.
 
@@ -502,8 +502,8 @@ thinker, asserts the simulator runs end-to-end.
 (:wat::test::deftest :trading::test::sim::integration::ten-thousand-candles
   ()
   (:wat::core::let*
-    (((stream :lab::candles::Stream)
-      (:lab::candles::open "data/btc_5m_raw.parquet"))
+    (((stream :trading::candles::Stream)
+      (:trading::candles::open "data/btc_5m_raw.parquet"))
      ((thinker :trading::sim::Thinker)
       (:trading::sim::Thinker
         :build-surface <surface-builder-fn>))
@@ -555,8 +555,8 @@ After all slices land, the lab can:
 
 ```scheme
 (:wat::core::let*
-  (((stream :lab::candles::Stream)
-    (:lab::candles::open "data/btc_5m_raw.parquet"))
+  (((stream :trading::candles::Stream)
+    (:trading::candles::open "data/btc_5m_raw.parquet"))
    ((thinker :trading::sim::Thinker) <some-thinker>)
    ((agg :trading::sim::Aggregate)
     (:trading::sim::run stream thinker default-config)))

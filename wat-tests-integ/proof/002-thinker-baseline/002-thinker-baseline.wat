@@ -58,7 +58,7 @@
    ;; per-call run-name slot of log-paper-resolved.
    (:wat::core::define
      (:trading::test::proofs::002::log-outcome
-       (db :lab::rundb::RunDb)
+       (db :trading::rundb::RunDb)
        (run-name :String)
        (thinker-name :String) (predictor-name :String)
        (out :trading::sim::Outcome)
@@ -76,12 +76,12 @@
         ((dir-str :String)            (:trading::test::proofs::002::dir-str dir)))
        (:wat::core::match state -> :()
          ((:trading::sim::PositionState::Grace _r)
-           (:lab::rundb::log-paper-resolved db
+           (:trading::rundb::log-paper-resolved db
              run-name thinker-name predictor-name
              paper-id dir-str entry-candle closed-at
              "Grace" final-residue 0.0))
          (:trading::sim::PositionState::Violence
-           (:lab::rundb::log-paper-resolved db
+           (:trading::rundb::log-paper-resolved db
              run-name thinker-name predictor-name
              paper-id dir-str entry-candle closed-at
              "Violence" 0.0 (:wat::core::f64::abs final-residue)))
@@ -93,11 +93,11 @@
    ;; Arc 029: gained `run-name` parameter; propagates to log-outcome.
    (:wat::core::define
      (:trading::test::proofs::002::run-with-log
-       (stream :lab::candles::Stream)
+       (stream :trading::candles::Stream)
        (thinker :trading::sim::Thinker)
        (predictor :trading::sim::Predictor)
        (config :trading::sim::Config)
-       (db :lab::rundb::RunDb)
+       (db :trading::rundb::RunDb)
        (run-name :String)
        (thinker-name :String)
        (predictor-name :String)
@@ -136,11 +136,11 @@
      ((db-path :String)
       (:wat::core::string::concat
         "runs/proof-002-" epoch-str ".db"))
-     ((db :lab::rundb::RunDb) (:lab::rundb::open db-path))
+     ((db :trading::rundb::RunDb) (:trading::rundb::open db-path))
 
      ;; Always-up run.
-     ((stream-up :lab::candles::Stream)
-      (:lab::candles::open-bounded "data/btc_5m_raw.parquet" 10000))
+     ((stream-up :trading::candles::Stream)
+      (:trading::candles::open-bounded "data/btc_5m_raw.parquet" 10000))
      ((run-name-up :String)
       (:wat::core::string::concat "always-up-10k-" iso-str))
      ((agg-up :trading::sim::Aggregate)
@@ -158,8 +158,8 @@
      ((violence-up :i64) (:trading::sim::Aggregate/violence-count agg-up))
 
      ;; SMA-cross run — SAME db, different run-name.
-     ((stream-sx :lab::candles::Stream)
-      (:lab::candles::open-bounded "data/btc_5m_raw.parquet" 10000))
+     ((stream-sx :trading::candles::Stream)
+      (:trading::candles::open-bounded "data/btc_5m_raw.parquet" 10000))
      ((run-name-sx :String)
       (:wat::core::string::concat "sma-cross-10k-" iso-str))
      ((agg-sx :trading::sim::Aggregate)

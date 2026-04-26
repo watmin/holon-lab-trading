@@ -40,9 +40,9 @@ and 026).
 
 ### Lab-level (`holon-lab-trading`)
 
-- **Phase 0** — parquet OHLCV reader (`:lab::candles::Stream`,
-  `:lab::candles::open`, `:lab::candles::open-bounded`,
-  `:lab::candles::next!`).
+- **Phase 0** — parquet OHLCV reader (`:trading::candles::Stream`,
+  `:trading::candles::open`, `:trading::candles::open-bounded`,
+  `:trading::candles::next!`).
 - **Phase 1 — types** — Ohlcv, Candle (73 fields across 11 sub-
   structs), PaperEntry, PortfolioSnapshot, PhaseLabel /
   PhaseDirection / PhaseRecord.

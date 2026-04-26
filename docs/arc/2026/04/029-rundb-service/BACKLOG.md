@@ -2,13 +2,13 @@
 
 **Shape:** three slices. Slice 1 refactors the arc-027 shim
 (`run_name` per-message, not per-handle). Slice 2 builds the
-wat-only `:lab::rundb::Service` on top. Slice 3 lands the
+wat-only `:trading::rundb::Service` on top. Slice 3 lands the
 INSCRIPTION and flips proof 003 from BLOCKED to ready. Total
 estimate: ~2.5 hours.
 
 This arc is the second proofs-lane → infra-lane handoff.
 Builder direction 2026-04-25 (mid-implementation, after I tried
-to hack 10 sequential `:lab::rundb::open` calls into proof 003):
+to hack 10 sequential `:trading::rundb::open` calls into proof 003):
 
 > "hold on - we need a db service for this... go study the
 > archived rust and wat's service pattern (console service,
@@ -43,10 +43,10 @@ pub struct WatRunDb {
 ```rust
 pub fn open(path: String) -> Self {
     let conn = Connection::open(&path).unwrap_or_else(|e| {
-        panic!(":rust::lab::RunDb::open: cannot open {path}: {e}")
+        panic!(":rust::trading::RunDb::open: cannot open {path}: {e}")
     });
     conn.execute_batch(RUNDB_SCHEMA).unwrap_or_else(|e| {
-        panic!(":rust::lab::RunDb::open: schema creation failed at {path}: {e}")
+        panic!(":rust::trading::RunDb::open: schema creation failed at {path}: {e}")
     });
     Self { conn }
 }
@@ -81,7 +81,7 @@ pub fn log_paper_resolved(
             opened_at, resolved_at, state, residue, loss,
         ],
     ).unwrap_or_else(|e| {
-        panic!(":rust::lab::RunDb::log-paper-resolved: insert failed: {e}")
+        panic!(":rust::trading::RunDb::log-paper-resolved: insert failed: {e}")
     });
 }
 ```
@@ -90,14 +90,14 @@ pub fn log_paper_resolved(
 
 ```scheme
 (:wat::core::define
-  (:lab::rundb::open
+  (:trading::rundb::open
     (path :String)                              ; ← removed run-name arg
-    -> :lab::rundb::RunDb)
-  (:rust::lab::RunDb::open path))
+    -> :trading::rundb::RunDb)
+  (:rust::trading::RunDb::open path))
 
 (:wat::core::define
-  (:lab::rundb::log-paper-resolved              ; ← renamed
-    (db :lab::rundb::RunDb)
+  (:trading::rundb::log-paper-resolved              ; ← renamed
+    (db :trading::rundb::RunDb)
     (run-name :String)                          ; ← new arg
     (thinker :String) (predictor :String)
     (paper-id :i64) (direction :String)
@@ -105,7 +105,7 @@ pub fn log_paper_resolved(
     (state :String)
     (residue :f64) (loss :f64)
     -> :())
-  (:rust::lab::RunDb::log-paper-resolved
+  (:rust::trading::RunDb::log-paper-resolved
     db run-name thinker predictor paper-id direction
     opened-at resolved-at state residue loss))
 ```
@@ -142,9 +142,9 @@ Concrete shape post-migration:
      ((iso-str :String) (:wat::time::to-iso8601 now 3))
      ((db-path :String)
       (:wat::core::string::concat "runs/proof-002-" epoch-str ".db"))
-     ((db :lab::rundb::RunDb) (:lab::rundb::open db-path))
+     ((db :trading::rundb::RunDb) (:trading::rundb::open db-path))
      ;; Run always-up; log all outcomes with run-name "always-up-10k-<iso>".
-     ;; (run-with-log calls :lab::rundb::log-paper-resolved per Outcome
+     ;; (run-with-log calls :trading::rundb::log-paper-resolved per Outcome
      ;;  with the bound run-name + per-Outcome fields.)
      ((agg-up :trading::sim::Aggregate)
       (:trading::test::proofs::002::run-with-log
@@ -224,7 +224,7 @@ addition (`execute_ddl`). Mirrors the archive's
 adapted to wat's enum + service patterns.
 
 Architectural anchor: per Q9 + Q10, the unit of communication
-is a `:lab::log::LogEntry` sum (initial variant: `PaperResolved`),
+is a `:trading::log::LogEntry` sum (initial variant: `PaperResolved`),
 sent in confirmed batches with per-request ack channels
 (CacheService-style). One thread owns the connection; N
 clients each get a request-Tx + a personal ack channel.
@@ -234,15 +234,15 @@ clients each get a request-Tx + a personal ack channel.
 `src/shims.rs` — add one method to `WatRunDb`:
 
 ```rust
-/// `:rust::lab::RunDb::execute-ddl db ddl-str` — run a
+/// `:rust::trading::RunDb::execute-ddl db ddl-str` — run a
 /// DDL string (CREATE TABLE, CREATE INDEX, etc.). Used by
 /// the service's loop-entry to install schemas from
-/// :lab::log::all-schemas at driver startup. Idempotent —
+/// :trading::log::all-schemas at driver startup. Idempotent —
 /// every schema string uses CREATE TABLE IF NOT EXISTS so
 /// re-installs are no-ops.
 pub fn execute_ddl(&mut self, ddl_str: String) {
     self.conn.execute_batch(&ddl_str).unwrap_or_else(|e| {
-        panic!(":rust::lab::RunDb::execute-ddl: {e}")
+        panic!(":rust::trading::RunDb::execute-ddl: {e}")
     });
 }
 ```
@@ -251,11 +251,11 @@ pub fn execute_ddl(&mut self, ddl_str: String) {
 
 ```scheme
 (:wat::core::define
-  (:lab::rundb::execute-ddl
-    (db :lab::rundb::RunDb)
+  (:trading::rundb::execute-ddl
+    (db :trading::rundb::RunDb)
     (ddl-str :String)
     -> :())
-  (:rust::lab::RunDb::execute-ddl db ddl-str))
+  (:rust::trading::RunDb::execute-ddl db ddl-str))
 ```
 
 Note: slice 1 leaves the auto-schema-on-open path intact for
@@ -269,7 +269,7 @@ go through wat-managed schemas.
 ### Step 2b — `wat/io/log/LogEntry.wat` — the sum type
 
 ```scheme
-;; :lab::log::LogEntry — the unit of communication crossing
+;; :trading::log::LogEntry — the unit of communication crossing
 ;; the rundb service boundary. Discriminated union, grows
 ;; variant-by-variant as proofs surface new "kinds of things
 ;; that happened".
@@ -288,7 +288,7 @@ go through wat-managed schemas.
 ;;   - PhaseSnapshot { ... }
 ;;   - ObserverSnapshot { ... }
 
-(:wat::core::enum :lab::log::LogEntry
+(:wat::core::enum :trading::log::LogEntry
   (PaperResolved
     (run-name :String) (thinker :String) (predictor :String)
     (paper-id :i64) (direction :String)
@@ -299,17 +299,17 @@ go through wat-managed schemas.
 ### Step 2c — `wat/io/log/schema.wat` — DDL constants + registry
 
 ```scheme
-;; :lab::log::schema-* — per-variant DDL strings. Each is the
+;; :trading::log::schema-* — per-variant DDL strings. Each is the
 ;; CREATE TABLE IF NOT EXISTS for one variant's destination
 ;; table. Read-locality: schema lives next to the variant it
 ;; describes (in the file pair LogEntry.wat / schema.wat).
 ;;
-;; :lab::log::all-schemas — the registry. The service iterates
+;; :trading::log::all-schemas — the registry. The service iterates
 ;; this at startup and execute-ddl's each. Adding a variant =
 ;; add a string + register it here. No service code changes.
 
 (:wat::core::define
-  (:lab::log::schema-paper-resolved -> :String)
+  (:trading::log::schema-paper-resolved -> :String)
   "CREATE TABLE IF NOT EXISTS paper_resolutions (
      run_name     TEXT NOT NULL,
      thinker      TEXT NOT NULL,
@@ -325,11 +325,11 @@ go through wat-managed schemas.
    );")
 
 (:wat::core::define
-  (:lab::log::all-schemas -> :Vec<String>)
+  (:trading::log::all-schemas -> :Vec<String>)
   (:wat::core::vec :String
-    (:lab::log::schema-paper-resolved)
-    ;; future: (:lab::log::schema-telemetry),
-    ;;         (:lab::log::schema-broker-snapshot), ...
+    (:trading::log::schema-paper-resolved)
+    ;; future: (:trading::log::schema-telemetry),
+    ;;         (:trading::log::schema-broker-snapshot), ...
     ))
 ```
 
@@ -338,39 +338,39 @@ go through wat-managed schemas.
 #### Protocol typealiases
 
 ```scheme
-(:wat::core::typealias :lab::rundb::Service::AckTx
+(:wat::core::typealias :trading::rundb::Service::AckTx
   :rust::crossbeam_channel::Sender<()>)
-(:wat::core::typealias :lab::rundb::Service::AckRx
+(:wat::core::typealias :trading::rundb::Service::AckRx
   :rust::crossbeam_channel::Receiver<()>)
 ;; A Request is a batch of LogEntries + the ack channel the
 ;; client wants the driver to signal on after commit.
-(:wat::core::typealias :lab::rundb::Service::Request
-  :(Vec<lab::log::LogEntry>, lab::rundb::Service::AckTx))
-(:wat::core::typealias :lab::rundb::Service::ReqTx
-  :rust::crossbeam_channel::Sender<lab::rundb::Service::Request>)
-(:wat::core::typealias :lab::rundb::Service::ReqRx
-  :rust::crossbeam_channel::Receiver<lab::rundb::Service::Request>)
+(:wat::core::typealias :trading::rundb::Service::Request
+  :(Vec<trading::log::LogEntry>, trading::rundb::Service::AckTx))
+(:wat::core::typealias :trading::rundb::Service::ReqTx
+  :rust::crossbeam_channel::Sender<trading::rundb::Service::Request>)
+(:wat::core::typealias :trading::rundb::Service::ReqRx
+  :rust::crossbeam_channel::Receiver<trading::rundb::Service::Request>)
 ```
 
 #### Dispatcher (per-variant routing — wat-side, per Q9)
 
 ```scheme
 (:wat::core::define
-  (:lab::rundb::Service/dispatch
-    (db :lab::rundb::RunDb)
-    (entry :lab::log::LogEntry)
+  (:trading::rundb::Service/dispatch
+    (db :trading::rundb::RunDb)
+    (entry :trading::log::LogEntry)
     -> :())
   (:wat::core::match entry -> :()
     ((PaperResolved run-name thinker predictor paper-id
                     direction opened-at resolved-at
                     state residue loss)
-      (:lab::rundb::log-paper-resolved
+      (:trading::rundb::log-paper-resolved
         db run-name thinker predictor paper-id
         direction opened-at resolved-at
         state residue loss))
     ;; future variant arms add here:
     ;;   ((Telemetry namespace id dimensions ts name value unit)
-    ;;     (:lab::rundb::log-telemetry db namespace id ...))
+    ;;     (:trading::rundb::log-telemetry db namespace id ...))
     ))
 ```
 
@@ -381,43 +381,43 @@ Per CacheService precedent: `RunDb` is `thread_owned`, so
 
 ```scheme
 (:wat::core::define
-  (:lab::rundb::Service/loop-entry
+  (:trading::rundb::Service/loop-entry
     (path :String)
-    (rxs :Vec<lab::rundb::Service::ReqRx>)
+    (rxs :Vec<trading::rundb::Service::ReqRx>)
     -> :())
   (:wat::core::let*
-    (((db :lab::rundb::RunDb) (:lab::rundb::open path))
+    (((db :trading::rundb::RunDb) (:trading::rundb::open path))
      ;; Install every known schema. Idempotent.
      ((_install :())
-      (:wat::core::foldl (:lab::log::all-schemas) ()
+      (:wat::core::foldl (:trading::log::all-schemas) ()
         (:wat::core::lambda
           ((acc :()) (ddl :String) -> :())
-          (:lab::rundb::execute-ddl db ddl)))))
-    (:lab::rundb::Service/loop db rxs)))
+          (:trading::rundb::execute-ddl db ddl)))))
+    (:trading::rundb::Service/loop db rxs)))
 ```
 
 #### Recursive select loop with confirmed batch + ack
 
 ```scheme
 (:wat::core::define
-  (:lab::rundb::Service/loop
-    (db :lab::rundb::RunDb)
-    (rxs :Vec<lab::rundb::Service::ReqRx>)
+  (:trading::rundb::Service/loop
+    (db :trading::rundb::RunDb)
+    (rxs :Vec<trading::rundb::Service::ReqRx>)
     -> :())
   (:wat::core::if (:wat::core::empty? rxs) -> :()
     ()
     (:wat::core::let*
-      (((chosen :(i64,Option<lab::rundb::Service::Request>))
+      (((chosen :(i64,Option<trading::rundb::Service::Request>))
         (:wat::kernel::select rxs))
        ((idx :i64) (:wat::core::first chosen))
-       ((maybe :Option<lab::rundb::Service::Request>)
+       ((maybe :Option<trading::rundb::Service::Request>)
         (:wat::core::second chosen)))
       (:wat::core::match maybe -> :()
         ((Some req)
           (:wat::core::let*
-            (((entries :Vec<lab::log::LogEntry>)
+            (((entries :Vec<trading::log::LogEntry>)
               (:wat::core::first req))
-             ((ack-tx :lab::rundb::Service::AckTx)
+             ((ack-tx :trading::rundb::Service::AckTx)
               (:wat::core::second req))
              ;; Dispatch each entry to its table. v1 ships
              ;; without an explicit BEGIN/COMMIT — auto-commit
@@ -427,22 +427,22 @@ Per CacheService precedent: `RunDb` is `thread_owned`, so
              ((_apply :())
               (:wat::core::foldl entries ()
                 (:wat::core::lambda
-                  ((acc :()) (e :lab::log::LogEntry) -> :())
-                  (:lab::rundb::Service/dispatch db e))))
+                  ((acc :()) (e :trading::log::LogEntry) -> :())
+                  (:trading::rundb::Service/dispatch db e))))
              ;; Ack — driver-side send swallows :None if the
              ;; client dropped its ack-rx before we got here.
              ((_ :Option<()>) (:wat::kernel::send ack-tx ())))
-            (:lab::rundb::Service/loop db rxs)))
+            (:trading::rundb::Service/loop db rxs)))
         (:None
-          (:lab::rundb::Service/loop
+          (:trading::rundb::Service/loop
             db
             (:wat::std::list::remove-at rxs idx)))))))
 ```
 
 (Open question for implementation: wat's `BEGIN`/`COMMIT`
 wrapping. If `execute_ddl` accepts arbitrary SQL, the wat
-side could `(:lab::rundb::execute-ddl db "BEGIN")` /
-`(:lab::rundb::execute-ddl db "COMMIT")` around the foldl —
+side could `(:trading::rundb::execute-ddl db "BEGIN")` /
+`(:trading::rundb::execute-ddl db "COMMIT")` around the foldl —
 keeps txn semantics in wat. Defer to slice 2 implementer
 to land OR defer to slice 4 (a follow-up perf pass) once
 we have a benchmark.)
@@ -451,14 +451,14 @@ we have a benchmark.)
 
 ```scheme
 (:wat::core::define
-  (:lab::rundb::Service/batch-log
-    (req-tx :lab::rundb::Service::ReqTx)
-    (ack-tx :lab::rundb::Service::AckTx)   ; client-owned, reused
-    (ack-rx :lab::rundb::Service::AckRx)   ; client-owned, reused
-    (entries :Vec<lab::log::LogEntry>)
+  (:trading::rundb::Service/batch-log
+    (req-tx :trading::rundb::Service::ReqTx)
+    (ack-tx :trading::rundb::Service::AckTx)   ; client-owned, reused
+    (ack-rx :trading::rundb::Service::AckRx)   ; client-owned, reused
+    (entries :Vec<trading::log::LogEntry>)
     -> :())
   (:wat::core::let*
-    (((req :lab::rundb::Service::Request)
+    (((req :trading::rundb::Service::Request)
       (:wat::core::tuple entries ack-tx))
      ;; If driver is gone, send→:None and recv→:None below
      ;; collapses; caller observes silent return per Cache-
@@ -469,45 +469,45 @@ we have a benchmark.)
 ```
 
 Per Q10: **one primitive, no sugar.** Single-entry callers
-pass `(:wat::core::vec :lab::log::LogEntry entry)`.
+pass `(:wat::core::vec :trading::log::LogEntry entry)`.
 
 #### Setup
 
 ```scheme
 (:wat::core::define
-  (:lab::rundb::Service
+  (:trading::rundb::Service
     (path :String)
     (count :i64)
-    -> :(wat::kernel::HandlePool<lab::rundb::Service::ReqTx>,
+    -> :(wat::kernel::HandlePool<trading::rundb::Service::ReqTx>,
          wat::kernel::ProgramHandle<()>))
   (:wat::core::let*
-    (((pairs :Vec<(lab::rundb::Service::ReqTx,
-                   lab::rundb::Service::ReqRx)>)
+    (((pairs :Vec<(trading::rundb::Service::ReqTx,
+                   trading::rundb::Service::ReqRx)>)
       (:wat::core::map (:wat::core::range 0 count)
         (:wat::core::lambda
           ((_i :i64)
-           -> :(lab::rundb::Service::ReqTx,
-                lab::rundb::Service::ReqRx))
+           -> :(trading::rundb::Service::ReqTx,
+                trading::rundb::Service::ReqRx))
           (:wat::kernel::make-bounded-queue
-            :lab::rundb::Service::Request 1))))
-     ((req-txs :Vec<lab::rundb::Service::ReqTx>)
+            :trading::rundb::Service::Request 1))))
+     ((req-txs :Vec<trading::rundb::Service::ReqTx>)
       (:wat::core::map pairs
         (:wat::core::lambda
-          ((p :(lab::rundb::Service::ReqTx,
-                lab::rundb::Service::ReqRx))
-           -> :lab::rundb::Service::ReqTx)
+          ((p :(trading::rundb::Service::ReqTx,
+                trading::rundb::Service::ReqRx))
+           -> :trading::rundb::Service::ReqTx)
           (:wat::core::first p))))
-     ((req-rxs :Vec<lab::rundb::Service::ReqRx>)
+     ((req-rxs :Vec<trading::rundb::Service::ReqRx>)
       (:wat::core::map pairs
         (:wat::core::lambda
-          ((p :(lab::rundb::Service::ReqTx,
-                lab::rundb::Service::ReqRx))
-           -> :lab::rundb::Service::ReqRx)
+          ((p :(trading::rundb::Service::ReqTx,
+                trading::rundb::Service::ReqRx))
+           -> :trading::rundb::Service::ReqRx)
           (:wat::core::second p))))
-     ((pool :wat::kernel::HandlePool<lab::rundb::Service::ReqTx>)
+     ((pool :wat::kernel::HandlePool<trading::rundb::Service::ReqTx>)
       (:wat::kernel::HandlePool::new "RunDbService" req-txs))
      ((driver :wat::kernel::ProgramHandle<()>)
-      (:wat::kernel::spawn :lab::rundb::Service/loop-entry path req-rxs)))
+      (:wat::kernel::spawn :trading::rundb::Service/loop-entry path req-rxs)))
     (:wat::core::tuple pool driver)))
 ```
 
@@ -608,7 +608,7 @@ as arc 027's INSCRIPTION:
 status header from `BLOCKED on lab arc 029` to `ready — pair
 file forthcoming`. The proofs lane writes the supporting
 program at `wat-tests-integ/proof/003-thinker-significance/`
-using `:lab::rundb::Service` + `:lab::log::LogEntry::PaperResolved`.
+using `:trading::rundb::Service` + `:trading::log::LogEntry::PaperResolved`.
 
 `docs/proofs/2026/04/002-thinker-baseline/PROOF.md` already
 carries a closing addendum (added during arc 029's design
@@ -700,7 +700,7 @@ refactored shim directly with a per-call run_name and a single
 thread. Proof 003 still works; just bypasses the service.
 
 **`spawn` accepts a named-define entry by symbol.** Per Console
-precedent, `(:wat::kernel::spawn :lab::rundb::Service/loop-entry
+precedent, `(:wat::kernel::spawn :trading::rundb::Service/loop-entry
 path rxs)` should resolve at startup-check time. If symbol
 resolution fails, the diagnostic is at startup; recoverable.
 
@@ -724,8 +724,8 @@ struct as the variant payload — match `(PaperResolved row)`,
 then destructure `row` field-by-field via accessors. Capture
 the call in INSCRIPTION.
 
-**`:lab::log::all-schemas` evaluation.** The service's
-loop-entry calls `(:lab::log::all-schemas)` once at startup.
+**`:trading::log::all-schemas` evaluation.** The service's
+loop-entry calls `(:trading::log::all-schemas)` once at startup.
 If wat treats this as a *function* (re-evaluated each call)
 vs a *constant* (memoized at compile/freeze), behavior is the
 same here (called once) but matters for future hot-path

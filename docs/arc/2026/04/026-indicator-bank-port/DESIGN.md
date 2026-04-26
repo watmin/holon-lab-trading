@@ -412,7 +412,7 @@ optimization patterns. Not pre-optimized.
   slower per tick. Acceptable for the yardstick's measurement
   cadence.
 - **Visualization / plotting.** Out of scope.
-- **Live data feeds.** Out of scope; arc 025's `:lab::candles::Stream`
+- **Live data feeds.** Out of scope; arc 025's `:trading::candles::Stream`
   reads parquet only.
 - **Cross-pair indicators.** Single-pair (BTC) for v1; multi-pair
   is post-Phase-5.

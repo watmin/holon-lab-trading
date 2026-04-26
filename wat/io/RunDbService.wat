@@ -1,7 +1,7 @@
-;; :lab::rundb::Service — CSP wrapper over `:lab::rundb::RunDb`.
+;; :trading::rundb::Service — CSP wrapper over `:trading::rundb::RunDb`.
 ;;
 ;; CacheService-style request/reply driver: each request carries a
-;; batch of `:lab::log::LogEntry` plus the client's ack-tx; the
+;; batch of `:trading::log::LogEntry` plus the client's ack-tx; the
 ;; driver dispatches each entry to its per-variant shim wrapper,
 ;; then signals ack. One thread owns the connection; N clients
 ;; each get a request-Tx + a personal ack channel pair.
@@ -12,7 +12,7 @@
 ;;   2. Driver `Service/loop-entry` opens the RunDb in its own
 ;;      thread (per-thread-owned discipline; can't pass an open
 ;;      Connection across threads), installs every schema in
-;;      `:lab::log::all-schemas`, enters the select loop.
+;;      `:trading::log::all-schemas`, enters the select loop.
 ;;   3. Caller pops handles, distributes them to clients, calls
 ;;      `HandlePool::finish` once distribution is complete.
 ;;   4. Each client `(Service/batch-log req-tx ack-tx ack-rx
@@ -52,66 +52,66 @@
 
 ;; Per-request ack channel. Driver `send`s `()` after committing
 ;; the batch; client `recv`s to unblock its `batch-log` call.
-(:wat::core::typealias :lab::rundb::Service::AckTx
+(:wat::core::typealias :trading::rundb::Service::AckTx
   :rust::crossbeam_channel::Sender<()>)
-(:wat::core::typealias :lab::rundb::Service::AckRx
+(:wat::core::typealias :trading::rundb::Service::AckRx
   :rust::crossbeam_channel::Receiver<()>)
 
 ;; A Request is one batch of LogEntries + the ack channel the
 ;; client wants signaled on after commit.
-(:wat::core::typealias :lab::rundb::Service::Request
-  :(Vec<lab::log::LogEntry>,lab::rundb::Service::AckTx))
+(:wat::core::typealias :trading::rundb::Service::Request
+  :(Vec<trading::log::LogEntry>,trading::rundb::Service::AckTx))
 
-(:wat::core::typealias :lab::rundb::Service::ReqTx
-  :rust::crossbeam_channel::Sender<lab::rundb::Service::Request>)
-(:wat::core::typealias :lab::rundb::Service::ReqRx
-  :rust::crossbeam_channel::Receiver<lab::rundb::Service::Request>)
+(:wat::core::typealias :trading::rundb::Service::ReqTx
+  :rust::crossbeam_channel::Sender<trading::rundb::Service::Request>)
+(:wat::core::typealias :trading::rundb::Service::ReqRx
+  :rust::crossbeam_channel::Receiver<trading::rundb::Service::Request>)
 
 ;; The setup-side request channel — what
 ;; `(:wat::kernel::make-bounded-queue :Service::Request 1)`
 ;; returns. The `Service` setup function builds N of these,
 ;; splits txs into the HandlePool and rxs into the driver's
 ;; select vec.
-(:wat::core::typealias :lab::rundb::Service::ReqChannel
-  :(lab::rundb::Service::ReqTx,lab::rundb::Service::ReqRx))
+(:wat::core::typealias :trading::rundb::Service::ReqChannel
+  :(trading::rundb::Service::ReqTx,trading::rundb::Service::ReqRx))
 
 ;; The pool variant returned alongside the driver-handle. Wraps
 ;; the N pre-built request senders so callers `pop`/`finish` the
 ;; standard HandlePool surface.
-(:wat::core::typealias :lab::rundb::Service::ReqTxPool
-  :wat::kernel::HandlePool<lab::rundb::Service::ReqTx>)
+(:wat::core::typealias :trading::rundb::Service::ReqTxPool
+  :wat::kernel::HandlePool<trading::rundb::Service::ReqTx>)
 
-;; What `(:lab::rundb::Service path count)` returns — the
+;; What `(:trading::rundb::Service path count)` returns — the
 ;; (handle-pool-of-request-txs, driver-program-handle) pair the
 ;; caller distributes + joins. Aliased so the function's signature
 ;; communicates intent rather than a nested generic.
-(:wat::core::typealias :lab::rundb::Service::Spawn
-  :(lab::rundb::Service::ReqTxPool,wat::kernel::ProgramHandle<()>))
+(:wat::core::typealias :trading::rundb::Service::Spawn
+  :(trading::rundb::Service::ReqTxPool,wat::kernel::ProgramHandle<()>))
 
 ;; A client's reusable ack channel — what
 ;; `(:wat::kernel::make-bounded-queue :() 1)` returns when the
 ;; client sets up its per-batch ack. Held across batches so the
 ;; recv site is the synchronization point.
-(:wat::core::typealias :lab::rundb::Service::AckChannel
-  :(lab::rundb::Service::AckTx,lab::rundb::Service::AckRx))
+(:wat::core::typealias :trading::rundb::Service::AckChannel
+  :(trading::rundb::Service::AckTx,trading::rundb::Service::AckRx))
 
 
 ;; ─── Per-variant dispatcher (wat-side, per Q9) ───────────────────
 
 ;; Routes one LogEntry to its typed shim wrapper. Future variants
-;; add arms here + new `:lab::rundb::log-<variant>` wat wrapper +
+;; add arms here + new `:trading::rundb::log-<variant>` wat wrapper +
 ;; new shim method.
 (:wat::core::define
-  (:lab::rundb::Service/dispatch
-    (db :lab::rundb::RunDb)
-    (entry :lab::log::LogEntry)
+  (:trading::rundb::Service/dispatch
+    (db :trading::rundb::RunDb)
+    (entry :trading::log::LogEntry)
     -> :())
   (:wat::core::match entry -> :()
-    ((:lab::log::LogEntry::PaperResolved
+    ((:trading::log::LogEntry::PaperResolved
         run-name thinker predictor paper-id
         direction opened-at resolved-at
         state residue loss)
-      (:lab::rundb::log-paper-resolved
+      (:trading::rundb::log-paper-resolved
         db run-name thinker predictor paper-id
         direction opened-at resolved-at
         state residue loss))))
@@ -123,20 +123,20 @@
 ;; MUST happen in the driver's thread. Setup never touches a
 ;; RunDb; it just builds queues + spawns the entry below.
 (:wat::core::define
-  (:lab::rundb::Service/loop-entry
+  (:trading::rundb::Service/loop-entry
     (path :String)
-    (rxs :Vec<lab::rundb::Service::ReqRx>)
+    (rxs :Vec<trading::rundb::Service::ReqRx>)
     -> :())
   (:wat::core::let*
-    (((db :lab::rundb::RunDb) (:lab::rundb::open path))
+    (((db :trading::rundb::RunDb) (:trading::rundb::open path))
      ;; Install every known schema. CREATE TABLE IF NOT EXISTS
      ;; makes this idempotent vs the auto-schema-on-open path.
      ((_install :())
-      (:wat::core::foldl (:lab::log::all-schemas) ()
+      (:wat::core::foldl (:trading::log::all-schemas) ()
         (:wat::core::lambda
           ((acc :()) (ddl :String) -> :())
-          (:lab::rundb::execute-ddl db ddl)))))
-    (:lab::rundb::Service/loop db rxs)))
+          (:trading::rundb::execute-ddl db ddl)))))
+    (:trading::rundb::Service/loop db rxs)))
 
 
 ;; ─── Recursive select loop with confirmed batch + ack ────────────
@@ -147,38 +147,38 @@
 ;; the trimmed vec. Loop exits when the vec is empty (every
 ;; client has dropped its sender).
 (:wat::core::define
-  (:lab::rundb::Service/loop
-    (db :lab::rundb::RunDb)
-    (rxs :Vec<lab::rundb::Service::ReqRx>)
+  (:trading::rundb::Service/loop
+    (db :trading::rundb::RunDb)
+    (rxs :Vec<trading::rundb::Service::ReqRx>)
     -> :())
   (:wat::core::if (:wat::core::empty? rxs) -> :()
     ()
     (:wat::core::let*
-      (((chosen :(i64,Option<lab::rundb::Service::Request>))
+      (((chosen :(i64,Option<trading::rundb::Service::Request>))
         (:wat::kernel::select rxs))
        ((idx :i64) (:wat::core::first chosen))
-       ((maybe :Option<lab::rundb::Service::Request>)
+       ((maybe :Option<trading::rundb::Service::Request>)
         (:wat::core::second chosen)))
       (:wat::core::match maybe -> :()
         ((Some req)
           (:wat::core::let*
-            (((entries :Vec<lab::log::LogEntry>)
+            (((entries :Vec<trading::log::LogEntry>)
               (:wat::core::first req))
-             ((ack-tx :lab::rundb::Service::AckTx)
+             ((ack-tx :trading::rundb::Service::AckTx)
               (:wat::core::second req))
              ;; Apply each entry. Auto-commit per statement
              ;; (v1; future perf arc wraps in BEGIN/COMMIT).
              ((_apply :())
               (:wat::core::foldl entries ()
                 (:wat::core::lambda
-                  ((acc :()) (e :lab::log::LogEntry) -> :())
-                  (:lab::rundb::Service/dispatch db e))))
+                  ((acc :()) (e :trading::log::LogEntry) -> :())
+                  (:trading::rundb::Service/dispatch db e))))
              ;; Ack — driver-side `send` swallows :None if the
              ;; client dropped its ack-rx mid-batch.
              ((_ack :Option<()>) (:wat::kernel::send ack-tx ())))
-            (:lab::rundb::Service/loop db rxs)))
+            (:trading::rundb::Service/loop db rxs)))
         (:None
-          (:lab::rundb::Service/loop
+          (:trading::rundb::Service/loop
             db
             (:wat::std::list::remove-at rxs idx)))))))
 
@@ -194,14 +194,14 @@
 ;; :None and the recv returns :None; both are discarded — same
 ;; silent-late-lifecycle posture as Console/out.
 (:wat::core::define
-  (:lab::rundb::Service/batch-log
-    (req-tx :lab::rundb::Service::ReqTx)
-    (ack-tx :lab::rundb::Service::AckTx)
-    (ack-rx :lab::rundb::Service::AckRx)
-    (entries :Vec<lab::log::LogEntry>)
+  (:trading::rundb::Service/batch-log
+    (req-tx :trading::rundb::Service::ReqTx)
+    (ack-tx :trading::rundb::Service::AckTx)
+    (ack-rx :trading::rundb::Service::AckRx)
+    (entries :Vec<trading::log::LogEntry>)
     -> :())
   (:wat::core::let*
-    (((req :lab::rundb::Service::Request)
+    (((req :trading::rundb::Service::Request)
       (:wat::core::tuple entries ack-tx))
      ((_send :Option<()>) (:wat::kernel::send req-tx req))
      ((_recv :Option<()>) (:wat::kernel::recv ack-rx)))
@@ -220,30 +220,30 @@
 ;; HandlePool::finish, lets clients work + drop handles, then
 ;; calls `(join driver)` to confirm clean exit.
 (:wat::core::define
-  (:lab::rundb::Service
+  (:trading::rundb::Service
     (path :String)
     (count :i64)
-    -> :lab::rundb::Service::Spawn)
+    -> :trading::rundb::Service::Spawn)
   (:wat::core::let*
-    (((pairs :Vec<lab::rundb::Service::ReqChannel>)
+    (((pairs :Vec<trading::rundb::Service::ReqChannel>)
       (:wat::core::map
         (:wat::core::range 0 count)
         (:wat::core::lambda
-          ((_i :i64) -> :lab::rundb::Service::ReqChannel)
+          ((_i :i64) -> :trading::rundb::Service::ReqChannel)
           (:wat::kernel::make-bounded-queue
-            :lab::rundb::Service::Request 1))))
-     ((req-txs :Vec<lab::rundb::Service::ReqTx>)
+            :trading::rundb::Service::Request 1))))
+     ((req-txs :Vec<trading::rundb::Service::ReqTx>)
       (:wat::core::map pairs
         (:wat::core::lambda
-          ((p :lab::rundb::Service::ReqChannel) -> :lab::rundb::Service::ReqTx)
+          ((p :trading::rundb::Service::ReqChannel) -> :trading::rundb::Service::ReqTx)
           (:wat::core::first p))))
-     ((req-rxs :Vec<lab::rundb::Service::ReqRx>)
+     ((req-rxs :Vec<trading::rundb::Service::ReqRx>)
       (:wat::core::map pairs
         (:wat::core::lambda
-          ((p :lab::rundb::Service::ReqChannel) -> :lab::rundb::Service::ReqRx)
+          ((p :trading::rundb::Service::ReqChannel) -> :trading::rundb::Service::ReqRx)
           (:wat::core::second p))))
-     ((pool :lab::rundb::Service::ReqTxPool)
+     ((pool :trading::rundb::Service::ReqTxPool)
       (:wat::kernel::HandlePool::new "RunDbService" req-txs))
      ((driver :wat::kernel::ProgramHandle<()>)
-      (:wat::kernel::spawn :lab::rundb::Service/loop-entry path req-rxs)))
+      (:wat::kernel::spawn :trading::rundb::Service/loop-entry path req-rxs)))
     (:wat::core::tuple pool driver)))

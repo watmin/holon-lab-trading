@@ -600,17 +600,17 @@
 ;;
 ;; No internal max-candles. The stream's `next!` returning :None is
 ;; the only termination signal. Callers bound runs by passing a
-;; bounded stream constructed via `:lab::candles::open-bounded path n`.
+;; bounded stream constructed via `:trading::candles::open-bounded path n`.
 
 (:wat::core::define
   (:trading::sim::run-loop
     (state :trading::sim::SimState)
-    (stream :lab::candles::Stream)
+    (stream :trading::candles::Stream)
     (config :trading::sim::Config)
     (thinker :trading::sim::Thinker)
     (predictor :trading::sim::Predictor)
     -> :trading::sim::SimState)
-  (:wat::core::match (:lab::candles::next! stream)
+  (:wat::core::match (:trading::candles::next! stream)
                      -> :trading::sim::SimState
     (:None state)
     ((Some (ts open high low close volume))
@@ -629,13 +629,13 @@
 
 ;; ─── Public API — single `run` ───────────────────────────────────
 ;;
-;; Bound at construction: callers pass `:lab::candles::open-bounded
-;; "path" 1000` for a cap-1000 run, or plain `:lab::candles::open
+;; Bound at construction: callers pass `:trading::candles::open-bounded
+;; "path" 1000` for a cap-1000 run, or plain `:trading::candles::open
 ;; "path"` for full-stream.
 
 (:wat::core::define
   (:trading::sim::run
-    (stream :lab::candles::Stream)
+    (stream :trading::candles::Stream)
     (thinker :trading::sim::Thinker)
     (predictor :trading::sim::Predictor)
     (config :trading::sim::Config)

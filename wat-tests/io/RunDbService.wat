@@ -1,5 +1,5 @@
 ;; wat-tests/io/RunDbService.wat — smoke tests for the
-;; :lab::rundb::Service CSP wrapper.
+;; :trading::rundb::Service CSP wrapper.
 ;;
 ;; Three deftests:
 ;;   1. Single-client batch round-trip — one handle, one batch
@@ -41,33 +41,33 @@
   ()
   (:wat::core::let*
     (((path :String) "/tmp/rundb-service-test-001.db")
-     ((spawn :lab::rundb::Service::Spawn) (:lab::rundb::Service path 1))
-     ((pool :lab::rundb::Service::ReqTxPool) (:wat::core::first spawn))
+     ((spawn :trading::rundb::Service::Spawn) (:trading::rundb::Service path 1))
+     ((pool :trading::rundb::Service::ReqTxPool) (:wat::core::first spawn))
      ((driver :wat::kernel::ProgramHandle<()>) (:wat::core::second spawn))
      ;; Inner let*: every client-side ReqTx lives only here. When
      ;; this scope exits, the ReqTx drops → driver's last rx
      ;; disconnects → loop exits → outer `(join driver)` unblocks.
      ((_inner :())
       (:wat::core::let*
-        (((req-tx :lab::rundb::Service::ReqTx)
+        (((req-tx :trading::rundb::Service::ReqTx)
           (:wat::kernel::HandlePool::pop pool))
          ((_finish :()) (:wat::kernel::HandlePool::finish pool))
-         ((ack-channel :lab::rundb::Service::AckChannel)
+         ((ack-channel :trading::rundb::Service::AckChannel)
           (:wat::kernel::make-bounded-queue :() 1))
-         ((ack-tx :lab::rundb::Service::AckTx) (:wat::core::first ack-channel))
-         ((ack-rx :lab::rundb::Service::AckRx) (:wat::core::second ack-channel))
-         ((entries :Vec<lab::log::LogEntry>)
-          (:wat::core::vec :lab::log::LogEntry
-            (:lab::log::LogEntry::PaperResolved
+         ((ack-tx :trading::rundb::Service::AckTx) (:wat::core::first ack-channel))
+         ((ack-rx :trading::rundb::Service::AckRx) (:wat::core::second ack-channel))
+         ((entries :Vec<trading::log::LogEntry>)
+          (:wat::core::vec :trading::log::LogEntry
+            (:trading::log::LogEntry::PaperResolved
               "single-batch" "always-up" "cosine"
               1 "Up" 100 388 "Grace" 0.04 0.0)
-            (:lab::log::LogEntry::PaperResolved
+            (:trading::log::LogEntry::PaperResolved
               "single-batch" "always-up" "cosine"
               2 "Up" 400 688 "Violence" 0.0 0.02)
-            (:lab::log::LogEntry::PaperResolved
+            (:trading::log::LogEntry::PaperResolved
               "single-batch" "always-up" "cosine"
               3 "Up" 700 988 "Grace" 0.03 0.0))))
-        (:lab::rundb::Service/batch-log req-tx ack-tx ack-rx entries)))
+        (:trading::rundb::Service/batch-log req-tx ack-tx ack-rx entries)))
      ((_join :()) (:wat::kernel::join driver)))
     (:wat::test::assert-eq true true)))
 
@@ -82,25 +82,25 @@
 (:wat::test::deftest :trading::test::io::rundb-service::test-multi-client-fan-in
   ((:wat::core::define
      (:trading::test::io::rundb-service::worker
-       (req-tx :lab::rundb::Service::ReqTx)
+       (req-tx :trading::rundb::Service::ReqTx)
        (run-name :String)
        (paper-id :i64)
        -> :())
      (:wat::core::let*
-       (((ack-channel :lab::rundb::Service::AckChannel)
+       (((ack-channel :trading::rundb::Service::AckChannel)
          (:wat::kernel::make-bounded-queue :() 1))
-        ((ack-tx :lab::rundb::Service::AckTx) (:wat::core::first ack-channel))
-        ((ack-rx :lab::rundb::Service::AckRx) (:wat::core::second ack-channel))
-        ((entries :Vec<lab::log::LogEntry>)
-         (:wat::core::vec :lab::log::LogEntry
-           (:lab::log::LogEntry::PaperResolved
+        ((ack-tx :trading::rundb::Service::AckTx) (:wat::core::first ack-channel))
+        ((ack-rx :trading::rundb::Service::AckRx) (:wat::core::second ack-channel))
+        ((entries :Vec<trading::log::LogEntry>)
+         (:wat::core::vec :trading::log::LogEntry
+           (:trading::log::LogEntry::PaperResolved
              run-name "always-up" "cosine"
              paper-id "Up" 100 388 "Grace" 0.04 0.0))))
-       (:lab::rundb::Service/batch-log req-tx ack-tx ack-rx entries))))
+       (:trading::rundb::Service/batch-log req-tx ack-tx ack-rx entries))))
   (:wat::core::let*
     (((path :String) "/tmp/rundb-service-test-002.db")
-     ((spawn :lab::rundb::Service::Spawn) (:lab::rundb::Service path 3))
-     ((pool :lab::rundb::Service::ReqTxPool) (:wat::core::first spawn))
+     ((spawn :trading::rundb::Service::Spawn) (:trading::rundb::Service path 3))
+     ((pool :trading::rundb::Service::ReqTxPool) (:wat::core::first spawn))
      ((driver :wat::kernel::ProgramHandle<()>) (:wat::core::second spawn))
      ;; Inner scope owns all popped ReqTxs. Spawn moves a clone
      ;; into each worker; the parent's local bindings drop here
@@ -108,9 +108,9 @@
      ;; drop on return), the driver's rxs disconnect.
      ((_inner :())
       (:wat::core::let*
-        (((tx-a :lab::rundb::Service::ReqTx) (:wat::kernel::HandlePool::pop pool))
-         ((tx-b :lab::rundb::Service::ReqTx) (:wat::kernel::HandlePool::pop pool))
-         ((tx-c :lab::rundb::Service::ReqTx) (:wat::kernel::HandlePool::pop pool))
+        (((tx-a :trading::rundb::Service::ReqTx) (:wat::kernel::HandlePool::pop pool))
+         ((tx-b :trading::rundb::Service::ReqTx) (:wat::kernel::HandlePool::pop pool))
+         ((tx-c :trading::rundb::Service::ReqTx) (:wat::kernel::HandlePool::pop pool))
          ((_finish :()) (:wat::kernel::HandlePool::finish pool))
          ((wa :wat::kernel::ProgramHandle<()>)
           (:wat::kernel::spawn :trading::test::io::rundb-service::worker tx-a "fan-in-a" 11))
@@ -133,16 +133,16 @@
   ()
   (:wat::core::let*
     (((path :String) "/tmp/rundb-service-test-003.db")
-     ((spawn :lab::rundb::Service::Spawn) (:lab::rundb::Service path 2))
-     ((pool :lab::rundb::Service::ReqTxPool) (:wat::core::first spawn))
+     ((spawn :trading::rundb::Service::Spawn) (:trading::rundb::Service path 2))
+     ((pool :trading::rundb::Service::ReqTxPool) (:wat::core::first spawn))
      ((driver :wat::kernel::ProgramHandle<()>) (:wat::core::second spawn))
      ;; Inner scope: pop both handles, finish pool, do nothing.
      ;; Both ReqTx bindings drop at inner-let* exit; driver loop
      ;; sees all rxs disconnect; exits.
      ((_inner :())
       (:wat::core::let*
-        (((tx-a :lab::rundb::Service::ReqTx) (:wat::kernel::HandlePool::pop pool))
-         ((tx-b :lab::rundb::Service::ReqTx) (:wat::kernel::HandlePool::pop pool)))
+        (((tx-a :trading::rundb::Service::ReqTx) (:wat::kernel::HandlePool::pop pool))
+         ((tx-b :trading::rundb::Service::ReqTx) (:wat::kernel::HandlePool::pop pool)))
         (:wat::kernel::HandlePool::finish pool)))
      ((_join :()) (:wat::kernel::join driver)))
     (:wat::test::assert-eq true true)))

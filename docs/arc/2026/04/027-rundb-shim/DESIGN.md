@@ -64,7 +64,7 @@ pub struct WatRunDb {
     run_name: String,
 }
 
-#[wat_dispatch(path = ":rust::lab::RunDb", scope = "thread_owned")]
+#[wat_dispatch(path = ":rust::trading::RunDb", scope = "thread_owned")]
 impl WatRunDb {
     /// Open or create a SQLite database at `path`, ensure the
     /// `paper_resolutions` schema exists, and bind a `run_name`
@@ -93,33 +93,33 @@ impl WatRunDb {
 ### `wat/io/RunDb.wat` (new)
 
 ```scheme
-(:wat::core::use! :rust::lab::RunDb)
+(:wat::core::use! :rust::trading::RunDb)
 
-(:wat::core::typealias :lab::rundb::RunDb :rust::lab::RunDb)
+(:wat::core::typealias :trading::rundb::RunDb :rust::trading::RunDb)
 
 (:wat::core::define
-  (:lab::rundb::open
+  (:trading::rundb::open
     (path :String) (run-name :String)
-    -> :lab::rundb::RunDb)
-  (:rust::lab::RunDb::open path run-name))
+    -> :trading::rundb::RunDb)
+  (:rust::trading::RunDb::open path run-name))
 
 (:wat::core::define
-  (:lab::rundb::log-paper
-    (db :lab::rundb::RunDb)
+  (:trading::rundb::log-paper
+    (db :trading::rundb::RunDb)
     (thinker :String) (predictor :String)
     (paper-id :i64) (direction :String)
     (opened-at :i64) (resolved-at :i64)
     (state :String)
     (residue :f64) (loss :f64)
     -> :())
-  (:rust::lab::RunDb::log-paper db thinker predictor paper-id direction
+  (:rust::trading::RunDb::log-paper db thinker predictor paper-id direction
                                  opened-at resolved-at state residue loss))
 
 (:wat::core::define
-  (:lab::rundb::close
-    (db :lab::rundb::RunDb)
+  (:trading::rundb::close
+    (db :trading::rundb::RunDb)
     -> :())
-  (:rust::lab::RunDb::close db))
+  (:rust::trading::RunDb::close db))
 ```
 
 ### Schema

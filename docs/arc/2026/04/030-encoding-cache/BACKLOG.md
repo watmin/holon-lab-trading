@@ -43,7 +43,7 @@ shape mirrors the archive's
 `archived/pre-wat-native/src/types/log_entry.rs::LogEntry::Telemetry`:
 
 ```scheme
-(:wat::core::enum :lab::log::LogEntry
+(:wat::core::enum :trading::log::LogEntry
   (PaperResolved
     ...)
   (Telemetry                                  ; ← new
@@ -67,7 +67,7 @@ sum).
 
 ```scheme
 (:wat::core::define
-  (:lab::log::schema-telemetry -> :String)
+  (:trading::log::schema-telemetry -> :String)
   "CREATE TABLE IF NOT EXISTS telemetry (
      namespace     TEXT NOT NULL,
      id            TEXT NOT NULL,
@@ -79,10 +79,10 @@ sum).
    );")
 
 (:wat::core::define
-  (:lab::log::all-schemas -> :Vec<String>)
+  (:trading::log::all-schemas -> :Vec<String>)
   (:wat::core::vec :String
-    (:lab::log::schema-paper-resolved)
-    (:lab::log::schema-telemetry)))         ; ← added
+    (:trading::log::schema-paper-resolved)
+    (:trading::log::schema-telemetry)))         ; ← added
 ```
 
 No PRIMARY KEY on telemetry (every row is a unique
@@ -114,7 +114,7 @@ pub fn log_telemetry(
             metric_name, metric_value, metric_unit,
         ],
     ).unwrap_or_else(|e| {
-        panic!(":rust::lab::RunDb::log-telemetry: insert failed: {e}")
+        panic!(":rust::trading::RunDb::log-telemetry: insert failed: {e}")
     });
 }
 ```
@@ -123,13 +123,13 @@ pub fn log_telemetry(
 
 ```scheme
 (:wat::core::define
-  (:lab::rundb::log-telemetry
-    (db :lab::rundb::RunDb)
+  (:trading::rundb::log-telemetry
+    (db :trading::rundb::RunDb)
     (namespace :String) (id :String) (dimensions :String)
     (timestamp-ns :i64)
     (metric-name :String) (metric-value :f64) (metric-unit :String)
     -> :())
-  (:rust::lab::RunDb::log-telemetry
+  (:rust::trading::RunDb::log-telemetry
     db namespace id dimensions
     timestamp-ns metric-name metric-value metric-unit))
 ```
@@ -140,23 +140,23 @@ pub fn log_telemetry(
 
 ```scheme
 (:wat::core::define
-  (:lab::rundb::Service/dispatch
-    (db :lab::rundb::RunDb)
-    (entry :lab::log::LogEntry)
+  (:trading::rundb::Service/dispatch
+    (db :trading::rundb::RunDb)
+    (entry :trading::log::LogEntry)
     -> :())
   (:wat::core::match entry -> :()
-    ((:lab::log::LogEntry::PaperResolved
+    ((:trading::log::LogEntry::PaperResolved
         run-name thinker predictor paper-id
         direction opened-at resolved-at
         state residue loss)
-      (:lab::rundb::log-paper-resolved
+      (:trading::rundb::log-paper-resolved
         db run-name thinker predictor paper-id
         direction opened-at resolved-at
         state residue loss))
-    ((:lab::log::LogEntry::Telemetry                    ; ← new
+    ((:trading::log::LogEntry::Telemetry                    ; ← new
         namespace id dimensions timestamp-ns
         metric-name metric-value metric-unit)
-      (:lab::rundb::log-telemetry
+      (:trading::rundb::log-telemetry
         db namespace id dimensions timestamp-ns
         metric-name metric-value metric-unit))))
 ```
@@ -172,12 +172,12 @@ pub fn log_telemetry(
 ;; Build a Telemetry LogEntry from its fields. Pure constructor;
 ;; doesn't send. Caller batches + sends via Service/batch-log.
 (:wat::core::define
-  (:lab::log::emit-metric
+  (:trading::log::emit-metric
     (namespace :String) (id :String) (dimensions :String)
     (timestamp-ns :i64)
     (metric-name :String) (metric-value :f64) (metric-unit :String)
-    -> :lab::log::LogEntry)
-  (:lab::log::LogEntry::Telemetry
+    -> :trading::log::LogEntry)
+  (:trading::log::LogEntry::Telemetry
     namespace id dimensions timestamp-ns
     metric-name metric-value metric-unit))
 
@@ -188,7 +188,7 @@ pub fn log_telemetry(
 ;; substrate's mutable-cell shape; if no cell, may need a
 ;; substrate carry-along OR fall back to a counter-based gate).
 (:wat::core::define
-  (:lab::log::make-rate-gate
+  (:trading::log::make-rate-gate
     (interval-ms :i64)
     -> :wat::core::lambda<() -> bool>)
   ...)
@@ -216,7 +216,7 @@ pub fn wat_sources() -> &'static [WatSource] {
    `LogEntry::Telemetry`, batch-log via Service to a temp DB,
    query back via sqlite3 CLI. Verify namespace / metric_name
    / metric_value match.
-2. **emit-metric helper.** Construct via `:lab::log::emit-metric`,
+2. **emit-metric helper.** Construct via `:trading::log::emit-metric`,
    compare to direct constructor — must produce equal entries.
 3. **Rate gate behavior.** Create gate with 100ms interval;
    immediate call returns true, second-immediate returns false,
@@ -321,7 +321,7 @@ unless the substrate has objection.
     (cache :trading::sim::EncodeCache)
     (run-name :String)
     (timestamp-ns :i64)
-    -> :Vec<lab::log::LogEntry>)
+    -> :Vec<trading::log::LogEntry>)
   ...)
 ```
 

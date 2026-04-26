@@ -1,6 +1,6 @@
-;; :lab::rundb::* — wat surface over the SQLite paper-resolution writer.
+;; :trading::rundb::* — wat surface over the SQLite paper-resolution writer.
 ;;
-;; Backed by `:rust::lab::RunDb` from `src/shims.rs`. The shim holds a
+;; Backed by `:rust::trading::RunDb` from `src/shims.rs`. The shim holds a
 ;; `rusqlite::Connection`; every `log-paper-resolved` call takes its
 ;; `run-name` per-message and inserts one row into the
 ;; `paper_resolutions` table with that name attached. Thread-owned
@@ -11,8 +11,8 @@
 ;;      per-message parameter. Lets one shim handle drive multiple
 ;;      run names.
 ;;   2. `log-paper` renamed to `log-paper-resolved` to align with
-;;      the slice-2 `:lab::log::LogEntry::PaperResolved` variant the
-;;      `:lab::rundb::Service` wrapper dispatches over.
+;;      the slice-2 `:trading::log::LogEntry::PaperResolved` variant the
+;;      `:trading::rundb::Service` wrapper dispatches over.
 ;;
 ;; Both changes are prerequisites for the CSP service shape that
 ;; fans in N clients onto one underlying connection
@@ -35,9 +35,9 @@
 ;; keeps tests friendly to reruns without a `remove-file!` helper.
 ;;
 ;; Usage:
-;;   (let* (((db :lab::rundb::RunDb)
-;;           (:lab::rundb::open "runs/proof-002.db")))
-;;     (:lab::rundb::log-paper-resolved db
+;;   (let* (((db :trading::rundb::RunDb)
+;;           (:trading::rundb::open "runs/proof-002.db")))
+;;     (:trading::rundb::log-paper-resolved db
 ;;       "always-up-baseline"
 ;;       "always-up" "cosine-vs-corners"
 ;;       1 "Up" 100 388 "Grace" 0.04 0.0))
@@ -46,36 +46,36 @@
 ;; against the produced DB file. A future arc adds read APIs once a
 ;; wat consumer surfaces.
 
-(:wat::core::use! :rust::lab::RunDb)
+(:wat::core::use! :rust::trading::RunDb)
 
-(:wat::core::typealias :lab::rundb::RunDb :rust::lab::RunDb)
+(:wat::core::typealias :trading::rundb::RunDb :rust::trading::RunDb)
 
 ;; Open or create a SQLite database at `path` and ensure the
 ;; `paper_resolutions` schema. The `run-name` discriminator for each
 ;; row is supplied per-call on `log-paper-resolved`.
 (:wat::core::define
-  (:lab::rundb::open
+  (:trading::rundb::open
     (path :String)
-    -> :lab::rundb::RunDb)
-  (:rust::lab::RunDb::open path))
+    -> :trading::rundb::RunDb)
+  (:rust::trading::RunDb::open path))
 
 ;; Run an arbitrary DDL string (CREATE TABLE, CREATE INDEX, etc.).
-;; The slice-2 :lab::rundb::Service driver iterates :lab::log::all-
+;; The slice-2 :trading::rundb::Service driver iterates :trading::log::all-
 ;; schemas at startup and execute-ddl's each. Idempotent — schemas
 ;; use CREATE TABLE IF NOT EXISTS.
 (:wat::core::define
-  (:lab::rundb::execute-ddl
-    (db :lab::rundb::RunDb)
+  (:trading::rundb::execute-ddl
+    (db :trading::rundb::RunDb)
     (ddl-str :String)
     -> :())
-  (:rust::lab::RunDb::execute_ddl db ddl-str))
+  (:rust::trading::RunDb::execute_ddl db ddl-str))
 
 ;; Insert one row into `paper_resolutions` under the given run-name.
 ;; Auto-commit; no batching; idempotent on the (run-name, paper-id)
 ;; primary key.
 (:wat::core::define
-  (:lab::rundb::log-paper-resolved
-    (db :lab::rundb::RunDb)
+  (:trading::rundb::log-paper-resolved
+    (db :trading::rundb::RunDb)
     (run-name :String)
     (thinker :String)
     (predictor :String)
@@ -87,6 +87,6 @@
     (residue :f64)
     (loss :f64)
     -> :())
-  (:rust::lab::RunDb::log_paper_resolved
+  (:rust::trading::RunDb::log_paper_resolved
     db run-name thinker predictor paper-id direction
     opened-at resolved-at state residue loss))

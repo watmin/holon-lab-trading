@@ -7,7 +7,7 @@ flips (slice 3). ~640 LOC of wat + ~30 LOC of Rust + 3 new
 smoke tests.
 
 Builder direction (mid-implementation, after the proofs lane
-tried to hack 10 sequential `:lab::rundb::open` calls into proof
+tried to hack 10 sequential `:trading::rundb::open` calls into proof
 003):
 
 > "hold on - we need a db service for this... go study the
@@ -60,7 +60,7 @@ Verified end-to-end:
 
 ### Type aliases for tuple-return shapes (builder direction)
 
-Four new aliases at `:lab::rundb::Service::*`:
+Four new aliases at `:trading::rundb::Service::*`:
 - `ReqChannel` — `:(ReqTx, ReqRx)` — the pair
   `make-bounded-queue :Service::Request 1` returns; the setup
   function builds N of these and splits into pool + driver-rxs
@@ -124,13 +124,13 @@ perf arc that fires when measurement shows commit overhead is
 the bottleneck. The current write volume (~340 inserts per
 proof) makes auto-commit fine; adding BEGIN/COMMIT now would
 obscure the lifecycle contract for negligible measured benefit.
-The wat-side surface (`(:lab::rundb::execute-ddl db "BEGIN")`)
+The wat-side surface (`(:trading::rundb::execute-ddl db "BEGIN")`)
 exists to layer the wrapping later without shim changes.
 
 ### Schema autoinstall stays in `open()`
 
 DESIGN sketched moving schema ownership entirely into wat
-(service installs from `:lab::log::all-schemas` at startup).
+(service installs from `:trading::log::all-schemas` at startup).
 BACKLOG slice 1 walked this back: keep auto-schema in `open()`
 for backward compat with direct-shim callers (proof 002
 bypasses the service). Service-mode callers still get fresh
@@ -236,6 +236,6 @@ Reproduced from DESIGN's "What this arc does NOT add":
   tests) → slice 3 (this INSCRIPTION + proof 003 unblock).
 - Lab side next: proofs lane writes proof 003's pair file at
   `wat-tests-integ/proof/003-thinker-significance/` against
-  `:lab::rundb::Service` + `:lab::log::LogEntry::PaperResolved`.
+  `:trading::rundb::Service` + `:trading::log::LogEntry::PaperResolved`.
 
 PERSEVERARE.
