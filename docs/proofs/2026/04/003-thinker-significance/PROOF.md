@@ -1,7 +1,7 @@
 # Proof 003 — Thinker Significance
 
 **Date:** opened 2026-04-25, shipped 2026-04-25.
-**Status:** **SHIPPED.** Pair file at `wat-tests-integ/proof/003-thinker-significance/`. Test passes in 586s (~9.8 min) on 200k candles via `:lab::rundb::Service` (single client, batch+ack, one entry per window — ~30-40 entries per batch). Numbers below.
+**Status:** **SHIPPED.** Pair file at `wat-tests-integ/proof/003-thinker-significance/`. Test passes in 586s (~9.8 min). Per thinker: 100,000 candles examined (10 windows × 10k each, ~1.15 months per window). Per proof: 200,000 simulator-tick invocations (2 thinkers × 100k). The 10 windows are *scattered* across 5.7 years via stride ≈ 65k candles (~7.6 months); we sample regimes, not contiguous coverage. Logged via `:lab::rundb::Service` (single client, batch+ack, one batch per window). Numbers below.
 **Pair file (planned):** [`wat-tests-integ/proof/003-thinker-significance/003-thinker-significance.wat`](../../../../wat-tests-integ/proof/003-thinker-significance/003-thinker-significance.wat).
 **Predecessor:** [Proof 002 — Thinker Baseline](../002-thinker-baseline/PROOF.md).
 **Unblocking arc:** [`docs/arc/2026/04/029-rundb-service/`](../../../arc/2026/04/029-rundb-service/DESIGN.md).
@@ -11,9 +11,12 @@ loses **−0.2791** vs always-up's **−0.6498** — sma-cross looks
 better. But one window is one regime. Is the gap real, or did
 sma-cross just get lucky on the first month of 2019?
 
-Proof 003 runs both thinkers on **10 windows** spread across the
-full 6-year stream and asks: does sma-cross beat always-up
-consistently, or does the gap collapse into noise?
+Proof 003 **samples** the 6-year stream — 10 windows of ~1
+month each, evenly strided ~7.6 months apart — and asks: does
+sma-cross beat always-up consistently across regimes, or does
+the gap collapse into noise? This is *not* a contiguous 6-year
+run (that's proof 004); it's a regime-coverage check costing
+~10 months of examined data per thinker.
 
 > Every proof moves us a step forward. — the user.
 
