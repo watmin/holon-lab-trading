@@ -224,11 +224,19 @@ impl WatCandleStream {
 
 /// `:rust::lab::RunDb` — thread-owned SQLite writer.
 ///
-/// Holds an open `Connection` plus a `run_name` discriminator bound at
-/// `open` time. Schema (`paper_resolutions`) is created if absent;
-/// every `log_paper` call inserts one row. Auto-commit; no batching;
-/// idempotent on `(run_name, paper_id)` PRIMARY KEY via `INSERT OR
-/// REPLACE` (test-rerun friendly without a `remove-file!` helper).
+/// Holds an open `Connection`. Schema (`paper_resolutions`) is
+/// created if absent; every `log_paper` call inserts one row,
+/// taking the `run_name` discriminator as its first parameter
+/// (per-message routing rather than per-handle). Auto-commit; no
+/// batching; idempotent on `(run_name, paper_id)` PRIMARY KEY via
+/// `INSERT OR REPLACE` (test-rerun friendly without a
+/// `remove-file!` helper).
+///
+/// Arc 029 refactored `run_name` from a struct field into a
+/// per-call parameter — lets one shim handle drive multiple run
+/// names, which is the prerequisite for the `:lab::rundb::Service`
+/// CSP wrapper that fans in N clients (each with its own
+/// run_name) onto one underlying connection.
 ///
 /// Per `feedback_shim_panic_vs_option`: construction-time errors
 /// panic with diagnostic; per-call write errors panic in v1 (a
@@ -236,7 +244,6 @@ impl WatCandleStream {
 /// disk-full / permission failures gracefully).
 pub struct WatRunDb {
     conn: Connection,
-    run_name: String,
 }
 
 const RUNDB_SCHEMA: &str = "
@@ -260,28 +267,35 @@ CREATE TABLE IF NOT EXISTS paper_resolutions (
     scope = "thread_owned"
 )]
 impl WatRunDb {
-    /// `:rust::lab::RunDb::open path run_name` — open or create a
-    /// SQLite database at `path`, ensure the `paper_resolutions`
-    /// schema exists, and bind `run_name` for every subsequent
-    /// `log_paper` call. Panics on any rusqlite error (bad path,
-    /// permission, schema creation failure).
-    pub fn open(path: String, run_name: String) -> Self {
+    /// `:rust::lab::RunDb::open path` — open or create a SQLite
+    /// database at `path` and ensure the `paper_resolutions` schema
+    /// exists. Panics on any rusqlite error (bad path, permission,
+    /// schema creation failure). Arc 029 dropped the `run_name`
+    /// parameter — it now rides per-call on `log_paper`.
+    pub fn open(path: String) -> Self {
         let conn = Connection::open(&path).unwrap_or_else(|e| {
             panic!(":rust::lab::RunDb::open: cannot open {path}: {e}")
         });
         conn.execute_batch(RUNDB_SCHEMA).unwrap_or_else(|e| {
             panic!(":rust::lab::RunDb::open: schema creation failed at {path}: {e}")
         });
-        Self { conn, run_name }
+        Self { conn }
     }
 
-    /// `:rust::lab::RunDb::log-paper db ...` — insert one row into
-    /// `paper_resolutions`. `INSERT OR REPLACE` semantics — the same
+    /// `:rust::lab::RunDb::log-paper-resolved db run_name ...` —
+    /// insert one row into `paper_resolutions` under the given
+    /// `run_name`. `INSERT OR REPLACE` semantics — the same
     /// `(run_name, paper_id)` re-logged overwrites the prior row.
-    /// Panics on rusqlite write errors.
+    /// Panics on rusqlite write errors. Arc 029 (a) renamed from
+    /// `log_paper` to align with the `LogEntry::PaperResolved`
+    /// variant the slice-2 service wraps and (b) promoted
+    /// `run_name` from struct field to first parameter so one shim
+    /// handle can drive multiple run names (the prerequisite for
+    /// per-message routing through `:lab::rundb::Service`).
     #[allow(clippy::too_many_arguments)]
-    pub fn log_paper(
+    pub fn log_paper_resolved(
         &mut self,
+        run_name: String,
         thinker: String,
         predictor: String,
         paper_id: i64,
@@ -299,7 +313,7 @@ impl WatRunDb {
                   opened_at, resolved_at, state, residue, loss) \
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                 params![
-                    self.run_name,
+                    run_name,
                     thinker,
                     predictor,
                     paper_id,
@@ -312,7 +326,7 @@ impl WatRunDb {
                 ],
             )
             .unwrap_or_else(|e| {
-                panic!(":rust::lab::RunDb::log-paper: insert failed: {e}")
+                panic!(":rust::lab::RunDb::log-paper-resolved: insert failed: {e}")
             });
     }
 

@@ -1,15 +1,29 @@
 ;; :lab::rundb::* — wat surface over the SQLite paper-resolution writer.
 ;;
 ;; Backed by `:rust::lab::RunDb` from `src/shims.rs`. The shim holds a
-;; `rusqlite::Connection` plus a `run_name` discriminator bound at
-;; open time; every `log-paper` call inserts one row into the
-;; `paper_resolutions` table with that run name attached. Thread-owned
+;; `rusqlite::Connection`; every `log-paper-resolved` call takes its
+;; `run-name` per-message and inserts one row into the
+;; `paper_resolutions` table with that name attached. Thread-owned
 ;; scope — one db per program thread, no Mutex.
+;;
+;; Arc 029 (2026-04-25) refactored two ways:
+;;   1. `run-name` moved from a per-handle bind (arc 027 shape) to a
+;;      per-message parameter. Lets one shim handle drive multiple
+;;      run names.
+;;   2. `log-paper` renamed to `log-paper-resolved` to align with
+;;      the slice-2 `:lab::log::LogEntry::PaperResolved` variant the
+;;      `:lab::rundb::Service` wrapper dispatches over.
+;;
+;; Both changes are prerequisites for the CSP service shape that
+;; fans in N clients onto one underlying connection
+;; (see `wat/io/RunDbService.wat` — slice 2).
 ;;
 ;; Mirrors `wat-lru` and `CandleStream`'s surface shape (typealias +
 ;; thin define wrappers over `:rust::*`).
 ;;
-;; Schema (auto-created on `open`):
+;; Schema (auto-created on `open` for backward compat with
+;; direct-shim callers like proof 002; service-mode callers will
+;; install schemas explicitly via `execute-ddl` once slice 2 lands):
 ;;
 ;;   paper_resolutions(run_name, thinker, predictor, paper_id,
 ;;                     direction, opened_at, resolved_at, state,
@@ -22,10 +36,11 @@
 ;;
 ;; Usage:
 ;;   (let* (((db :lab::rundb::RunDb)
-;;           (:lab::rundb::open "runs/proof-002.db" "always-up-baseline")))
-;;     (:lab::rundb::log-paper db "always-up" "cosine-vs-corners"
-;;                              1 "Up" 100 388 "Grace" 0.04 0.0)
-;;     (:lab::rundb::close db))
+;;           (:lab::rundb::open "runs/proof-002.db")))
+;;     (:lab::rundb::log-paper-resolved db
+;;       "always-up-baseline"
+;;       "always-up" "cosine-vs-corners"
+;;       1 "Up" 100 388 "Grace" 0.04 0.0))
 ;;
 ;; Read-side queries are out of scope for v1; use the `sqlite3` CLI
 ;; against the produced DB file. A future arc adds read APIs once a
@@ -35,21 +50,22 @@
 
 (:wat::core::typealias :lab::rundb::RunDb :rust::lab::RunDb)
 
-;; Open or create a SQLite database at `path`, ensure the
-;; `paper_resolutions` schema, and bind `run-name` for every
-;; subsequent `log-paper` call.
+;; Open or create a SQLite database at `path` and ensure the
+;; `paper_resolutions` schema. The `run-name` discriminator for each
+;; row is supplied per-call on `log-paper-resolved`.
 (:wat::core::define
   (:lab::rundb::open
     (path :String)
-    (run-name :String)
     -> :lab::rundb::RunDb)
-  (:rust::lab::RunDb::open path run-name))
+  (:rust::lab::RunDb::open path))
 
-;; Insert one row into `paper_resolutions`. Auto-commit; no batching;
-;; idempotent on the (run-name, paper-id) primary key.
+;; Insert one row into `paper_resolutions` under the given run-name.
+;; Auto-commit; no batching; idempotent on the (run-name, paper-id)
+;; primary key.
 (:wat::core::define
-  (:lab::rundb::log-paper
+  (:lab::rundb::log-paper-resolved
     (db :lab::rundb::RunDb)
+    (run-name :String)
     (thinker :String)
     (predictor :String)
     (paper-id :i64)
@@ -60,6 +76,6 @@
     (residue :f64)
     (loss :f64)
     -> :())
-  (:rust::lab::RunDb::log_paper
-    db thinker predictor paper-id direction
+  (:rust::lab::RunDb::log_paper_resolved
+    db run-name thinker predictor paper-id direction
     opened-at resolved-at state residue loss))

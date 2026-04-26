@@ -27,12 +27,12 @@
   ()
   (:wat::core::let*
     (((db1 :lab::rundb::RunDb)
-      (:lab::rundb::open "/tmp/rundb-test-001.db" "first-run"))
-     ;; Open a second handle on the same file with a different
-     ;; run-name. CREATE TABLE IF NOT EXISTS makes this idempotent;
-     ;; the binding shadows the first, which drops at let* exit.
+      (:lab::rundb::open "/tmp/rundb-test-001.db"))
+     ;; Open a second handle on the same file. CREATE TABLE IF NOT
+     ;; EXISTS makes this idempotent; the binding shadows the first,
+     ;; which drops at let* exit.
      ((db2 :lab::rundb::RunDb)
-      (:lab::rundb::open "/tmp/rundb-test-001.db" "second-run")))
+      (:lab::rundb::open "/tmp/rundb-test-001.db")))
     (:wat::test::assert-eq true true)))
 
 
@@ -41,9 +41,10 @@
   ()
   (:wat::core::let*
     (((db :lab::rundb::RunDb)
-      (:lab::rundb::open "/tmp/rundb-test-002.db" "single-row-run"))
+      (:lab::rundb::open "/tmp/rundb-test-002.db"))
      ((u1 :())
-      (:lab::rundb::log-paper db
+      (:lab::rundb::log-paper-resolved db
+        "single-row-run"
         "always-up" "cosine-vs-corners"
         1 "Up"
         100 388
@@ -53,24 +54,26 @@
 
 
 ;; ─── deftest: log multiple rows, don't crash ──────────────────────
+;; Same handle, two run-names — proves arc 029's per-call run_name
+;; routing works (one connection drives many runs, no need to reopen).
 (:wat::test::deftest :trading::test::io::rundb::test-log-paper-multiple-rows
   ()
   (:wat::core::let*
     (((db :lab::rundb::RunDb)
-      (:lab::rundb::open "/tmp/rundb-test-003.db" "multi-row-run"))
+      (:lab::rundb::open "/tmp/rundb-test-003.db"))
      ((u1 :())
-      (:lab::rundb::log-paper db "always-up" "cosine"
+      (:lab::rundb::log-paper-resolved db "multi-row-up" "always-up" "cosine"
         1 "Up"  100 388 "Grace"    0.04  0.0))
      ((u2 :())
-      (:lab::rundb::log-paper db "always-up" "cosine"
+      (:lab::rundb::log-paper-resolved db "multi-row-up" "always-up" "cosine"
         2 "Up"  400 688 "Violence" 0.0   0.02))
      ((u3 :())
-      (:lab::rundb::log-paper db "always-up" "cosine"
+      (:lab::rundb::log-paper-resolved db "multi-row-up" "always-up" "cosine"
         3 "Up"  700 988 "Grace"    0.03  0.0))
      ((u4 :())
-      (:lab::rundb::log-paper db "sma-cross" "cosine"
+      (:lab::rundb::log-paper-resolved db "multi-row-down" "sma-cross" "cosine"
         4 "Down" 1000 1288 "Grace" 0.025 0.0))
      ((u5 :())
-      (:lab::rundb::log-paper db "sma-cross" "cosine"
+      (:lab::rundb::log-paper-resolved db "multi-row-down" "sma-cross" "cosine"
         5 "Down" 1300 1588 "Violence" 0.0 0.018)))
     (:wat::test::assert-eq true true)))

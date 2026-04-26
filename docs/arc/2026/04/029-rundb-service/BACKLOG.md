@@ -22,7 +22,7 @@ program once the seam exists.
 
 ## Slice 1 — Refactor `WatRunDb` (per-message `run_name` + variant-aligned naming)
 
-**Status: not started.**
+**Status: shipped 2026-04-25.**
 
 `src/shims.rs` — three small edits:
 

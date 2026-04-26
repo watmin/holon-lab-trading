@@ -218,3 +218,17 @@ per-thinker DBs stay on disk as historical artifacts (per
 `feedback_never_delete_runs`). The numbers above are
 unchanged — they are the numbers the simulator produces; the
 storage shape is orthogonal.
+
+**Migration landed 2026-04-25** (arc 029 slice 1, lab commit
+forthcoming). Verification on the freshest single-DB run
+(`runs/proof-002-1777164134.db`):
+
+```
+always-up | 34 | 0 | 34
+sma-cross | 34 | 5 | 29
+```
+
+Same numbers as the pre-migration shipped run. The
+`paper_resolutions` schema was unchanged; only the row source
+moved (per-handle `run_name` → per-call), and the helper
+signatures gained one parameter each.
