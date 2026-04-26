@@ -16,6 +16,7 @@
 (:wat::load-file! "io/log/LogEntry.wat")
 (:wat::load-file! "io/log/schema.wat")
 (:wat::load-file! "io/log/telemetry.wat")
+(:wat::load-file! "io/log/rate-gate.wat")
 (:wat::load-file! "io/RunDbService.wat")
 
 ;; Phase 1 — types
@@ -57,6 +58,9 @@
 (:wat::load-file! "sim/labels.wat")
 (:wat::load-file! "sim/paper.wat")
 (:wat::load-file! "sim/v1.wat")
+
+;; arc 030 slice 2 — encoding cache for the predictor's hot path.
+(:wat::load-file! "sim/encoding-cache.wat")
 
 ;; Phase 2 — vocab
 ;;   arc 001 — shared/time
