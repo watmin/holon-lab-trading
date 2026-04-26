@@ -26,24 +26,33 @@
    ;; final State at shutdown so callers can verify counts via
    ;; join-result. Two fields for T3 — placeholder counts that prove
    ;; both reply-bearing and fire-and-forget variants update state.
+   ;; Paper — a virtual position the Treasury has opened. T6 is the
+   ;; first real Treasury domain struct. Just (id, amount) for now;
+   ;; future fields: entry-price, deadline, exit-target, etc.
+   (:wat::core::struct :exp::Paper
+     (id :i64)
+     (amount :i64))
+
    ;;
    ;; T1-T4a established the SHAPE with two placeholder counters.
-   ;; T5 starts adding real Treasury fields alongside — `last-price`
-   ;; tracks the most recent Tick. Future fields land here as the
-   ;; Treasury domain fills in: open-papers, treasury-balance, etc.
+   ;; T5 added `last-price` (real Treasury field — tracks most recent Tick).
+   ;; T6 adds `open-papers` (the papers themselves) and `next-paper-id`
+   ;; (monotonic ID source — next ID to hand out).
    ;;
-   ;; State::fresh absorbs the new field — existing deftests that
-   ;; only check counters keep working unchanged.
+   ;; State::fresh absorbs new fields — existing deftests that only
+   ;; check counters keep working unchanged.
    (:wat::core::struct :exp::State
-     (tick-count :i64)
-     (ping-count :i64)
-     (last-price :Option<f64>))
+     (tick-count    :i64)
+     (ping-count    :i64)
+     (last-price    :Option<f64>)
+     (open-papers   :Vec<exp::Paper>)
+     (next-paper-id :i64))
 
-   ;; Convenience constructor — fresh State has zero counts and no
-   ;; observed price yet (:None until the first Tick).
+   ;; Convenience constructor — zero counts, no observed price, no
+   ;; open papers, ID counter starts at 0.
    (:wat::core::define
      (:exp::State::fresh -> :exp::State)
-     (:exp::State/new 0 0 :None))
+     (:exp::State/new 0 0 :None (:wat::core::vec :exp::Paper) 0))
 
    ;; Reply channel — for T1 the worker only needs to ack receipt.
    ;; T4+ will swap () for real Verdict / PositionReceipt types.
@@ -66,9 +75,11 @@
    ;; SubmitExit carry reply-tx for receipts; Tick is the silent clock;
    ;; an inspect/get-treasury verb will follow the Snapshot pattern.
    (:wat::core::enum :exp::Request
-     (Ping     (reply-tx :exp::ReplyTx))
-     (Tick     (price :f64))
-     (Snapshot (reply-tx :wat::kernel::QueueSender<exp::State>)))
+     (Ping      (reply-tx :exp::ReplyTx))
+     (Tick      (price :f64))
+     (Snapshot  (reply-tx :wat::kernel::QueueSender<exp::State>))
+     (OpenPaper (amount :i64)
+                (reply-tx :wat::kernel::QueueSender<i64>)))
 
    ;; Per-broker request channel typealiases.
    (:wat::core::typealias :exp::ReqTx :wat::kernel::QueueSender<exp::Request>)
@@ -130,7 +141,9 @@
            (:exp::State/new
              (:exp::State/tick-count state)
              (:wat::core::+ (:exp::State/ping-count state) 1)
-             (:exp::State/last-price state))))
+             (:exp::State/last-price state)
+             (:exp::State/open-papers state)
+             (:exp::State/next-paper-id state))))
        ;; T5: Tick now does real work — store the price as last-price
        ;; alongside bumping tick-count. This is the first placeholder
        ;; field that became domain.
@@ -138,11 +151,31 @@
          (:exp::State/new
            (:wat::core::+ (:exp::State/tick-count state) 1)
            (:exp::State/ping-count state)
-           (Some price)))
+           (Some price)
+           (:exp::State/open-papers state)
+           (:exp::State/next-paper-id state)))
        ((:exp::Request::Snapshot reply-tx)
          (:wat::core::let*
            (((_send :wat::kernel::Sent) (:wat::kernel::send reply-tx state)))
-           state))))
+           state))
+       ;; T6: OpenPaper — first real Treasury verb.
+       ;;   - Mint a new id from next-paper-id (state-as-ID-source)
+       ;;   - Build a Paper, append to open-papers (Vec immutable update via conj)
+       ;;   - Send the new id back on reply-tx (caller now holds the handle to this paper)
+       ;;   - Increment next-paper-id so the next OpenPaper gets a fresh id
+       ((:exp::Request::OpenPaper amount reply-tx)
+         (:wat::core::let*
+           (((id :i64) (:exp::State/next-paper-id state))
+            ((paper :exp::Paper) (:exp::Paper/new id amount))
+            ((papers' :Vec<exp::Paper>)
+             (:wat::core::conj (:exp::State/open-papers state) paper))
+            ((_send :wat::kernel::Sent) (:wat::kernel::send reply-tx id)))
+           (:exp::State/new
+             (:exp::State/tick-count state)
+             (:exp::State/ping-count state)
+             (:exp::State/last-price state)
+             papers'
+             (:wat::core::+ id 1))))))
 
    ;; ─── Service constructor ─────────────────────────────────────
    ;;
@@ -498,6 +531,119 @@
                     (:wat::test::assert-eq "snap2 last-price != 102.0" "")))
                 (:None (:wat::test::assert-eq "snap2 last-price is None" ""))))
             (:None (:wat::test::assert-eq "no snap2" "")))))
+        ()))
+
+     ((_join :exp::State) (:wat::kernel::join driver)))
+    (:wat::test::assert-eq true true)))
+
+
+;; ─── T6 — first real Treasury verb: OpenPaper ─────────────────
+;;
+;; OpenPaper(amount, reply-tx) mints a fresh paper-id, builds a Paper,
+;; appends to open-papers, sends the id back. Three patterns surface
+;; that recur in any registry-shaped service:
+;;   - state-as-ID-source (next-paper-id counter in State)
+;;   - Vec<DomainStruct> immutable update (conj papers new-paper)
+;;   - reply type that's a generated scalar (PaperId), not state echo
+;;
+;; Send three OpenPaper calls; expect IDs 0, 1, 2 in order. Snapshot;
+;; verify open-papers length = 3 and next-paper-id = 3.
+
+(:deftest :exp::t6-open-paper
+  (:wat::core::let*
+    (((spawn :exp::Spawn) (:exp::Service 1))
+     ((pool :exp::ReqTxPool) (:wat::core::first spawn))
+     ((driver :wat::kernel::ProgramHandle<exp::State>) (:wat::core::second spawn))
+
+     ((_inner :())
+      (:wat::core::let*
+        (((req-tx :exp::ReqTx) (:wat::kernel::HandlePool::pop pool))
+         ((_finish :()) (:wat::kernel::HandlePool::finish pool))
+
+         ;; OpenPaper's reply channel — carries the new paper-id.
+         ((id-pair :wat::kernel::QueuePair<i64>)
+          (:wat::kernel::make-bounded-queue :i64 1))
+         ((id-tx :wat::kernel::QueueSender<i64>) (:wat::core::first id-pair))
+         ((id-rx :wat::kernel::QueueReceiver<i64>) (:wat::core::second id-pair))
+
+         ;; Snapshot channel — to verify final state shape.
+         ((snap-pair :wat::kernel::QueuePair<exp::State>)
+          (:wat::kernel::make-bounded-queue :exp::State 1))
+         ((snap-tx :wat::kernel::QueueSender<exp::State>)
+          (:wat::core::first snap-pair))
+         ((snap-rx :wat::kernel::QueueReceiver<exp::State>)
+          (:wat::core::second snap-pair))
+
+         ;; Three OpenPaper calls — expect IDs 0, 1, 2 in order.
+         ((_o1 :wat::kernel::Sent)
+          (:wat::kernel::send req-tx (:exp::Request::OpenPaper 100 id-tx)))
+         ((id1 :Option<i64>) (:wat::kernel::recv id-rx))
+         ((_check1 :())
+          (:wat::core::match id1 -> :()
+            ((Some 0) ())
+            ((Some n)
+              (:wat::test::assert-eq
+                (:wat::core::string::concat
+                  "expected first id 0, got "
+                  (:wat::core::i64::to-string n))
+                ""))
+            (:None (:wat::test::assert-eq "no id1" ""))))
+
+         ((_o2 :wat::kernel::Sent)
+          (:wat::kernel::send req-tx (:exp::Request::OpenPaper 200 id-tx)))
+         ((id2 :Option<i64>) (:wat::kernel::recv id-rx))
+         ((_check2 :())
+          (:wat::core::match id2 -> :()
+            ((Some 1) ())
+            ((Some n)
+              (:wat::test::assert-eq
+                (:wat::core::string::concat
+                  "expected second id 1, got "
+                  (:wat::core::i64::to-string n))
+                ""))
+            (:None (:wat::test::assert-eq "no id2" ""))))
+
+         ((_o3 :wat::kernel::Sent)
+          (:wat::kernel::send req-tx (:exp::Request::OpenPaper 300 id-tx)))
+         ((id3 :Option<i64>) (:wat::kernel::recv id-rx))
+         ((_check3 :())
+          (:wat::core::match id3 -> :()
+            ((Some 2) ())
+            ((Some n)
+              (:wat::test::assert-eq
+                (:wat::core::string::concat
+                  "expected third id 2, got "
+                  (:wat::core::i64::to-string n))
+                ""))
+            (:None (:wat::test::assert-eq "no id3" ""))))
+
+         ;; Snapshot — verify open-papers length = 3 and next-paper-id = 3.
+         ((_g :wat::kernel::Sent)
+          (:wat::kernel::send req-tx (:exp::Request::Snapshot snap-tx)))
+         ((snap :Option<exp::State>) (:wat::kernel::recv snap-rx))
+         ((_check-snap :())
+          (:wat::core::match snap -> :()
+            ((Some s)
+              (:wat::core::let*
+                (((papers :Vec<exp::Paper>) (:exp::State/open-papers s))
+                 ((len :i64) (:wat::core::length papers))
+                 ((next-id :i64) (:exp::State/next-paper-id s))
+                 ((_ :())
+                  (:wat::core::if (:wat::core::= len 3) -> :()
+                    ()
+                    (:wat::test::assert-eq
+                      (:wat::core::string::concat
+                        "expected 3 papers, got "
+                        (:wat::core::i64::to-string len))
+                      ""))))
+                (:wat::core::if (:wat::core::= next-id 3) -> :()
+                  ()
+                  (:wat::test::assert-eq
+                    (:wat::core::string::concat
+                      "expected next-paper-id 3, got "
+                      (:wat::core::i64::to-string next-id))
+                    ""))))
+            (:None (:wat::test::assert-eq "no snap" "")))))
         ()))
 
      ((_join :exp::State) (:wat::kernel::join driver)))
