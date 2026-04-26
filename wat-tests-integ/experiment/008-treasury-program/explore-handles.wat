@@ -68,7 +68,7 @@
    ;;
    ;; Recv-loop on req-rx; for each Some(n), send (n*2) on resp-tx;
    ;; on :None (req-tx dropped by client) return (). The send returns
-   ;; :Option<()>; we ignore the variant — if the client dropped resp-rx
+   ;; :wat::kernel::Sent; we ignore the variant — if the client dropped resp-rx
    ;; before we could ack, that's its problem (fire-and-forget arm).
    (:wat::core::define
      (:trading::test::experiment::008::handles::doubler-loop
@@ -78,7 +78,7 @@
      (:wat::core::match (:wat::kernel::recv req-rx) -> :()
        ((Some n)
          (:wat::core::let*
-           (((_ack :Option<()>) (:wat::kernel::send resp-tx (:wat::core::* n 2))))
+           (((_ack :wat::kernel::Sent) (:wat::kernel::send resp-tx (:wat::core::* n 2))))
            (:trading::test::experiment::008::handles::doubler-loop req-rx resp-tx)))
        (:None ())))
 
@@ -131,8 +131,8 @@
      (:wat::core::match (:wat::kernel::recv req-rx) -> :()
        ((Some n)
          (:wat::core::let*
-           (((_r :Option<()>) (:wat::kernel::send resp-tx (:wat::core::* n 2)))
-            ((_t :Option<()>) (:wat::kernel::send telem-tx n)))
+           (((_r :wat::kernel::Sent) (:wat::kernel::send resp-tx (:wat::core::* n 2)))
+            ((_t :wat::kernel::Sent) (:wat::kernel::send telem-tx n)))
            (:trading::test::experiment::008::handles::telemetry-loop
              req-rx resp-tx telem-tx)))
        (:None ())))
@@ -274,9 +274,9 @@
             :trading::test::experiment::008::handles::run-counter rx))
 
          ;; bounded(1) backpressures — each send blocks until worker recv.
-         ((_s1 :Option<()>) (:wat::kernel::send tx 10))
-         ((_s2 :Option<()>) (:wat::kernel::send tx 20))
-         ((_s3 :Option<()>) (:wat::kernel::send tx 30)))
+         ((_s1 :wat::kernel::Sent) (:wat::kernel::send tx 10))
+         ((_s2 :wat::kernel::Sent) (:wat::kernel::send tx 20))
+         ((_s3 :wat::kernel::Sent) (:wat::kernel::send tx 30)))
         ;; let* body: yield the ProgramHandle. pair/tx/rx drop right here.
         h)))
     ;; By this point: zero local Senders. Worker's next recv → None.
@@ -320,7 +320,7 @@
             req-rx resp-tx))
 
          ;; Round-trip: send 21, recv 42.
-         ((_s :Option<()>) (:wat::kernel::send req-tx 21))
+         ((_s :wat::kernel::Sent) (:wat::kernel::send req-tx 21))
          ((got :Option<i64>) (:wat::kernel::recv resp-rx))
          ((_check :())
           (:wat::core::match got -> :()
@@ -376,11 +376,11 @@
 
          ;; 2 on tx1, 3 on tx2 — total 5. bounded(1) keeps backpressure
          ;; honest; worker must keep up.
-         ((_a1 :Option<()>) (:wat::kernel::send tx1 1))
-         ((_a2 :Option<()>) (:wat::kernel::send tx1 2))
-         ((_b1 :Option<()>) (:wat::kernel::send tx2 10))
-         ((_b2 :Option<()>) (:wat::kernel::send tx2 20))
-         ((_b3 :Option<()>) (:wat::kernel::send tx2 30)))
+         ((_a1 :wat::kernel::Sent) (:wat::kernel::send tx1 1))
+         ((_a2 :wat::kernel::Sent) (:wat::kernel::send tx1 2))
+         ((_b1 :wat::kernel::Sent) (:wat::kernel::send tx2 10))
+         ((_b2 :wat::kernel::Sent) (:wat::kernel::send tx2 20))
+         ((_b3 :wat::kernel::Sent) (:wat::kernel::send tx2 30)))
         h)))
     (:wat::core::match (:wat::kernel::join-result handle) -> :()
       ((Ok 5) ())
@@ -428,7 +428,7 @@
             :trading::test::experiment::008::handles::telemetry-loop
             req-rx resp-tx telem-tx))
 
-         ((_s :Option<()>) (:wat::kernel::send req-tx 21))
+         ((_s :wat::kernel::Sent) (:wat::kernel::send req-tx 21))
          ((got-resp :Option<i64>) (:wat::kernel::recv resp-rx))
          ((got-telem :Option<i64>) (:wat::kernel::recv telem-rx))
          ((_check-resp :())
@@ -512,9 +512,9 @@
          ((_finish :()) (:wat::kernel::HandlePool::finish pool))
 
          ;; Each "client" sends one value. Sum should be 100+200+300 = 600.
-         ((_a :Option<()>) (:wat::kernel::send tx-a 100))
-         ((_b :Option<()>) (:wat::kernel::send tx-b 200))
-         ((_c :Option<()>) (:wat::kernel::send tx-c 300)))
+         ((_a :wat::kernel::Sent) (:wat::kernel::send tx-a 100))
+         ((_b :wat::kernel::Sent) (:wat::kernel::send tx-b 200))
+         ((_c :wat::kernel::Sent) (:wat::kernel::send tx-c 300)))
         h)))
     ;; Inner scope exit: pairs, txs, rxs (local clones), pool, tx-a/b/c
     ;; all drop. Worker's three rxs all see disconnect → prune all →
@@ -555,10 +555,10 @@
           (:wat::kernel::spawn
             :trading::test::experiment::008::handles::run-tally rx))
 
-         ((_s1 :Option<()>) (:wat::kernel::send tx 5))
-         ((_s2 :Option<()>) (:wat::kernel::send tx 10))
-         ((_s3 :Option<()>) (:wat::kernel::send tx 15))
-         ((_s4 :Option<()>) (:wat::kernel::send tx 20)))
+         ((_s1 :wat::kernel::Sent) (:wat::kernel::send tx 5))
+         ((_s2 :wat::kernel::Sent) (:wat::kernel::send tx 10))
+         ((_s3 :wat::kernel::Sent) (:wat::kernel::send tx 15))
+         ((_s4 :wat::kernel::Sent) (:wat::kernel::send tx 20)))
         h)))
     (:wat::core::match (:wat::kernel::join-result handle) -> :()
       ((Ok tally)

@@ -116,7 +116,7 @@
      (:wat::core::match req -> :exp::State
        ((:exp::Request::Ping reply-tx)
          (:wat::core::let*
-           (((_ack :Option<()>) (:wat::kernel::send reply-tx ())))
+           (((_ack :wat::kernel::Sent) (:wat::kernel::send reply-tx ())))
            (:exp::State/new
              (:exp::State/tick-count state)
              (:wat::core::+ (:exp::State/ping-count state) 1))))
@@ -126,7 +126,7 @@
            (:exp::State/ping-count state)))
        ((:exp::Request::Snapshot reply-tx)
          (:wat::core::let*
-           (((_send :Option<()>) (:wat::kernel::send reply-tx state)))
+           (((_send :wat::kernel::Sent) (:wat::kernel::send reply-tx state)))
            state))))
 
    ;; ─── Service constructor ─────────────────────────────────────
@@ -190,9 +190,9 @@
          ((reply-rx :exp::ReplyRx) (:wat::core::second reply-pair))
 
          ;; Send Ping carrying our reply-tx; driver acks; we recv.
-         ((_send :Option<()>)
+         ((_send :wat::kernel::Sent)
           (:wat::kernel::send req-tx (:exp::Request::Ping reply-tx)))
-         ((got :Option<()>) (:wat::kernel::recv reply-rx))
+         ((got :wat::kernel::Sent) (:wat::kernel::recv reply-rx))
          ((_check :())
           (:wat::core::match got -> :()
             ((Some _) ())
@@ -233,13 +233,13 @@
          ;; Tick first — no reply channel, no recv. Worker silently
          ;; consumes. bounded(1) means this send returns once the
          ;; worker has dequeued.
-         ((_t1 :Option<()>)
+         ((_t1 :wat::kernel::Sent)
           (:wat::kernel::send req-tx (:exp::Request::Tick 100.0)))
 
          ;; Ping — reply round-trip.
-         ((_p :Option<()>)
+         ((_p :wat::kernel::Sent)
           (:wat::kernel::send req-tx (:exp::Request::Ping reply-tx)))
-         ((got :Option<()>) (:wat::kernel::recv reply-rx))
+         ((got :wat::kernel::Sent) (:wat::kernel::recv reply-rx))
          ((_check :())
           (:wat::core::match got -> :()
             ((Some _) ())
@@ -247,7 +247,7 @@
 
          ;; Tick again — proves the dispatch returns to a clean state
          ;; after a reply-bearing variant.
-         ((_t2 :Option<()>)
+         ((_t2 :wat::kernel::Sent)
           (:wat::kernel::send req-tx (:exp::Request::Tick 101.0))))
         ()))
 
@@ -283,16 +283,16 @@
          ((reply-rx :exp::ReplyRx) (:wat::core::second reply-pair))
 
          ;; 3 Ticks (fire-and-forget — bumps tick-count each time).
-         ((_t1 :Option<()>) (:wat::kernel::send req-tx (:exp::Request::Tick 100.0)))
-         ((_t2 :Option<()>) (:wat::kernel::send req-tx (:exp::Request::Tick 101.0)))
-         ((_t3 :Option<()>) (:wat::kernel::send req-tx (:exp::Request::Tick 102.0)))
+         ((_t1 :wat::kernel::Sent) (:wat::kernel::send req-tx (:exp::Request::Tick 100.0)))
+         ((_t2 :wat::kernel::Sent) (:wat::kernel::send req-tx (:exp::Request::Tick 101.0)))
+         ((_t3 :wat::kernel::Sent) (:wat::kernel::send req-tx (:exp::Request::Tick 102.0)))
 
          ;; 2 Pings — each acks AND bumps ping-count. Recv ack between
          ;; sends so reply-tx isn't backpressuring.
-         ((_p1 :Option<()>) (:wat::kernel::send req-tx (:exp::Request::Ping reply-tx)))
-         ((_a1 :Option<()>) (:wat::kernel::recv reply-rx))
-         ((_p2 :Option<()>) (:wat::kernel::send req-tx (:exp::Request::Ping reply-tx)))
-         ((_a2 :Option<()>) (:wat::kernel::recv reply-rx)))
+         ((_p1 :wat::kernel::Sent) (:wat::kernel::send req-tx (:exp::Request::Ping reply-tx)))
+         ((_a1 :wat::kernel::Sent) (:wat::kernel::recv reply-rx))
+         ((_p2 :wat::kernel::Sent) (:wat::kernel::send req-tx (:exp::Request::Ping reply-tx)))
+         ((_a2 :wat::kernel::Sent) (:wat::kernel::recv reply-rx)))
         ()))
 
      ;; Inner exited; client Senders dropped; loop returned final State.
@@ -360,12 +360,12 @@
           (:wat::core::second snap-pair))
 
          ;; Drive state: 1 Tick + 1 Ping.
-         ((_t1 :Option<()>) (:wat::kernel::send req-tx (:exp::Request::Tick 100.0)))
-         ((_p1 :Option<()>) (:wat::kernel::send req-tx (:exp::Request::Ping ack-tx)))
-         ((_a1 :Option<()>) (:wat::kernel::recv ack-rx))
+         ((_t1 :wat::kernel::Sent) (:wat::kernel::send req-tx (:exp::Request::Tick 100.0)))
+         ((_p1 :wat::kernel::Sent) (:wat::kernel::send req-tx (:exp::Request::Ping ack-tx)))
+         ((_a1 :wat::kernel::Sent) (:wat::kernel::recv ack-rx))
 
          ;; First Snapshot — expect (tick=1, ping=1).
-         ((_s1 :Option<()>) (:wat::kernel::send req-tx (:exp::Request::Snapshot snap-tx)))
+         ((_s1 :wat::kernel::Sent) (:wat::kernel::send req-tx (:exp::Request::Snapshot snap-tx)))
          ((snap1 :Option<exp::State>) (:wat::kernel::recv snap-rx))
          ((_check1 :())
           (:wat::core::match snap1 -> :()
@@ -384,8 +384,8 @@
 
          ;; One more Tick, then Snapshot again — expect (tick=2, ping=1).
          ;; Confirms Snapshot reads LIVE state, not a frozen value.
-         ((_t2 :Option<()>) (:wat::kernel::send req-tx (:exp::Request::Tick 101.0)))
-         ((_s2 :Option<()>) (:wat::kernel::send req-tx (:exp::Request::Snapshot snap-tx)))
+         ((_t2 :wat::kernel::Sent) (:wat::kernel::send req-tx (:exp::Request::Tick 101.0)))
+         ((_s2 :wat::kernel::Sent) (:wat::kernel::send req-tx (:exp::Request::Snapshot snap-tx)))
          ((snap2 :Option<exp::State>) (:wat::kernel::recv snap-rx))
          ((_check2 :())
           (:wat::core::match snap2 -> :()
