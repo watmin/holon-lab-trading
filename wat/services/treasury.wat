@@ -102,8 +102,7 @@
 ;; recvs responses on resp-rx. The corresponding (resp-tx, req-rx)
 ;; live with the driver — driver routes responses by select-idx.
 (:wat::core::typealias :trading::treasury::Service::BrokerHandle
-  :(trading::treasury::Service::EventTx,
-    trading::treasury::Service::RespRx))
+  :(trading::treasury::Service::EventTx,trading::treasury::Service::RespRx))
 
 
 ;; ─── Slot — per-receiver routing identity ───────────────────────
@@ -130,9 +129,7 @@
   :wat::kernel::HandlePool<trading::treasury::Service::BrokerHandle>)
 
 (:wat::core::typealias :trading::treasury::Service::Spawn
-  :(trading::treasury::Service::BrokerHandlePool,
-    trading::treasury::Service::EventTx,
-    wat::kernel::ProgramHandle<()>))
+  :(trading::treasury::Service::BrokerHandlePool,trading::treasury::Service::EventTx,wat::kernel::ProgramHandle<()>))
 
 
 ;; ─── Telemetry helpers ──────────────────────────────────────────
