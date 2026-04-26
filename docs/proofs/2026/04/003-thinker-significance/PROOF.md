@@ -1,7 +1,7 @@
 # Proof 003 — Thinker Significance
 
-**Date:** opened 2026-04-25.
-**Status:** **ready** (lab arc 029 closed 2026-04-25 — RunDb service shipped). Per-call `run_name` lives on `:lab::rundb::log-paper-resolved` (the slice-1 shim refactor); the slice-2 `:lab::rundb::Service` provides CacheService-style batched send+ack so multiple window-runners can fan in to one connection under distinct run_names. Pair file forthcoming.
+**Date:** opened 2026-04-25, shipped 2026-04-25.
+**Status:** **SHIPPED.** Pair file at `wat-tests-integ/proof/003-thinker-significance/`. Test passes in 586s (~9.8 min) on 200k candles via `:lab::rundb::Service` (single client, batch+ack, one entry per window — ~30-40 entries per batch). Numbers below.
 **Pair file (planned):** [`wat-tests-integ/proof/003-thinker-significance/003-thinker-significance.wat`](../../../../wat-tests-integ/proof/003-thinker-significance/003-thinker-significance.wat).
 **Predecessor:** [Proof 002 — Thinker Baseline](../002-thinker-baseline/PROOF.md).
 **Unblocking arc:** [`docs/arc/2026/04/029-rundb-service/`](../../../arc/2026/04/029-rundb-service/DESIGN.md).
@@ -177,20 +177,82 @@ hand-waving; the SQL is in the doc.
 
 ---
 
-## E — What this proof will establish
+## E — What this proof established
 
-1. **Whether sma-cross's edge over always-up generalizes.** If
-   sma-cross's net_pnl beats always-up's in ≥ 7 of 10 windows
-   AND the aggregate z > 2, the edge is regime-robust.
-2. **Variance of the lifecycle response.** If grace_rate ranges
-   from 0.05 to 0.30 across windows for sma-cross, the
-   simulator is regime-sensitive — we'll need regime-aware
-   thinkers eventually.
-3. **The base rate of always-up under different regimes.** Does
-   always-up grace-rate stay at 0.0 across all 10 windows
-   (deadlines always hit)? Or does it occasionally produce
-   Grace in strong-uptrend windows? This bounds what "Up
-   conviction always" actually buys you.
+### Aggregate (per thinker, across all 10 windows)
+
+| thinker   | papers | grace | violence | grace_rate | total_residue | total_loss | net_pnl  |
+|-----------|-------:|------:|---------:|-----------:|--------------:|-----------:|---------:|
+| always-up | 340    | 0     | 340      | 0.0000     | 0.0000        | 7.7555     | **−7.7555** |
+| sma-cross | 354    | 69    | 285      | 0.1949     | 2.1557        | 6.0199     | **−3.8641** |
+
+Note: always-up always opens 34 papers per window (every
+paper deadlines at 288 candles → no early exits → no slot
+turnover). SMA-cross opens 33-38 per window because Grace
+exits free up slots for new entries within the same window —
+the variation is mechanism, not noise.
+
+### Per-window head-to-head: sma-cross net_pnl − always-up net_pnl
+
+| window | calendar | au_pnl | sx_pnl | gap | winner |
+|-------:|---------|-------:|-------:|----:|--------|
+| w0 | Jan-Feb 2019 | −0.6498 | −0.2792 | +0.371 | sma-cross |
+| w1 | Aug-Sep 2019 | −0.6620 | −0.3921 | +0.270 | sma-cross |
+| w2 | Apr-May 2020 | −0.8588 | −0.2229 | +0.636 | sma-cross |
+| w3 | Nov-Dec 2020 | −0.7660 | −0.5002 | +0.266 | sma-cross |
+| w4 | Jul-Aug 2021 | −1.0506 | −0.6248 | +0.426 | sma-cross |
+| w5 | Mar-Apr 2022 | −1.0135 | **+0.0410** | **+1.054** | sma-cross |
+| w6 | Oct-Nov 2022 | −0.6046 | −0.3854 | +0.219 | sma-cross |
+| w7 | Jun-Jul 2023 | −0.5487 | −0.3455 | +0.203 | sma-cross |
+| w8 | Feb-Mar 2024 | −0.6664 | −0.3660 | +0.300 | sma-cross |
+| w9 | Sep-Oct 2024 | −0.9349 | −0.7889 | +0.146 | sma-cross |
+
+**SMA-cross wins all 10 of 10 windows.** Mean per-window gap:
++0.39. Range: +0.146 (w9, late-2024 chop) to +1.054 (w5,
+Mar-Apr 2022 — the only window where sma-cross posts positive
+absolute net_pnl, +0.041).
+
+### Significance — two-proportion z-test on aggregate grace_rate
+
+```
+p_sx = 69/354 = 0.1949
+p_au = 0/340  = 0.0000
+p_pool = (69 + 0) / (354 + 340) = 0.0994
+
+z = (0.1949 − 0.0000) / sqrt(0.0994 × 0.9006 × (1/354 + 1/340))
+  = 0.1949 / sqrt(0.0895 × 0.005769)
+  = 0.1949 / 0.02272
+  ≈ 8.58
+```
+
+|z| ≈ 8.58 → **p < 10⁻¹⁶**. The grace_rate gap is not noise;
+it is regime-robust at any reasonable threshold.
+
+### What this proves
+
+1. **SMA-cross's edge over always-up generalizes.** Per-window
+   wins: 10/10. Aggregate z-score: 8.58. Six years of BTC
+   regimes (bull 2019, COVID crash + recovery 2020, peak
+   2021, crypto winter 2022, recovery 2023-24) — sma-cross
+   wins every one. The directional vocabulary matters.
+2. **Always-up's grace_rate is exactly 0.0 across all 10
+   windows.** Regime-invariant. When you only buy and never
+   time exits, you NEVER catch a peak — the simulator's Grace
+   gate (peak-or-valley exit) is unreachable for a thinker
+   that doesn't model direction. Bound established.
+3. **SMA-cross's grace_rate is regime-sensitive but always
+   positive.** Range across windows: 11.8% (w7, 4/33) to
+   27.8% (w2, 10/36). The simulator's lifecycle responds to
+   thinker behavior; the response varies with regime.
+4. **Direction symmetry holds.** SMA-cross opens both Up (177)
+   and Down (177) trades. Up grace_rate: 39/177 = 22.0%.
+   Down grace_rate: 30/177 = 16.9%. Up's slight edge over
+   Down may reflect 2019-2024 BTC's overall up-trend, but
+   both directions produce real Grace — the lifecycle is
+   symmetric.
+5. **The simulator works at scale.** 200k candles, 694 papers,
+   ~10 min wall-clock, single-thread, conservation holds
+   across all 20 sub-runs. No "Active" leaks at outcome time.
 
 ---
 
@@ -273,10 +335,24 @@ The proof doc post-execution embeds these tables.
 ## H — Closing
 
 Proof 002 said "the lifecycle responds to vocabulary." Proof 003
-asks "does it respond *consistently* across regimes?" The answer
-either justifies the always-up vs sma-cross hierarchy or
-collapses it into noise.
+says **the response is regime-robust**: across six years of
+real BTC, across bull and bear and crypto-winter, sma-cross
+beats always-up in every window measured. Not by a lot —
+mean per-window gap is +0.39 raw cosine residue — but
+consistently. And in one window (Mar-Apr 2022) it actually
+crosses into positive absolute P&L, suggesting some regimes
+favor the directional model meaningfully more than others.
 
-Either answer is a foothold for proof 005.
+Statistical floor: z ≈ 8.6 on aggregate grace_rate. p < 10⁻¹⁶.
+This isn't an edge that disappears under scrutiny.
+
+The next step queued: **proof 004** takes the full 6-year
+contiguous stream (652k candles) — same shape, no windowing.
+And **arc 030** (encoding cache + LogEntry::Telemetry) is
+in design now, opened during proof 003's run when the
+~10-minute wall-clock surfaced "vector ops are the cost."
+Once cache lands, a re-run of proof 003 quantifies the
+speedup; a re-run of proof 004 makes the 6-year case feasible
+inside a single test session.
 
 PERSEVERARE.
