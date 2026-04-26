@@ -1,7 +1,7 @@
 # Proof 003 — Thinker Significance
 
 **Date:** opened 2026-04-25.
-**Status:** **BLOCKED on lab arc 029** (RunDb service). Initial supporting program drafted but discarded — the arc 027 shim binds `run_name` at open, and proof 003 needs N run_names per database. Builder direction 2026-04-25: "we need a db service for this." Arc 029 refactors the shim to take `run_name` per-message and adds `:lab::rundb::Service` (Console-style fire-and-forget driver). Once arc 029 ships, proof 003 builds on top.
+**Status:** **ready** (lab arc 029 closed 2026-04-25 — RunDb service shipped). Per-call `run_name` lives on `:lab::rundb::log-paper-resolved` (the slice-1 shim refactor); the slice-2 `:lab::rundb::Service` provides CacheService-style batched send+ack so multiple window-runners can fan in to one connection under distinct run_names. Pair file forthcoming.
 **Pair file (planned):** [`wat-tests-integ/proof/003-thinker-significance/003-thinker-significance.wat`](../../../../wat-tests-integ/proof/003-thinker-significance/003-thinker-significance.wat).
 **Predecessor:** [Proof 002 — Thinker Baseline](../002-thinker-baseline/PROOF.md).
 **Unblocking arc:** [`docs/arc/2026/04/029-rundb-service/`](../../../arc/2026/04/029-rundb-service/DESIGN.md).

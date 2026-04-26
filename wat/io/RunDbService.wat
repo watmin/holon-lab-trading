@@ -67,6 +67,14 @@
 (:wat::core::typealias :lab::rundb::Service::ReqRx
   :rust::crossbeam_channel::Receiver<lab::rundb::Service::Request>)
 
+;; The setup-side request channel — what
+;; `(:wat::kernel::make-bounded-queue :Service::Request 1)`
+;; returns. The `Service` setup function builds N of these,
+;; splits txs into the HandlePool and rxs into the driver's
+;; select vec.
+(:wat::core::typealias :lab::rundb::Service::ReqChannel
+  :(lab::rundb::Service::ReqTx,lab::rundb::Service::ReqRx))
+
 ;; The pool variant returned alongside the driver-handle. Wraps
 ;; the N pre-built request senders so callers `pop`/`finish` the
 ;; standard HandlePool surface.
@@ -217,22 +225,22 @@
     (count :i64)
     -> :lab::rundb::Service::Spawn)
   (:wat::core::let*
-    (((pairs :Vec<(lab::rundb::Service::ReqTx,lab::rundb::Service::ReqRx)>)
+    (((pairs :Vec<lab::rundb::Service::ReqChannel>)
       (:wat::core::map
         (:wat::core::range 0 count)
         (:wat::core::lambda
-          ((_i :i64) -> :(lab::rundb::Service::ReqTx,lab::rundb::Service::ReqRx))
+          ((_i :i64) -> :lab::rundb::Service::ReqChannel)
           (:wat::kernel::make-bounded-queue
             :lab::rundb::Service::Request 1))))
      ((req-txs :Vec<lab::rundb::Service::ReqTx>)
       (:wat::core::map pairs
         (:wat::core::lambda
-          ((p :(lab::rundb::Service::ReqTx,lab::rundb::Service::ReqRx)) -> :lab::rundb::Service::ReqTx)
+          ((p :lab::rundb::Service::ReqChannel) -> :lab::rundb::Service::ReqTx)
           (:wat::core::first p))))
      ((req-rxs :Vec<lab::rundb::Service::ReqRx>)
       (:wat::core::map pairs
         (:wat::core::lambda
-          ((p :(lab::rundb::Service::ReqTx,lab::rundb::Service::ReqRx)) -> :lab::rundb::Service::ReqRx)
+          ((p :lab::rundb::Service::ReqChannel) -> :lab::rundb::Service::ReqRx)
           (:wat::core::second p))))
      ((pool :lab::rundb::Service::ReqTxPool)
       (:wat::kernel::HandlePool::new "RunDbService" req-txs))

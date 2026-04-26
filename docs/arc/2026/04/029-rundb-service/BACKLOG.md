@@ -582,7 +582,7 @@ cargo test --release --test test 2>&1 | grep -E "rundb|RunDb|FAILED"
 
 ## Slice 3 — INSCRIPTION + downstream status flip
 
-**Status: not started.** Depends on slices 1 and 2.
+**Status: shipped 2026-04-25.**
 
 `docs/arc/2026/04/029-rundb-service/INSCRIPTION.md` — same shape
 as arc 027's INSCRIPTION:
