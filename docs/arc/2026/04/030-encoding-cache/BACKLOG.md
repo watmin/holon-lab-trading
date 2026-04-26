@@ -1,12 +1,21 @@
 # lab arc 030 — Encoding cache + LogEntry::Telemetry — BACKLOG
 
 **Shape:** three slices. Slice 1 lands the `LogEntry::Telemetry`
-variant + emit helpers + rate gate (independent value; future
-emitters reuse it). Slice 2 builds the encoding cache (LRU on
+variant + `emit-metric` constructor (NO rate gate per DESIGN
+Q7; the program rhythm IS the rate gate for event-driven
+callers). Slice 2 builds the encoding cache (LRU on
 `HolonAST → Vector`, plus pre-encoded corners) and wires cache
-stats through Telemetry. Slice 3 ships INSCRIPTION + flips a
-follow-up "perf" proof from BLOCKED to ready. Total estimate:
-~6 hours.
+stats through Telemetry — and is where the rate gate question
+gets answered (cache has no natural rhythm). Slice 3 ships
+INSCRIPTION + flips a follow-up "perf" proof from BLOCKED to
+ready. Total estimate: ~5 hours.
+
+**Slice 1 priority bump (2026-04-26):** the proofs lane is
+opening `docs/experiments/2026/04/008-treasury-program/` next,
+and Treasury must emit telemetry from day 1 ("the db is our
+gdb" — telemetry is critical-path observability, not optional
+polish). Slice 1 is the unblock; slice 2 + cache work follows
+once Treasury experiment closes.
 
 This is the third proofs-lane → infra-lane handoff. The proofs
 lane drafts (this doc); the infra session implements; the proofs
@@ -25,16 +34,27 @@ Builder direction (2026-04-25, after proof 003 baseline showed
 
 > "i've we can toss like 30G at this"
 
+> "telemetry — i say this is priority - we know we don't know -
+> the metrics were massively helpful - the db is our gdb.. our
+> pry... into the system..."
+
 ---
 
-## Slice 1 — `LogEntry::Telemetry` variant + emit helpers
+## Slice 1 — `LogEntry::Telemetry` variant + `emit-metric`
 
-**Status: not started.**
+**Status: not started.** Priority — Treasury (experiment 008)
+needs this before it can ship.
 
 Adds the second variant on the arc 029 sum. The LogEntry,
 schema, dispatcher, shim wrapper, and a `wat/io/log/telemetry.wat`
-file with `emit-metric` + `make-rate-gate` helpers. Three smoke
-tests for the variant + roundtrip + rate gate.
+file with `emit-metric` (the constructor — pure function from
+fields to a `LogEntry::Telemetry` value). **No `make-rate-gate`
+in this slice** — descoped per DESIGN Q7 because event-driven
+callers (Treasury per Tick, future broker per candle) batch
+their own metrics and flush per event. The cache (slice 2) is
+the only consumer without a natural rhythm; the rate-gate
+question lives there. Two smoke tests for the variant + the
+emit-metric helper.
 
 ### Step 1a — extend the LogEntry sum
 
@@ -161,16 +181,21 @@ pub fn log_telemetry(
         metric-name metric-value metric-unit))))
 ```
 
-### Step 1e — `wat/io/log/telemetry.wat` — emit helpers + rate gate
+### Step 1e — `wat/io/log/telemetry.wat` — `emit-metric` constructor
 
 ```scheme
-;; wat/io/log/telemetry.wat — convenience for emitting Telemetry
-;; LogEntries. Mirrors archived/pre-wat-native/src/programs/telemetry.rs.
+;; wat/io/log/telemetry.wat — convenience constructor for
+;; Telemetry LogEntries. Mirrors archived/pre-wat-native/src/
+;; programs/telemetry.rs::emit_metric.
 
 (:wat::load-file! "LogEntry.wat")
 
-;; Build a Telemetry LogEntry from its fields. Pure constructor;
-;; doesn't send. Caller batches + sends via Service/batch-log.
+;; Pure constructor: build a Telemetry LogEntry from its fields.
+;; Caller accumulates a Vec<LogEntry> per event (per-Tick for
+;; Treasury, per-candle for future broker/observer programs)
+;; and flushes via Service/batch-log per event. The "rate" is
+;; implicit in the event cadence — no separate gate primitive
+;; needed in this slice (see DESIGN Q7).
 (:wat::core::define
   (:trading::log::emit-metric
     (namespace :String) (id :String) (dimensions :String)
@@ -180,19 +205,11 @@ pub fn log_telemetry(
   (:trading::log::LogEntry::Telemetry
     namespace id dimensions timestamp-ns
     metric-name metric-value metric-unit))
-
-;; A rate gate: returns a closure that opens true every
-;; `interval-ms`. Mirrors archive's make_rate_gate(Duration).
-;; Uses :wat::time::Instant + a thread-owned mutable cell to
-;; track last-emit time. Implementation TBD by infra (the
-;; substrate's mutable-cell shape; if no cell, may need a
-;; substrate carry-along OR fall back to a counter-based gate).
-(:wat::core::define
-  (:trading::log::make-rate-gate
-    (interval-ms :i64)
-    -> :wat::core::lambda<() -> bool>)
-  ...)
 ```
+
+(`make-rate-gate` is NOT in this slice. It comes back when
+slice 2's encoding cache needs throttled emission — that's
+where the substrate-mutable-cell question gets answered.)
 
 ### Step 1f — Wire new wat file into `src/shims.rs::wat_sources()`
 
@@ -210,36 +227,33 @@ pub fn wat_sources() -> &'static [WatSource] {
 
 ### Step 1g — Smoke tests
 
-`wat-tests/io/log/telemetry.wat` — three deftests:
+`wat-tests/io/log/telemetry.wat` — two deftests:
 
 1. **Variant constructor + dispatch round-trip.** Build one
    `LogEntry::Telemetry`, batch-log via Service to a temp DB,
    query back via sqlite3 CLI. Verify namespace / metric_name
    / metric_value match.
 2. **emit-metric helper.** Construct via `:trading::log::emit-metric`,
-   compare to direct constructor — must produce equal entries.
-3. **Rate gate behavior.** Create gate with 100ms interval;
-   immediate call returns true, second-immediate returns false,
-   wait 150ms (`:wat::time::*`-based sleep or busy-poll if
-   sleep isn't available), third call returns true again.
+   compare to direct `:trading::log::LogEntry::Telemetry`
+   constructor with same fields — must produce equal entries.
 
 ### Verification
 
 ```bash
 cargo test --release --test test 2>&1 | grep -E "telemetry|FAILED"
-# Lab wat tests count climbs by 3 (new telemetry smoke tests).
+# Lab wat tests count climbs by 2 (new telemetry smoke tests).
 ```
 
 **LOC budget:**
 - `wat/io/log/LogEntry.wat`: +1 variant arm. ~15 LOC delta.
 - `wat/io/log/schema.wat`: +1 schema constant + registry update. ~20 LOC delta.
-- `wat/io/log/telemetry.wat`: new file (helpers + rate gate). ~80 LOC.
+- `wat/io/log/telemetry.wat`: new file (constructor only — no rate gate). ~30 LOC.
 - `src/shims.rs`: +1 method (~15 LOC) + 1 line in `wat_sources()`.
 - `wat/io/RunDb.wat`: +1 wrapper. ~15 LOC.
 - `wat/io/RunDbService.wat`: +1 dispatcher arm. ~10 LOC delta.
-- `wat-tests/io/log/telemetry.wat`: ~120 LOC for 3 deftests.
+- `wat-tests/io/log/telemetry.wat`: ~80 LOC for 2 deftests.
 
-**Estimated cost:** ~275 LOC + 3 tests. **~2 hours.**
+**Estimated cost:** ~185 LOC + 2 tests. **~1.5 hours.**
 
 ---
 
@@ -461,13 +475,13 @@ cargo test --release --features proof-003 --test proof_003
 
 ## Total estimate
 
-- Slice 1: 2 hours (LogEntry::Telemetry + smoke tests)
-- Slice 2: 3.5 hours (cache + corners pre-encode + smoke tests + possible substrate carry-along)
+- Slice 1: 1.5 hours (LogEntry::Telemetry variant + emit-metric + 2 smoke tests; rate gate descoped per Q7)
+- Slice 2: 3.5 hours (cache + corners pre-encode + smoke tests + possible substrate carry-along; rate-gate question lands here when cache emits)
 - Slice 3: 30 minutes (INSCRIPTION + status flips)
 
-**~6 hours** = a day of focused work. Substantially heavier
-than arc 027 (~half a day); slightly heavier than arc 029
-(~5 hours). Carries the substrate-uplift risk (Q8/cosine-vec).
+**~5.5 hours** total. Slice 1 is the priority — proofs lane
+is opening experiment 008 (Treasury) next and needs Telemetry
+emission from day 1.
 
 ---
 

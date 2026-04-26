@@ -145,12 +145,12 @@ pub fn log_telemetry(
 `Service/dispatch` gains the Telemetry arm. Standard four-step
 add-a-variant work per arc 029 Q9.
 
-### Slice 1 surface — emit helper + rate gate
+### Slice 1 surface — emit helper (constructor only)
 
-Mirrors `archived/.../programs/telemetry.rs`:
+Mirrors `archived/.../programs/telemetry.rs::emit_metric`:
 
 ```scheme
-;; wat/io/log/telemetry.wat — convenience wrappers.
+;; wat/io/log/telemetry.wat — convenience wrapper.
 
 (:wat::core::define
   (:trading::log::emit-metric
@@ -161,20 +161,21 @@ Mirrors `archived/.../programs/telemetry.rs`:
   (:trading::log::LogEntry::Telemetry
     namespace id dimensions timestamp-ns
     metric-name metric-value metric-unit))
-
-;; A rate gate: returns a closure that opens true every `interval-ms`.
-;; Used by the cache (and other emitters) to throttle metric emission
-;; rather than firing on every operation.
-(:wat::core::define
-  (:trading::log::make-rate-gate
-    (interval-ms :i64)
-    -> :wat::core::lambda<() -> bool>)
-  ...)
 ```
 
-The rate gate uses a `:wat::time::Instant` mutable cell (or
-the simplest substrate-supported form) to track last-emit
-time.
+Pure constructor — builds a `Telemetry` LogEntry value from
+its fields. Caller accumulates these in a local `Vec<LogEntry>`
+and flushes via `Service/batch-log` per natural event cadence
+(see Q7).
+
+**No `make-rate-gate` in slice 1** — descoped per Q7 below.
+The first batch of telemetry consumers (Treasury, future
+broker/observer programs) all have natural event rhythms
+(per-Tick, per-candle); the program rhythm IS the rate gate
+when one exists. The cache (slice 2) is the only consumer
+WITHOUT a natural rhythm; that's where a rate gate becomes
+load-bearing, and it lands in slice 2 (or a follow-up arc)
+when the substrate path is clearer.
 
 ### Slice 2 surface — encoding cache
 
@@ -390,21 +391,42 @@ they don't compete with surface ASTs for LRU slots after
 construction. Win: single-pass encode at construction;
 cache stays focused on surfaces.
 
-### Q7 — Rate gate for telemetry emit
+### Q7 — Rate gate for telemetry emit (descoped from slice 1)
 
-**Time-based gate, default interval 1 second.** Without
-gating, the cache would emit hit/miss/size metrics on EVERY
-operation — quickly drowning the DB in microsecond-resolution
-telemetry that nobody can read. The archive used a
-`make_rate_gate(Duration)` closure that opens true every
-interval; the cache calls it after each batch of N ops.
+**The program rhythm IS the rate gate when one exists.**
+Looking at how the archive actually used telemetry: every
+event-driven program (treasury, broker, market_observer,
+regime_observer) accumulates a `Vec<LogEntry>` per event
+(per-Tick or per-candle), then `flush_metrics(db, &mut pending)`
+ONCE per event. The "rate" is implicit in the event cadence —
+no separate gate needed.
 
-For proof-003-cached, 1s emit interval means ~600 telemetry
-rows over the full 10-minute run. Manageable.
+The archive's `make_rate_gate(Duration)` was specifically for
+the cache (no natural event cadence — the cache is hit
+asynchronously by brokers) and the database driver (its own
+internal telemetry). Most callers never used it.
 
-A separate "shutdown emit" fires unconditionally at the end
-of the run (matches archive: `if flush_count > 0 || total_rows
-> 0 { emit(...) }`) so trailing accumulators don't get lost.
+**Slice 1 ships JUST `emit-metric` (the constructor).** Pure
+function `(namespace, id, dimensions, ts, name, value, unit)`
+→ `LogEntry::Telemetry`. Callers accumulate + flush via
+`Service/batch-log` per event.
+
+**`make-rate-gate` defers to slice 2 (or a follow-up arc).**
+The first wat-side need is the cache's hit/miss emit, which
+is slice 2's concern. Slice 2 picks the implementation:
+either (a) time-based gate via a substrate mutable-cell
+primitive (gap; needs substrate work), or (b) counter-based
+gate (open every N ops; trivial in wat with a thread-owned
+cell or Reckoner-style mutable). Implementer's call when
+slice 2 lands.
+
+**Why this matters for slice 1's scope:** dropping the rate
+gate descopes slice 1 to ~150 LOC (variant + schema +
+dispatch + emit-metric + 2 smoke tests instead of 3) and
+removes the substrate-mutable-cell risk from the critical
+path. Treasury (the first telemetry consumer in
+`docs/experiments/2026/04/008-treasury-program/`) doesn't
+need the gate — it emits per Tick.
 
 ### Q8 — `wat::holon::cosine-vec` — does it exist?
 
@@ -425,9 +447,10 @@ Implementer picks; INSCRIPTION captures.
 
 Three slices, tracked in [`BACKLOG.md`](BACKLOG.md):
 
-- **Slice 1** — `LogEntry::Telemetry` variant + emit helpers
-  + rate gate. Schema, dispatch, shim method, three smoke
-  tests for the variant + emit + rate gate. ~250 LOC.
+- **Slice 1** — `LogEntry::Telemetry` variant + `emit-metric`
+  constructor (NO rate gate per Q7). Schema, dispatch, shim
+  method, two smoke tests (variant round-trip + emit-metric
+  helper). ~150 LOC.
 - **Slice 2** — Encoding cache + corners pre-encode +
   predictor-cached + cache emits Telemetry. Possible
   substrate carry-along (`cosine-vec`). ~400 LOC depending
