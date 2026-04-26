@@ -21,24 +21,30 @@ consistently, or does the gap collapse into noise?
 
 ## A — The window scheme
 
-The stream is 652,608 candles. Ten 10k-windows, evenly strided:
+The stream is 652,608 5-min BTC candles spanning 2019-01-01 →
+2025-03-15. Ten 10k-windows, evenly strided. Each window covers
+exactly **34 days, 17 hours** (~1.15 months); the gap between
+consecutive window starts is ~7.6 months. Calendar mapping
+(verified against the parquet, not extrapolated):
 
-| window | start | end (exclusive) | approx calendar |
-|-------:|------:|----------------:|-----------------|
-| w0 | 0 | 10,000 | Jan–Feb 2019 |
-| w1 | 65,261 | 75,261 | Aug–Sep 2019 |
-| w2 | 130,522 | 140,522 | Apr–May 2020 |
-| w3 | 195,783 | 205,783 | Nov–Dec 2020 |
-| w4 | 261,044 | 271,044 | Jul–Aug 2021 |
-| w5 | 326,304 | 336,304 | Mar–Apr 2022 |
-| w6 | 391,565 | 401,565 | Oct–Nov 2022 |
-| w7 | 456,826 | 466,826 | Jun–Jul 2023 |
-| w8 | 522,087 | 532,087 | Feb–Mar 2024 |
-| w9 | 587,348 | 597,348 | Sep–Oct 2024 |
+| window | start row | start date | end date |
+|-------:|---------:|-----------|----------|
+| w0 |       0 | 2019-01-01 | 2019-02-04 |
+| w1 |  65,261 | 2019-08-15 | 2019-09-19 |
+| w2 | 130,522 | 2020-03-29 | 2020-05-02 |
+| w3 | 195,783 | 2020-11-10 | 2020-12-15 |
+| w4 | 261,044 | 2021-06-25 | 2021-07-30 |
+| w5 | 326,304 | 2022-02-07 | 2022-03-13 |
+| w6 | 391,565 | 2022-09-21 | 2022-10-26 |
+| w7 | 456,826 | 2023-05-06 | 2023-06-09 |
+| w8 | 522,087 | 2023-12-18 | 2024-01-22 |
+| w9 | 587,348 | 2024-08-01 | 2024-09-05 |
 
-Stride = ⌊652,608 / 10⌋ = 65,261. Each window covers
-~34.7 days of 5-min candles. Different regimes (the 2020 crash,
-the 2021 bull run, the 2022 collapse, the 2024 rally) all show up.
+Stride = ⌊652,608 / 10⌋ = 65,261 candles ≈ 7.6 months. Different
+regimes show up: w2 catches the COVID crash recovery, w3 the
+2020 bull run, w4 the 2021 BTC top, w5 the pre-LUNA chop, w6
+the post-FTX bottom, w8 the spot ETF approval week, w9 the
+late-2024 chop.
 
 **No infra change.** `:lab::candles::open-bounded path n` caps
 total emissions from row 0. To reach window `w_i`:
@@ -194,23 +200,23 @@ the variation is mechanism, not noise.
 
 ### Per-window head-to-head: sma-cross net_pnl − always-up net_pnl
 
-| window | calendar | au_pnl | sx_pnl | gap | winner |
-|-------:|---------|-------:|-------:|----:|--------|
-| w0 | Jan-Feb 2019 | −0.6498 | −0.2792 | +0.371 | sma-cross |
-| w1 | Aug-Sep 2019 | −0.6620 | −0.3921 | +0.270 | sma-cross |
-| w2 | Apr-May 2020 | −0.8588 | −0.2229 | +0.636 | sma-cross |
-| w3 | Nov-Dec 2020 | −0.7660 | −0.5002 | +0.266 | sma-cross |
-| w4 | Jul-Aug 2021 | −1.0506 | −0.6248 | +0.426 | sma-cross |
-| w5 | Mar-Apr 2022 | −1.0135 | **+0.0410** | **+1.054** | sma-cross |
-| w6 | Oct-Nov 2022 | −0.6046 | −0.3854 | +0.219 | sma-cross |
-| w7 | Jun-Jul 2023 | −0.5487 | −0.3455 | +0.203 | sma-cross |
-| w8 | Feb-Mar 2024 | −0.6664 | −0.3660 | +0.300 | sma-cross |
-| w9 | Sep-Oct 2024 | −0.9349 | −0.7889 | +0.146 | sma-cross |
+| window | calendar      | au_pnl | sx_pnl | gap | winner |
+|-------:|--------------|-------:|-------:|----:|--------|
+| w0 | 2019-01 → 02 | −0.6498 | −0.2792 | +0.371 | sma-cross |
+| w1 | 2019-08 → 09 | −0.6620 | −0.3921 | +0.270 | sma-cross |
+| w2 | 2020-03 → 05 | −0.8588 | −0.2229 | +0.636 | sma-cross |
+| w3 | 2020-11 → 12 | −0.7660 | −0.5002 | +0.266 | sma-cross |
+| w4 | 2021-06 → 07 | −1.0506 | −0.6248 | +0.426 | sma-cross |
+| w5 | 2022-02 → 03 | −1.0135 | **+0.0410** | **+1.054** | sma-cross |
+| w6 | 2022-09 → 10 | −0.6046 | −0.3854 | +0.219 | sma-cross |
+| w7 | 2023-05 → 06 | −0.5487 | −0.3455 | +0.203 | sma-cross |
+| w8 | 2023-12 → 24-01 | −0.6664 | −0.3660 | +0.300 | sma-cross |
+| w9 | 2024-08 → 09 | −0.9349 | −0.7889 | +0.146 | sma-cross |
 
 **SMA-cross wins all 10 of 10 windows.** Mean per-window gap:
 +0.39. Range: +0.146 (w9, late-2024 chop) to +1.054 (w5,
-Mar-Apr 2022 — the only window where sma-cross posts positive
-absolute net_pnl, +0.041).
+Feb-Mar 2022 pre-LUNA chop — the only window where sma-cross
+posts positive absolute net_pnl, +0.041).
 
 ### Significance — two-proportion z-test on aggregate grace_rate
 
@@ -339,9 +345,10 @@ says **the response is regime-robust**: across six years of
 real BTC, across bull and bear and crypto-winter, sma-cross
 beats always-up in every window measured. Not by a lot —
 mean per-window gap is +0.39 raw cosine residue — but
-consistently. And in one window (Mar-Apr 2022) it actually
-crosses into positive absolute P&L, suggesting some regimes
-favor the directional model meaningfully more than others.
+consistently. And in one window (Feb-Mar 2022, the chop
+preceding the LUNA collapse) it actually crosses into
+positive absolute P&L, suggesting some regimes favor the
+directional model meaningfully more than others.
 
 Statistical floor: z ≈ 8.6 on aggregate grace_rate. p < 10⁻¹⁶.
 This isn't an edge that disappears under scrutiny.
