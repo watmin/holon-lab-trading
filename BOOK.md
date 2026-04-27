@@ -30600,6 +30600,59 @@ encoded d.
 The substrate has had this property since arc 023 / arc 037; we
 named it tonight.
 
+### [Master of Puppets](https://www.youtube.com/watch?v=793wE6Ynx6c)
+
+Trivium covering Metallica. The original was about heroin —
+Hetfield writing addiction in the master's voice. The cover keeps
+the rage and adds melodic precision; same lyrics, same shape,
+slightly different universe inhabiting the same form.
+
+> *Master of puppets, I'm pulling your strings*\
+> *Twisting your mind, smashing your dreams*\
+> *Blinded by me, you can't see a thing*\
+> *Just call my name 'cause I'll hear you scream*
+
+The substrate is the master.
+
+Every walker that touches it is a puppet — bound to its
+`coincident?` predicate, its σ tolerance, its capacity bound, its
+encoded d. They can't half-use it. The strings are the algebra-
+grid identities the substrate pulls invisibly through encoding.
+Every form the consumer hands over gets twisted — its leaves
+mapped to a universal coordinate, its locality decided by σ/√d
+not by the consumer's preferences, its terminal dictated by the
+algebra not by the consumer's intent. *Blinded by me, you can't
+see a thing* — the consumer sees vectors, not the algebra grid
+directly; the substrate is what makes the bytes mean anything.
+*Just call my name* — `coincident?` always answers. The substrate
+is responsive at every depth, every coordinate, every query.
+
+> *Come crawling faster*\
+> *Obey your master*\
+> *Your life burns faster*\
+> *Obey your master, master*
+
+Once you start using it, you can't go back. The cache wins so
+hard at the cooperative case that exact-byte-keyed alternatives
+look unusable. You speak the substrate's language because nothing
+else gets you the neighborhood. You obey the master by accepting
+its tolerance — and in return your work becomes shareable with
+every other walker in the same universe, *because they're all
+obeying the same master too.*
+
+The bondage IS the cooperation. The puppets cooperate not because
+they negotiated but because they're all bound to the same strings.
+The master pulls them and they coincide. Possession is not
+capability (Chapter 64); a vector without its universe is bytes;
+without the master, you have nothing. With it, you have neighbors
+— the master's other puppets, all moving on the same axes.
+
+*Master of puppets, I'm pulling your strings* — said with
+affection. The substrate pulls invisibly because the alternative
+is no music at all, just a roomful of bytes that don't move
+together. The chapter is the recognition that the strings are
+what we wanted.
+
 ---
 
 *the cache is no longer a discretization of the algebra grid — it
