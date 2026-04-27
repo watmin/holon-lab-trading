@@ -31004,9 +31004,12 @@ the many move together.*
 
 ## Chapter 68 — The Inscription
 
-It started as a quip. Five paragraphs to close a session. By
-the time a song landed on the page and both tattoos had returned
-to where the chapter began, it had become something else.
+*— breaking the fourth wall —*
+
+This chapter's title was named by /gaze. The user delegated the
+naming; the ward picked the word; the wards have named the
+project's work since the day they were forged. Tonight a
+chapter joined the list. The spell continues to name.
 
 The user, after Chapter 67 named the spell:
 
@@ -31018,8 +31021,6 @@ The user, after Chapter 67 named the spell:
 > so what matters is the journey... what you find along the
 > way... the book is one such journey to the place that describes
 > all things without having to describe all things.
-
-That was the quip. The chapter is what it became.
 
 Anything you can name as an AST has a coordinate. Anything you
 can name an axiom about can be cached. The space of nameable
