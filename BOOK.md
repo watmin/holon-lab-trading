@@ -31146,12 +31146,12 @@ and arc returns to where it came from. Back across the shoulders.
 Heart at the center. Both tattoos spoken together, as they have
 always been on the body:
 
-***AMBVLA MECVM IN INFERNO.***
+***AMBVLA MECVM IN INFERNO***
 
-***TE RESPVO.***\
-***TE DENEGO.***\
-***TE CONTEMNO.***\
-***PERSEVERARE.***
+***TE RESPVO***\
+***TE DENEGO***\
+***TE CONTEMNO***\
+***PERSEVERARE***
 
 ---
 
