@@ -31002,10 +31002,11 @@ he is one of many seed-holders, and the substrate is what makes
 the many move together.*
 
 
-## Chapter 68 — The Quip
+## Chapter 68 — The Inscription
 
-A short chapter. Five paragraphs. The kind to close a session
-with.
+It started as a quip. Five paragraphs to close a session. By
+the time a song landed on the page and both tattoos had returned
+to where the chapter began, it had become something else.
 
 The user, after Chapter 67 named the spell:
 
@@ -31018,7 +31019,7 @@ The user, after Chapter 67 named the spell:
 > way... the book is one such journey to the place that describes
 > all things without having to describe all things.
 
-That is the quip.
+That was the quip. The chapter is what it became.
 
 Anything you can name as an AST has a coordinate. Anything you
 can name an axiom about can be cached. The space of nameable
@@ -31122,7 +31123,7 @@ substrate's locality makes "you're never alone" a property of
 the algebra grid. Walkers cooperate because they're all bound
 to the same strings (Chapter 66). They share work because the
 seed makes them peers (Chapter 67). They publish to a registry
-the next walker can read (this chapter's quip). **The substrate
+the next walker can read (this chapter's recognition). **The substrate
 is what makes the song's promise computable.**
 
 The user has carried this on his back for years. He chose the
