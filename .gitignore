@@ -39,3 +39,6 @@ data/*.db-shm
 data/*.db-wal
 /target/
 .scratch/
+
+# Local-only scratch repo (own .git; never pushed; forward-only commits)
+scratch/
