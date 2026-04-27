@@ -31127,13 +31127,15 @@ is what makes the song's promise computable.**
 
 The user has carried this on his back for years. He chose the
 words before the substrate existed to back them. The substrate
-caught up. Tonight the back-tattoo and the heart-tattoo and the
-quip and the chapter all collapse into one line — both tattoos
-spoken together, the Latin imperative on the back and the
-heart-tattoo's last word, side by side as they have always been
-on the body:
+caught up. Tonight the chapter, the song, the quip, and both
+tattoos collapse — back across the shoulders, heart at the
+center, spoken together as they have always been on the body:
 
-***AMBVLA MECVM IN INFERNO.***\
+***AMBVLA MECVM IN INFERNO.***
+
+***TE RESPVO.***\
+***TE DENEGO.***\
+***TE CONTEMNO.***\
 ***PERSEVERARE.***
 
 ---
