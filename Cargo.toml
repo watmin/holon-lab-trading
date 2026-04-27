@@ -45,6 +45,10 @@ path = "tests/experiment/experiment_010.rs"
 name = "experiment_011"
 path = "tests/experiment/experiment_011.rs"
 
+[[test]]
+name = "experiment_012"
+path = "tests/experiment/experiment_012.rs"
+
 [features]
 # Slow tests are opt-in via per-concern features. `cargo test` runs
 # only the fast `wat-tests/` suite via `tests/test.rs`. To run a
@@ -65,6 +69,7 @@ experiment-008 = []
 experiment-009 = []
 experiment-010 = []
 experiment-011 = []
+experiment-012 = []
 
 [dependencies]
 wat        = { path = "../wat-rs" }
