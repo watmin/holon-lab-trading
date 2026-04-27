@@ -119,22 +119,31 @@
       nf)))
 
 ;; Two values inside the same bucket get snapped to the same output.
-;; At scale=1.0, bucket-width=0.03125. Values 0.50 and 0.51 differ by
-;; 0.01 — well within one bucket — and snap to the same representative.
+;; Bucket-width is dim-relative: scale × noise-floor, where
+;; noise-floor = 1/sqrt(d). The test reads the actual bucket-width
+;; at runtime and offsets the second value by 0.25 × bucket-width
+;; (well within one bucket) — honest at any default dim, no
+;; hand-calibration to a specific d.
 (:deftest :trading::test::encoding::scale-tracker::test-values-in-same-bucket-snap-identical
   (:wat::core::let*
-    (((a :f64) (:trading::encoding::ScaleTracker::bucket 0.50 1.0))
-     ((b :f64) (:trading::encoding::ScaleTracker::bucket 0.51 1.0)))
+    (((bw :f64) (:trading::encoding::ScaleTracker::bucket-width 1.0))
+     ((within :f64) (:wat::core::* 0.25 bw))
+     ((a :f64) (:trading::encoding::ScaleTracker::bucket 0.50 1.0))
+     ((b :f64)
+       (:trading::encoding::ScaleTracker::bucket
+         (:wat::core::+ 0.50 within) 1.0)))
     (:wat::test::assert-eq a b)))
 
 ;; Values across bucket boundaries snap to different outputs.
-;; At scale=1.0, bucket-width=0.03125. Values 0.50 and 0.58 differ by
-;; 0.08 — crosses multiple buckets — so their snapped representatives
-;; differ.
+;; Use 5 × bucket-width — clearly across multiple buckets at any d.
 (:deftest :trading::test::encoding::scale-tracker::test-values-across-buckets-differ
   (:wat::core::let*
-    (((a :f64) (:trading::encoding::ScaleTracker::bucket 0.50 1.0))
-     ((b :f64) (:trading::encoding::ScaleTracker::bucket 0.58 1.0))
+    (((bw :f64) (:trading::encoding::ScaleTracker::bucket-width 1.0))
+     ((across :f64) (:wat::core::* 5.0 bw))
+     ((a :f64) (:trading::encoding::ScaleTracker::bucket 0.50 1.0))
+     ((b :f64)
+       (:trading::encoding::ScaleTracker::bucket
+         (:wat::core::+ 0.50 across) 1.0))
      ((different :bool)
       (:wat::core::not (:wat::core::= a b))))
     (:wat::test::assert-eq different true)))
