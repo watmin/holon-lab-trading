@@ -4,11 +4,11 @@
 Reframed 2026-04-27 (proof 018 → templates → coordinate cells).
 Reframed again 2026-04-28 after wat-rs arc 074 + 074 slice 2 shipped:
 substrate now exposes `:wat::holon::Hologram` (unbounded coordinate-
-cell store) and `:wat::holon::HologramLRU` (bounded sibling, wat-stdlib
-composition in `crates/wat-hologram-lru/`). v3 of this DESIGN replaces
+cell store) and `:wat::holon::lru::HologramCache` (bounded sibling, wat-stdlib
+composition in `crates/wat-holon-lru/`). v3 of this DESIGN replaces
 the proposed `FuzzyCache<V>` primitive with the substrate-shipped
-`HologramLRU` and drops the substrate-gap section (everything the lab
-needs is now in core or in wat-hologram-lru).
+`HologramCache` and drops the substrate-gap section (everything the lab
+needs is now in core or in wat-holon-lru).
 
 ## Progress (2026-04-28)
 
@@ -24,7 +24,7 @@ Partial — request/reply Service shape proven; telemetry + L2-spawn
 | Probe tests T1–T3 | ✅ covered by walker.wat tests. |
 | Probe tests T4–T8 | ❌ not started (cross-thinker, eviction, telemetry-rows, throughput gate). |
 
-**Substrate finding logged in source.** `:wat::holon::HologramLRU`'s
+**Substrate finding logged in source.** `:wat::holon::lru::HologramCache`'s
 underlying `:wat::lru::LocalCache` is thread-owned (lives in a
 `ThreadOwnedCell`), so a spawned worker holding one cannot return
 the cache through `join-result` and have the caller invoke methods
@@ -44,13 +44,13 @@ criteria from § What ships still apply unchanged.
 **Predecessors:**
 - Substrate: arc 057 (typed HolonAST leaves), arc 058
   (`HashMap<HolonAST, V>`), arc 068 (`:wat::eval-step!`), arc 070
-  (`:wat::eval::walk`), arc 074 + slice 2 (`Hologram` + `HologramLRU`).
+  (`:wat::eval::walk`), arc 074 + slice 2 (`Hologram` + `HologramCache`).
 - Lab proposal 057 (L1/L2 cache + parallel subtree compute) —
   approved with conditions; this sub-arc executes that design on the
   new substrate.
 - Proofs: 015 (expansion-chain), 016 (dual-LRU coordinate cache —
   exact-keyed v4), 017 (fuzzy-locality cache via `coincident?`), 018
-  (flat-fuzzy reference; superseded by HologramLRU's coordinate-cell
+  (flat-fuzzy reference; superseded by HologramCache's coordinate-cell
   shape).
 - BOOK chapters 59 (the dual-LRU named), 65 (the hologram), 66 (the
   fuzziness), 67 (the spell), 68 (the inscription), 70 (Jesus built
@@ -84,7 +84,7 @@ Slice 1 wires the cookbook. Subsequent slices stand on it.
 | Surface | Status |
 |---------|--------|
 | `:wat::holon::Hologram` | wat-rs core (arc 074 slice 1). Coordinate-cell store with cosine readout. HolonAST → HolonAST. Unbounded. |
-| `:wat::holon::HologramLRU` | `crates/wat-hologram-lru/` (arc 074 slice 2). Bounded sibling. Pure-wat composition: `Hologram` + `wat::lru::LocalCache`. LRU eviction + cosine readout + cell isolation. HolonAST → HolonAST. |
+| `:wat::holon::lru::HologramCache` | `crates/wat-holon-lru/` (arc 074 slice 2). Bounded sibling. Pure-wat composition: `Hologram` + `wat::lru::LocalCache`. LRU eviction + cosine readout + cell isolation. HolonAST → HolonAST. |
 | `:wat::holon::Hologram/coincident-get` / `present-get` | wat-stdlib convenience getters. The lab's hot path uses these (no filter-construction at call sites). |
 | `:wat::lru::LocalCache<K, V>` | wat-lru. Eviction-aware put returns `Option<(K, V)>` (after the slice-2 prep commit). Used here for the encode-cache (HolonAST → Vector — exact lookup, no fuzz). |
 | `:wat::lru::CacheService` program | Reference shape for the L2 cache services. Lab-side L2 has telemetry hooks; same protocol skeleton. |
@@ -105,24 +105,24 @@ no remaining wat-rs work for slice 1.
 
 ### A — The cache primitive (substrate-provided)
 
-`:wat::holon::HologramLRU` is the cache. **HolonAST → HolonAST.** Not
+`:wat::holon::lru::HologramCache` is the cache. **HolonAST → HolonAST.** Not
 parametric. The trader's two caches (next, terminal) both use this
 type directly. Every HolonAST IS its own vector (deterministically,
-through the substrate's encoder); HologramLRU's `find-best` re-encodes
+through the substrate's encoder); HologramCache's `find-best` re-encodes
 candidate keys per get, no separate vector cache layer needed. The
 existing `:trading::sim::EncodeCache` (a `LocalCache<HolonAST, Vector>`)
-memoizes encoding for code paths outside HologramLRU that need
+memoizes encoding for code paths outside HologramCache that need
 explicit Vectors — a separate concern; not load-bearing for this
 slice; stays as-is.
 
 Per-cell capacity defaults to `sqrt(d)` (the algebra grid's resolution
 limit at d). At d=10000, that's 100 entries per cell, with ~100 cells
-across the spread — total cap ~10k entries per HologramLRU instance.
-Consumers tune via `HologramLRU/make d cap`.
+across the spread — total cap ~10k entries per HologramCache instance.
+Consumers tune via `HologramCache/make d cap`.
 
 ### B — The two coordinate caches (lab-side wrappers)
 
-Both `:wat::holon::HologramLRU`. Both keyed by HolonAST. Both
+Both `:wat::holon::lru::HologramCache`. Both keyed by HolonAST. Both
 HolonAST → HolonAST.
 
 | Cache | Stored | What it serves |
@@ -139,8 +139,8 @@ expand work-sharing across coincident neighborhoods.
 **L1 (per-thinker, thread-owned):**
 
 Each thinker owns a `(next-cache, terminal-cache)` pair of
-`HologramLRU` instances threaded through its tail-recursive loop.
-HologramLRU is thread-owned mutable; the thinker holds it directly.
+`HologramCache` instances threaded through its tail-recursive loop.
+HologramCache is thread-owned mutable; the thinker holds it directly.
 No Mutex, no queue, no service.
 
 **L2 (process-wide, queue-addressed):**
@@ -148,8 +148,8 @@ No Mutex, no queue, no service.
 Two cache service programs sharing the same lab-side `:trading::
 cache::Service` shape (one instance per cache):
 
-- `cache-next: Service` — owns a `HologramLRU` for next-form sharing.
-- `cache-terminal: Service` — owns a `HologramLRU` for terminal sharing.
+- `cache-next: Service` — owns a `HologramCache` for next-form sharing.
+- `cache-terminal: Service` — owns a `HologramCache` for terminal sharing.
 
 Same protocol shape as `:wat::lru::CacheService` (request/reply via
 queue + per-client reply channel) but lab-specific because the loop
@@ -159,16 +159,16 @@ needs telemetry hooks (counters + tick-gate + LogEntry emission).
 
 `:trading::cache::resolve` is the cache-aware substitute for "encode
 a form" in the thinker's hot path. Same idea as proof 018's reference,
-adapted to HologramLRU's coordinate-cell shape:
+adapted to HologramCache's coordinate-cell shape:
 
 ```
 resolve(form-h, pos, l1, l2):
   ;; 1. Terminal cache lookup. Hit ends the walk.
-  on HologramLRU/coincident-get(l1.terminal-cache, pos, form-h) → Some(t):
+  on HologramCache/coincident-get(l1.terminal-cache, pos, form-h) → Some(t):
     return t
 
   ;; 2. Next-form cache lookup. Hit short-circuits one or more steps.
-  on HologramLRU/coincident-get(l1.next-cache, pos, form-h) → Some(next-h):
+  on HologramCache/coincident-get(l1.next-cache, pos, form-h) → Some(next-h):
     return resolve(next-h, pos, l1, l2)
 
   ;; 3. Both miss — invoke :wat::eval::walk on the form.
@@ -212,7 +212,7 @@ Counter set (per-cache):
 | `hits` | Count | matches accepted by the filter (incl. self-cosine) |
 | `misses` | Count | filter rejected or candidates empty |
 | `evictions` | Count | LRU evictions (visible via `LocalCache::put`'s return) |
-| `size` | Count | `HologramLRU/len` at window close |
+| `size` | Count | `HologramCache/len` at window close |
 | `ns_gets` | Microseconds | total time in lookup-side scans |
 | `ns_sets` | Microseconds | total time in put + cell-cleanup |
 | `gets_serviced` | Count | requests dispatched to caller |
@@ -251,9 +251,9 @@ One slice. Lab-only — substrate work was finished by arc 074 + slice 2.
 ### Lab files
 
 - `wat/cache/L1.wat` — per-thinker dual cache struct + helpers.
-  Two `HologramLRU` instances threaded through the thinker's loop.
+  Two `HologramCache` instances threaded through the thinker's loop.
 - `wat/cache/Service.wat` — generic queue-addressed program. Owns a
-  `HologramLRU`. Tracks counters. Runs the tick-gate. Emits
+  `HologramCache`. Tracks counters. Runs the tick-gate. Emits
   `LogEntry::Telemetry` through rundb. Lifecycle mirrors
   `RunDbService` and `:wat::lru::CacheService`.
 - `wat/cache/walker.wat` — `:trading::cache::resolve`, the per-step
@@ -306,9 +306,9 @@ constituent count caps the cache's clean neighborhood count. Beyond
 sqrt(d), the LRU evicts old entries automatically.
 
 **Slice-1 default: `cap = sqrt(d) × sqrt(d) = d`** for the global LRU
-(at d=10000: 10000 entries total, ~100 per cell). The HologramLRU
+(at d=10000: 10000 entries total, ~100 per cell). The HologramCache
 internally bounds per-cell behavior through its global LRU + the
-substrate's sqrt(d) cell count. Consumers tune via `HologramLRU/make`.
+substrate's sqrt(d) cell count. Consumers tune via `HologramCache/make`.
 
 ### Q3 — L2 cache size per service ✅ resolved sqrt(d)
 
@@ -327,7 +327,7 @@ evicted form re-walks from scratch.
 ### Q5 — Both caches always fuzzy ✅ yes
 
 Proof 017 only fuzzed the terminal lookup. Slice 1 commits to
-symmetric fuzzing — both caches use `HologramLRU/coincident-get`
+symmetric fuzzing — both caches use `HologramCache/coincident-get`
 which applies the same cosine + filter machinery on both
 directions.
 
@@ -338,7 +338,7 @@ arc if the throughput benchmark demands it.
 
 ### Q7 — SimHash bucketing for sub-linear lookup
 
-Out of scope for slice 1. HologramLRU's coordinate-cell pre-filter
+Out of scope for slice 1. HologramCache's coordinate-cell pre-filter
 already gives O(2 × cell_size) instead of O(N) — that's structurally
 sub-linear under typical pos distributions. SimHash adds another
 layer and ships when consumers surface a need.
@@ -364,8 +364,8 @@ sub-slices documented in the sub-arc's BACKLOG.md.
 For readers landing on v3:
 
 - v2 proposed `FuzzyCache<V>` as a new primitive lifted from proof
-  018. **v3 uses `:wat::holon::HologramLRU` instead** — substrate
-  shipped this in arc 074 + slice 2. HologramLRU is a coordinate-cell
+  018. **v3 uses `:wat::holon::lru::HologramCache` instead** — substrate
+  shipped this in arc 074 + slice 2. HologramCache is a coordinate-cell
   store with cosine readout AND LRU eviction; v2's FuzzyCache was
   flat-fuzzy linear scan.
 - v2 listed `LocalCache::len` as a substrate-gap commit. **v3 drops
@@ -375,7 +375,7 @@ For readers landing on v3:
   fuzzy." **v3 keeps EncodeCache on LocalCache** — encoding is
   deterministic, no fuzz needed.
 - v2 had `<V>` parametric framing throughout. **v3 drops it** —
-  Hologram and HologramLRU are concrete HolonAST → HolonAST. The
+  Hologram and HologramCache are concrete HolonAST → HolonAST. The
   encode-cache uses parametric LocalCache because it ALSO carries
   Vector values.
 - v2 referenced proof 018's `FuzzyCache` shape verbatim. **v3

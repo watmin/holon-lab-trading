@@ -1,12 +1,12 @@
 ;; :trading::cache::Service — L2 cache as a queue-addressed program.
 ;;
-;; A long-running spawned program that owns a HologramLRU and serves
+;; A long-running spawned program that owns a HologramCache and serves
 ;; cache requests via a request queue. Each client gets a per-client
 ;; reply channel for Get; Put is fire-and-forget.
 ;;
 ;; Slice 1 minimal:
 ;;   - Request: Get(probe, reply-tx) | Put(key, val)
-;;   - State:   HologramLRU + Stats (cache + per-window counters)
+;;   - State:   HologramCache + Stats (cache + per-window counters)
 ;;   - Reply:   Option<HolonAST> sent on reply-tx
 ;;   - Telemetry: caller-supplied (metrics-cadence-fn, telemetry-fn,
 ;;     initial-gate) triple. Service is non-negotiable: caller must
@@ -21,8 +21,8 @@
 ;; reaching for Mutex.
 ;;
 ;; Arc 076 + 077: slot routing inferred from the form's structure
-;; (the substrate does it inside HologramLRU); no caller-supplied
-;; pos. Filter is bound at HologramLRU/make time.
+;; (the substrate does it inside HologramCache); no caller-supplied
+;; pos. Filter is bound at HologramCache/make time.
 
 ;; ─── Reply channel typealiases ──────────────────────────────────
 
@@ -97,7 +97,7 @@
   (hits :i64)           ;; Gets returning Some
   (misses :i64)         ;; Gets returning :None
   (puts :i64)           ;; total Puts in this window
-  (cache-size :i64))    ;; HologramLRU/len at gate-fire time
+  (cache-size :i64))    ;; HologramCache/len at gate-fire time
 
 ;; Report — discriminated outbound messages the cache emits.
 ;; Slice 1 ships ONE variant (Metrics, gated by metrics-cadence). Future
@@ -151,12 +151,12 @@
 ;; ─── Service state — cache + running stats ─────────────────────
 ;;
 ;; Threaded through Service/loop alongside the metrics-cadence's gate. The
-;; cache mutates in place (HologramLRU is thread-owned mutable);
+;; cache mutates in place (HologramCache is thread-owned mutable);
 ;; Stats rebuilds each iteration (values-up). Gate is independent
 ;; of State — caller-typed.
 
 (:wat::core::struct :trading::cache::State
-  (cache :wat::holon::HologramLRU)
+  (cache :wat::holon::lru::HologramCache)
   (stats :trading::cache::Stats))
 
 ;; One loop-step's outputs: the post-dispatch State paired with the
@@ -168,9 +168,9 @@
 
 ;; ─── Per-variant request handler ────────────────────────────────
 ;;
-;; Get: filtered-argmax via HologramLRU/get; send Option<AST> on
+;; Get: filtered-argmax via HologramCache/get; send Option<AST> on
 ;;      reply-tx. Stats: lookups++, then hits++ or misses++.
-;; Put: insert into HologramLRU; no reply. Stats: puts++.
+;; Put: insert into HologramCache; no reply. Stats: puts++.
 ;;
 ;; Returns the new State (cache pointer unchanged — mutates in
 ;; place; stats rebuilt).
@@ -181,13 +181,13 @@
     (state :trading::cache::State)
     -> :trading::cache::State)
   (:wat::core::let*
-    (((cache :wat::holon::HologramLRU) (:trading::cache::State/cache state))
+    (((cache :wat::holon::lru::HologramCache) (:trading::cache::State/cache state))
      ((stats :trading::cache::Stats) (:trading::cache::State/stats state)))
     (:wat::core::match req -> :trading::cache::State
       ((:trading::cache::Request::Get probe reply-tx)
         (:wat::core::let*
           (((result :Option<wat::holon::HolonAST>)
-            (:wat::holon::HologramLRU/get cache probe))
+            (:wat::holon::lru::HologramCache/get cache probe))
            ((_send :wat::kernel::Sent)
             (:wat::kernel::send reply-tx result))
            ((hit-delta :i64)
@@ -206,7 +206,7 @@
           (:trading::cache::State/new cache stats')))
       ((:trading::cache::Request::Put key val)
         (:wat::core::let*
-          (((_ :()) (:wat::holon::HologramLRU/put cache key val))
+          (((_ :()) (:wat::holon::lru::HologramCache/put cache key val))
            ((stats' :trading::cache::Stats)
             (:trading::cache::Stats/new
               (:trading::cache::Stats/lookups stats)
@@ -247,14 +247,14 @@
       (:trading::cache::MetricsCadence/new gate' tick-fn)))
     (:wat::core::if fired -> :trading::cache::Step<G>
       (:wat::core::let*
-        (((cache :wat::holon::HologramLRU) (:trading::cache::State/cache state))
+        (((cache :wat::holon::lru::HologramCache) (:trading::cache::State/cache state))
          ((final-stats :trading::cache::Stats)
           (:trading::cache::Stats/new
             (:trading::cache::Stats/lookups stats)
             (:trading::cache::Stats/hits stats)
             (:trading::cache::Stats/misses stats)
             (:trading::cache::Stats/puts stats)
-            (:wat::holon::HologramLRU/len cache)))
+            (:wat::holon::lru::HologramCache/len cache)))
          ((_ :()) (reporter (:trading::cache::Report::Metrics final-stats)))
          ((state' :trading::cache::State)
           (:trading::cache::State/new cache (:trading::cache::Stats/zero))))
@@ -306,7 +306,7 @@
 
 ;; ─── Worker entry — owns the cache for its full lifetime ──────
 ;;
-;; HologramLRU's underlying LocalCache is thread-owned (lives in a
+;; HologramCache's underlying LocalCache is thread-owned (lives in a
 ;; ThreadOwnedCell), so the cache MUST stay on the worker thread.
 ;; Service/run wraps Service/loop so the spawned handle resolves
 ;; to :() — caller-friendly type.
@@ -319,8 +319,8 @@
     (metrics-cadence :trading::cache::MetricsCadence<G>)
     -> :())
   (:wat::core::let*
-    (((cache :wat::holon::HologramLRU)
-      (:wat::holon::HologramLRU/make
+    (((cache :wat::holon::lru::HologramCache)
+      (:wat::holon::lru::HologramCache/make
         (:wat::holon::filter-coincident)
         cap))
      ((initial :trading::cache::State)
@@ -335,7 +335,7 @@
 ;; Build N bounded request channels (capacity 1 each — back-pressure
 ;; under load), pool the senders (HandlePool's orphan detector
 ;; surfaces over/under-claim at finish), spawn the driver with a
-;; fresh HologramLRU and the user-supplied (reporter, metrics-cadence)
+;; fresh HologramCache and the user-supplied (reporter, metrics-cadence)
 ;; pair.
 ;;
 ;; Both injection points are non-negotiable. Pass

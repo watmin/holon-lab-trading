@@ -3,7 +3,7 @@
 ;; Building up from SERVICE-PROGRAMS.md's eight-step progression.
 ;; Each test is a strictly larger version of the prior one.
 ;;
-;; Arc 076 + 077: HologramLRU/make takes (filter, cap); Request enum
+;; Arc 076 + 077: HologramCache/make takes (filter, cap); Request enum
 ;; carries no pos field; substrate routes by form structure.
 
 ;; Custom deftest variant — splices step helpers into each test's
@@ -13,13 +13,13 @@
   ((:wat::load-file! "wat/cache/Service.wat")
 
    ;; ─── Step 1 helper ──────────────────────────────────────────
-   ;; A trivial worker — make a HologramLRU and return it. Verifies
-   ;; spawn + join with HologramLRU as the return type, without any
+   ;; A trivial worker — make a HologramCache and return it. Verifies
+   ;; spawn + join with HologramCache as the return type, without any
    ;; channel complexity.
    (:wat::core::define
      (:trading::test::cache::Service::trivial-worker
-       -> :wat::holon::HologramLRU)
-     (:wat::holon::HologramLRU/make
+       -> :wat::holon::lru::HologramCache)
+     (:wat::holon::lru::HologramCache/make
        (:wat::holon::filter-coincident)
        16))
 
@@ -43,7 +43,7 @@
      (:trading::test::cache::Service::count-recv rx 0))
 
    ;; ─── Step 3 helper — drive Service/loop, return final len ──
-   ;; HologramLRU is thread-owned; we cannot return the cache itself
+   ;; HologramCache is thread-owned; we cannot return the cache itself
    ;; across the join boundary. Compute len inside the worker; only
    ;; the i64 crosses. Pass null-metrics-cadence + null-reporter — these
    ;; tests don't care about reporting.
@@ -53,8 +53,8 @@
        (cap :i64)
        -> :i64)
      (:wat::core::let*
-       (((cache :wat::holon::HologramLRU)
-         (:wat::holon::HologramLRU/make
+       (((cache :wat::holon::lru::HologramCache)
+         (:wat::holon::lru::HologramCache/make
            (:wat::holon::filter-coincident)
            cap))
         ((initial :trading::cache::State)
@@ -64,14 +64,14 @@
            req-rxs initial
            :trading::cache::null-reporter
            (:trading::cache::null-metrics-cadence))))
-       (:wat::holon::HologramLRU/len
+       (:wat::holon::lru::HologramCache/len
          (:trading::cache::State/cache final))))))
 
 ;; ─── Step 1 — spawn + join, no channels ─────────────────────────
 
 (:deftest-hermetic :trading::test::cache::Service::test-step1-spawn-join
   (:wat::core::let*
-    (((handle :wat::kernel::ProgramHandle<wat::holon::HologramLRU>)
+    (((handle :wat::kernel::ProgramHandle<wat::holon::lru::HologramCache>)
       (:wat::kernel::spawn
         :trading::test::cache::Service::trivial-worker)))
     (:wat::core::match (:wat::kernel::join-result handle) -> :()
@@ -260,7 +260,7 @@
 ;; Probe T6 from DESIGN.md, lab-side. cap=2 cache; Put k1, Put k2,
 ;; Put k3 — k1 should be evicted. Subsequent Get(k1) returns None;
 ;; Get(k2) returns Some. This proves the queue-addressed wrapper
-;; preserves the HologramLRU eviction semantics — eviction visible
+;; preserves the HologramCache eviction semantics — eviction visible
 ;; from the client's view, not just at the substrate.
 
 (:deftest-hermetic :trading::test::cache::Service::test-step6-lru-eviction-via-service

@@ -1,6 +1,6 @@
 ;; wat-tests/cache/L1.wat — tests for :trading::cache::L1.
 ;;
-;; L1 is the per-thinker dual coordinate cache. Two HologramLRU
+;; L1 is the per-thinker dual coordinate cache. Two HologramCache
 ;; instances threaded through the thinker's loop. Tests verify:
 ;; construction, put/get round-trip on each cache, fuzzy hits, cache
 ;; isolation, len.
@@ -54,7 +54,7 @@
 ;; ─── two caches are independent ─────────────────────────────────
 ;;
 ;; A put on next-cache must NOT make the same key visible in
-;; terminal-cache, and vice versa. The two HologramLRUs are
+;; terminal-cache, and vice versa. The two HologramCaches are
 ;; structurally separate.
 
 (:deftest :trading::test::cache::L1::test-caches-are-independent
@@ -141,7 +141,7 @@
 
 ;; ─── T6: LRU eviction at cap drops oldest from BOTH sidecar + Hologram ──
 ;;
-;; L1's terminal-cache is a HologramLRU. cap=2 forces eviction on the
+;; L1's terminal-cache is a HologramCache. cap=2 forces eviction on the
 ;; third put. After (k1, v1) → (k2, v2) → (k3, v3) puts, k1 should be
 ;; gone from the cache: get-terminal(k1) returns None even though the
 ;; LRU is full. This is the lab-side mirror of

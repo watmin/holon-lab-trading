@@ -6,7 +6,7 @@
 ;; queries hit the cache.
 ;;
 ;; Arc 076 + 077: slot routing is inferred from the form's structure
-;; (the substrate does it inside HologramLRU on every put / get); no
+;; (the substrate does it inside HologramCache on every put / get); no
 ;; caller-supplied pos. The visitor records (form, value) pairs;
 ;; Hologram routes each one by inspecting the key.
 

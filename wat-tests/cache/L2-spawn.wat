@@ -107,7 +107,7 @@
 
 ;; ─── Caches are isolated: a Put on next is invisible from terminal ──
 ;;
-;; The two L2 services own separate HologramLRUs; a key Put on
+;; The two L2 services own separate HologramCaches; a key Put on
 ;; cache-next must not appear when Get from cache-terminal.
 
 (:deftest-hermetic :trading::test::cache::L2-spawn::test-caches-isolated
