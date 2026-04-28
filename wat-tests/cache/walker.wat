@@ -1,14 +1,15 @@
 ;; wat-tests/cache/walker.wat — :trading::cache::resolve tests.
 ;;
-;; Slice 1 minimal walker: cache-first, walk on miss, no recording
-;; (visitor returns Continue). Tests verify the structural shape:
+;; Slice 1 minimal walker: cache-first, walk on miss, recording into
+;; L1 via the visitor. Tests verify the structural shape:
 ;;
 ;;   - terminal-cache hit returns directly (no walk)
 ;;   - chain via next-cache works through L1/lookup
 ;;   - cache miss: walk-on-already-terminal returns Some
+;;   - the walk fills the cache (L1/len > 0 after one walk)
 ;;
-;; Recording into L1 (the "walk fills cache" property) ships in a
-;; separate slice once the visit-fn handles each StepResult variant.
+;; Arc 076 + 077: no caller-supplied pos. Substrate routes by form
+;; structure; resolve is `(form, l1) -> Option<HolonAST>`.
 
 (:wat::test::make-deftest :deftest
   ((:wat::load-file! "wat/cache/L1.wat")
@@ -18,12 +19,12 @@
 
 (:deftest :trading::test::cache::walker::test-terminal-hit
   (:wat::core::let*
-    (((l1 :trading::cache::L1) (:trading::cache::L1/make 10000 16))
+    (((l1 :trading::cache::L1) (:trading::cache::L1/make 16))
      ((form :wat::holon::HolonAST) (:wat::holon::leaf :form))
      ((terminal :wat::holon::HolonAST) (:wat::holon::leaf :answer))
-     ((_ :()) (:trading::cache::L1/put-terminal l1 5.0 form terminal))
+     ((_ :()) (:trading::cache::L1/put-terminal l1 form terminal))
      ((got :Option<wat::holon::HolonAST>)
-      (:trading::cache::resolve form 5.0 l1))
+      (:trading::cache::resolve form l1))
      ((found :wat::holon::HolonAST)
       (:wat::core::match got -> :wat::holon::HolonAST
         ((Some h) h)
@@ -34,14 +35,14 @@
 
 (:deftest :trading::test::cache::walker::test-chain-via-next
   (:wat::core::let*
-    (((l1 :trading::cache::L1) (:trading::cache::L1/make 10000 16))
+    (((l1 :trading::cache::L1) (:trading::cache::L1/make 16))
      ((form :wat::holon::HolonAST) (:wat::holon::leaf :form))
      ((next :wat::holon::HolonAST) (:wat::holon::leaf :next))
      ((terminal :wat::holon::HolonAST) (:wat::holon::leaf :terminal))
-     ((_ :()) (:trading::cache::L1/put-next l1 5.0 form next))
-     ((_ :()) (:trading::cache::L1/put-terminal l1 5.0 next terminal))
+     ((_ :()) (:trading::cache::L1/put-next l1 form next))
+     ((_ :()) (:trading::cache::L1/put-terminal l1 next terminal))
      ((got :Option<wat::holon::HolonAST>)
-      (:trading::cache::resolve form 5.0 l1))
+      (:trading::cache::resolve form l1))
      ((found :wat::holon::HolonAST)
       (:wat::core::match got -> :wat::holon::HolonAST
         ((Some h) h)
@@ -56,10 +57,10 @@
 
 (:deftest :trading::test::cache::walker::test-walk-on-already-terminal
   (:wat::core::let*
-    (((l1 :trading::cache::L1) (:trading::cache::L1/make 10000 16))
+    (((l1 :trading::cache::L1) (:trading::cache::L1/make 16))
      ((form :wat::holon::HolonAST) (:wat::holon::leaf :alpha))
      ((got :Option<wat::holon::HolonAST>)
-      (:trading::cache::resolve form 5.0 l1))
+      (:trading::cache::resolve form l1))
      ((found :wat::holon::HolonAST)
       (:wat::core::match got -> :wat::holon::HolonAST
         ((Some h) h)
@@ -74,11 +75,11 @@
 
 (:deftest :trading::test::cache::walker::test-walk-fills-cache
   (:wat::core::let*
-    (((l1 :trading::cache::L1) (:trading::cache::L1/make 10000 16))
+    (((l1 :trading::cache::L1) (:trading::cache::L1/make 16))
      ((form :wat::holon::HolonAST) (:wat::holon::leaf :alpha))
      ((len-before :i64) (:trading::cache::L1/len l1))
      ((_ :Option<wat::holon::HolonAST>)
-      (:trading::cache::resolve form 5.0 l1))
+      (:trading::cache::resolve form l1))
      ((len-after :i64) (:trading::cache::L1/len l1)))
     (:wat::test::assert-eq
       (:wat::core::if (:wat::core::i64::= len-before 0) -> :bool

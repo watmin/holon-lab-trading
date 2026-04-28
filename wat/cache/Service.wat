@@ -5,10 +5,10 @@
 ;; reply channel for Get; Put is fire-and-forget.
 ;;
 ;; Slice 1 minimal:
-;;   - Request: Get(pos, probe, reply-tx) | Put(pos, key, val)
+;;   - Request: Get(probe, reply-tx) | Put(key, val)
 ;;   - State:   HologramLRU (one per Service instance — cache-next or
 ;;              cache-terminal lives in its own Service)
-;;   - Reply:   GetReply (Option<HolonAST>) sent on reply-tx
+;;   - Reply:   Option<HolonAST> sent on reply-tx
 ;;   - No telemetry yet (slice-1-followup); no L1 promotion yet
 ;;     (caller side concern); no cooperation between services
 ;;     (each one is independent).
@@ -16,6 +16,10 @@
 ;; Pattern mirrors :svc::Request from wat-rs's service-template.wat:
 ;; one enum, three reply shapes, one handle fn per variant, one
 ;; driver loop selecting over the request queue.
+;;
+;; Arc 076 + 077: slot routing inferred from the form's structure
+;; (the substrate does it inside HologramLRU); no caller-supplied
+;; pos. Filter is bound at HologramLRU/make time.
 
 ;; ─── Reply channel typealiases ──────────────────────────────────
 
@@ -29,11 +33,9 @@
 
 (:wat::core::enum :trading::cache::Request
   (Get
-    (pos :f64)
     (probe :wat::holon::HolonAST)
     (reply-tx :trading::cache::GetReplyTx))
   (Put
-    (pos :f64)
     (key :wat::holon::HolonAST)
     (val :wat::holon::HolonAST)))
 
@@ -53,11 +55,11 @@
 
 ;; ─── Per-variant request handler ────────────────────────────────
 ;;
-;; Get: cosine-readout via coincident-get (the strict variant —
-;;      caller can promote to L1 if it wants); send Option<AST>
-;;      back on the reply-tx. Send returns :wat::kernel::Sent;
-;;      we discard (the caller may have dropped the reply channel
-;;      and we move on).
+;; Get: filtered-argmax via HologramLRU/get (the construction-time
+;;      coincidence filter — caller can promote to L1 if it wants);
+;;      send Option<AST> back on the reply-tx. Send returns
+;;      :wat::kernel::Sent; we discard (the caller may have dropped
+;;      the reply channel and we move on).
 ;; Put: insert into the HologramLRU; no reply.
 ;;
 ;; Each variant returns the same (mutable) HologramLRU. The cell
@@ -70,16 +72,16 @@
     (cache :wat::holon::HologramLRU)
     -> :wat::holon::HologramLRU)
   (:wat::core::match req -> :wat::holon::HologramLRU
-    ((:trading::cache::Request::Get pos probe reply-tx)
+    ((:trading::cache::Request::Get probe reply-tx)
       (:wat::core::let*
         (((result :Option<wat::holon::HolonAST>)
-          (:wat::holon::HologramLRU/coincident-get cache pos probe))
+          (:wat::holon::HologramLRU/get cache probe))
          ((_send :wat::kernel::Sent)
           (:wat::kernel::send reply-tx result)))
         cache))
-    ((:trading::cache::Request::Put pos key val)
+    ((:trading::cache::Request::Put key val)
       (:wat::core::let*
-        (((_ :()) (:wat::holon::HologramLRU/put cache pos key val)))
+        (((_ :()) (:wat::holon::HologramLRU/put cache key val)))
         cache))))
 
 ;; ─── Driver loop — select over Vec<ReqRx> ──────────────────────
@@ -124,14 +126,15 @@
 (:wat::core::define
   (:trading::cache::Service/run
     (req-rxs :Vec<trading::cache::ReqRx>)
-    (d :i64)
     (cap :i64)
     -> :())
   (:wat::core::let*
     (((_cache :wat::holon::HologramLRU)
       (:trading::cache::Service/loop
         req-rxs
-        (:wat::holon::HologramLRU/make d cap))))
+        (:wat::holon::HologramLRU/make
+          (:wat::holon::filter-coincident)
+          cap))))
     ()))
 
 ;; ─── Service constructor ───────────────────────────────────────
@@ -148,7 +151,6 @@
 (:wat::core::define
   (:trading::cache::Service
     (count :i64)
-    (d :i64)
     (cap :i64)
     -> :trading::cache::Spawn)
   (:wat::core::let*
@@ -175,5 +177,5 @@
       (:wat::kernel::HandlePool::new "trading-cache" req-txs))
      ((driver :wat::kernel::ProgramHandle<()>)
       (:wat::kernel::spawn :trading::cache::Service/run
-        req-rxs d cap)))
+        req-rxs cap)))
     (:wat::core::tuple pool driver)))

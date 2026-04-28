@@ -14,23 +14,30 @@
 ;; Lifecycle: construct via `make` once at thinker startup; thread
 ;; through the loop; the inner HologramLRUs mutate; the L1 struct
 ;; itself never changes.
+;;
+;; Arc 076 + 077: the program's encoding dim is ambient via
+;; `(:wat::config::set-dim-count!)`; HologramLRU/make reads it. Slot
+;; routing is inferred from the form's structure (Thermometer inside
+;; → bracket-pair lookup; non-therm → slot 0). No caller-supplied pos.
+;; Each LRU is configured with the construction-time filter
+;; (filter-coincident — strict, matches the cache's "did I see this
+;; exact coordinate before" semantics).
 
 (:wat::core::struct :trading::cache::L1
   (next :wat::holon::HologramLRU)
   (terminal :wat::holon::HologramLRU))
 
-;; Construct an L1 cache pair with both HologramLRUs sized for the
-;; given encoding `d` and global LRU cap. A reasonable default at
-;; d=10000 is `cap = 10000` (sqrt(d)² — 100 cells × ~100 entries).
-;; The thinker tunes per its working-set size.
+;; Construct an L1 cache pair with both HologramLRUs sharing the
+;; ambient program-d (capacity = floor(sqrt(dim-count))). `cap` is
+;; the LRU global bound; a reasonable default at dim-count=10000 is
+;; `cap = 10000` (~100 entries per slot).
 (:wat::core::define
   (:trading::cache::L1/make
-    (d :i64)
     (cap :i64)
     -> :trading::cache::L1)
   (:trading::cache::L1/new
-    (:wat::holon::HologramLRU/make d cap)
-    (:wat::holon::HologramLRU/make d cap)))
+    (:wat::holon::HologramLRU/make (:wat::holon::filter-coincident) cap)
+    (:wat::holon::HologramLRU/make (:wat::holon::filter-coincident) cap)))
 
 ;; ─── put helpers — record an edge or terminal in L1 ────────────────
 
@@ -40,52 +47,46 @@
 (:wat::core::define
   (:trading::cache::L1/put-next
     (l1 :trading::cache::L1)
-    (pos :f64)
     (form-h :wat::holon::HolonAST)
     (next-h :wat::holon::HolonAST)
     -> :())
   (:wat::holon::HologramLRU/put
     (:trading::cache::L1/next l1)
-    pos form-h next-h))
+    form-h next-h))
 
 ;; Record `(form-h → terminal-h)` in the terminal-cache. Used when
 ;; the walker reaches a Terminal step or AlreadyTerminal step.
 (:wat::core::define
   (:trading::cache::L1/put-terminal
     (l1 :trading::cache::L1)
-    (pos :f64)
     (form-h :wat::holon::HolonAST)
     (terminal-h :wat::holon::HolonAST)
     -> :())
   (:wat::holon::HologramLRU/put
     (:trading::cache::L1/terminal l1)
-    pos form-h terminal-h))
+    form-h terminal-h))
 
 ;; ─── get helpers — fuzzy lookup with coincident-floor strictness ──
 ;;
-;; Both caches use `coincident-get` — the strict variant. Matches the
-;; substrate's `coincident?` predicate semantics: only return a hit
-;; when the candidate's cosine clears the coincident floor at the
-;; store's d. The walker calls these in order (terminal first; then
-;; next; then full walk on miss).
+;; Both caches use the construction-time coincidence filter — strict,
+;; matching the substrate's `coincident?` semantics: only return a
+;; hit when the candidate's cosine clears the coincident floor.
 
 (:wat::core::define
   (:trading::cache::L1/get-terminal
     (l1 :trading::cache::L1)
-    (pos :f64)
     (probe :wat::holon::HolonAST)
     -> :Option<wat::holon::HolonAST>)
-  (:wat::holon::HologramLRU/coincident-get
-    (:trading::cache::L1/terminal l1) pos probe))
+  (:wat::holon::HologramLRU/get
+    (:trading::cache::L1/terminal l1) probe))
 
 (:wat::core::define
   (:trading::cache::L1/get-next
     (l1 :trading::cache::L1)
-    (pos :f64)
     (probe :wat::holon::HolonAST)
     -> :Option<wat::holon::HolonAST>)
-  (:wat::holon::HologramLRU/coincident-get
-    (:trading::cache::L1/next l1) pos probe))
+  (:wat::holon::HologramLRU/get
+    (:trading::cache::L1/next l1) probe))
 
 ;; ─── len — total entries across both caches ──────────────────────
 ;;
@@ -116,16 +117,15 @@
 (:wat::core::define
   (:trading::cache::L1/lookup
     (l1 :trading::cache::L1)
-    (pos :f64)
     (form-h :wat::holon::HolonAST)
     -> :Option<wat::holon::HolonAST>)
   (:wat::core::match
-    (:trading::cache::L1/get-terminal l1 pos form-h)
+    (:trading::cache::L1/get-terminal l1 form-h)
     -> :Option<wat::holon::HolonAST>
     ((Some t) (Some t))
     (:None
       (:wat::core::match
-        (:trading::cache::L1/get-next l1 pos form-h)
+        (:trading::cache::L1/get-next l1 form-h)
         -> :Option<wat::holon::HolonAST>
-        ((Some next-h) (:trading::cache::L1/lookup l1 pos next-h))
+        ((Some next-h) (:trading::cache::L1/lookup l1 next-h))
         (:None :None)))))

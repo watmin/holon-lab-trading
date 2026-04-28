@@ -33,7 +33,7 @@
   (:wat::core::match
     (:wat::core::f64::to-i64
       (:wat::core::* 1.0
-        (:wat::core::i64::to-f64 (:wat::config::dims))))
+        (:wat::core::i64::to-f64 (:wat::config::dim-count))))
     -> :i64
     ;; f64::to-i64 returns Option; on Some use it, on None fall back
     ;; (unreachable at any reasonable dims).
