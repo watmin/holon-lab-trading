@@ -1,14 +1,43 @@
 # 059-001 — L1/L2 caches on the new substrate
 
-**Status:** PROPOSED 2026-04-27. Reframed 2026-04-27 (proof 018 →
-templates → coordinate cells). Reframed again 2026-04-28 after wat-rs
-arc 074 + 074 slice 2 shipped: substrate now exposes
-`:wat::holon::Hologram` (unbounded coordinate-cell store) and
-`:wat::holon::HologramLRU` (bounded sibling, wat-stdlib composition
-in `crates/wat-hologram-lru/`). v3 of this DESIGN replaces the
-proposed `FuzzyCache<V>` primitive with the substrate-shipped
+**Status:** IN PROGRESS 2026-04-28 (partial). PROPOSED 2026-04-27.
+Reframed 2026-04-27 (proof 018 → templates → coordinate cells).
+Reframed again 2026-04-28 after wat-rs arc 074 + 074 slice 2 shipped:
+substrate now exposes `:wat::holon::Hologram` (unbounded coordinate-
+cell store) and `:wat::holon::HologramLRU` (bounded sibling, wat-stdlib
+composition in `crates/wat-hologram-lru/`). v3 of this DESIGN replaces
+the proposed `FuzzyCache<V>` primitive with the substrate-shipped
 `HologramLRU` and drops the substrate-gap section (everything the lab
 needs is now in core or in wat-hologram-lru).
+
+## Progress (2026-04-28)
+
+Partial — request/reply Service shape proven; telemetry + L2-spawn
++ probe-tests T4–T8 still pending.
+
+| Surface | State |
+|---|---|
+| `wat/cache/L1.wat` | ✅ shipped (8 deftests green: make / put-get-next / put-get-terminal / cache-isolation / len / lookup-direct / lookup-chain / lookup-empty). |
+| `wat/cache/walker.wat` | ✅ shipped (4 deftests green: terminal-hit / chain-via-next / walk-on-already-terminal / walk-fills-cache). Visitor records each `StepResult` variant into L1; `pos` closed at 50.0 — per-step pos is a follow-up. |
+| `wat/cache/Service.wat` | ⚙️ partial — Request enum + handle + Service/loop + Service/run wrapper + Service constructor shipped. **No telemetry yet** (counters, tick-gate, `LogEntry::Telemetry` per § E). 5 incremental deftests green (step1 spawn+join → step5 full constructor + 2-client HandlePool fan-in with Put+Get round-trip). |
+| `wat/cache/L2-spawn.wat` | ❌ not started. |
+| Probe tests T1–T3 | ✅ covered by walker.wat tests. |
+| Probe tests T4–T8 | ❌ not started (cross-thinker, eviction, telemetry-rows, throughput gate). |
+
+**Substrate finding logged in source.** `:wat::holon::HologramLRU`'s
+underlying `:wat::lru::LocalCache` is thread-owned (lives in a
+`ThreadOwnedCell`), so a spawned worker holding one cannot return
+the cache through `join-result` and have the caller invoke methods
+on it. The `:trading::cache::Service` constructor wraps `Service/loop`
+in a `Service/run` thunk that drops the cache on the worker thread
+and returns `:()` — the spawn-handle type is `ProgramHandle<()>`. Live
+state is observable only through `Get` queries during operation. This
+mirrors `wat::lru::CacheService`'s shape; record-keeping note in case
+follow-up work reaches for cache-as-return-value and finds it absent.
+
+**Acceptance gate (T8 throughput) is not yet measurable** — needs
+`L2-spawn.wat` and a thinker that consumes the cache. Acceptance
+criteria from § What ships still apply unchanged.
 
 **Umbrella:** [`docs/proposals/2026/04/059-the-trader-on-substrate/`](../).
 
