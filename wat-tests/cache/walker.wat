@@ -65,3 +65,23 @@
         ((Some h) h)
         (:None    (:wat::holon::leaf :unreachable)))))
     (:wat::test::assert-eq found form)))
+
+;; ─── Walk fills the cache: L1/len > 0 after a walk ─────────────
+;;
+;; The visitor records each step. After walking an already-terminal
+;; form, the terminal-cache should contain at least one entry (the
+;; (form → form) self-edge from the AlreadyTerminal arm).
+
+(:deftest :trading::test::cache::walker::test-walk-fills-cache
+  (:wat::core::let*
+    (((l1 :trading::cache::L1) (:trading::cache::L1/make 10000 16))
+     ((form :wat::holon::HolonAST) (:wat::holon::leaf :alpha))
+     ((len-before :i64) (:trading::cache::L1/len l1))
+     ((_ :Option<wat::holon::HolonAST>)
+      (:trading::cache::resolve form 5.0 l1))
+     ((len-after :i64) (:trading::cache::L1/len l1)))
+    (:wat::test::assert-eq
+      (:wat::core::if (:wat::core::i64::= len-before 0) -> :bool
+        (:wat::core::i64::> len-after 0)
+        false)
+      true)))

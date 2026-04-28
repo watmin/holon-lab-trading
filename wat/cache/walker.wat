@@ -12,15 +12,47 @@
 ;; lands in the next incremental slice.
 
 ;; Visit function for the walker. Top-level define so we can pass
-;; by keyword path (matches the probe-022 pattern). No-op for
-;; this slice: ignore step, return Continue with the same acc.
+;; by keyword path (matches the probe-022 pattern).
+;;
+;; Records each step into L1 and returns Continue:
+;;   StepTerminal value     → record (form-h → value) in terminal-cache
+;;   AlreadyTerminal value  → record (value → value) in terminal-cache (idempotent self-edge)
+;;   StepNext next-form-w   → record (form-h → next-h) in next-cache
+;;
+;; Each match arm uses full variant paths
+;; (`:wat::eval::StepResult::StepTerminal` etc.) — the substrate's
+;; pattern matcher resolves bare names ambiguously when multiple
+;; enums have similarly-named variants; full paths disambiguate.
+;;
+;; Pos is closed over at FIXED 50.0 for slice-1-minimal. Arc 070's
+;; walker doesn't thread per-step pos; threading positional context
+;; through the visitor lands in a follow-up arc when the trader
+;; surfaces a need.
 (:wat::core::define
   (:trading::cache::record-coordinate
     (acc :trading::cache::L1)
     (form-w :wat::WatAST)
     (step :wat::eval::StepResult)
     -> :wat::eval::WalkStep<trading::cache::L1>)
-  (:wat::eval::WalkStep::Continue acc))
+  (:wat::core::let*
+    (((current-h :wat::holon::HolonAST)
+      (:wat::holon::from-watast form-w)))
+    (:wat::core::match step
+      -> :wat::eval::WalkStep<trading::cache::L1>
+      ((:wat::eval::StepResult::StepTerminal value)
+        (:wat::core::let*
+          (((_ :()) (:trading::cache::L1/put-terminal acc 50.0 current-h value)))
+          (:wat::eval::WalkStep::Continue acc)))
+      ((:wat::eval::StepResult::AlreadyTerminal value)
+        (:wat::core::let*
+          (((_ :()) (:trading::cache::L1/put-terminal acc 50.0 value value)))
+          (:wat::eval::WalkStep::Continue acc)))
+      ((:wat::eval::StepResult::StepNext next-form-w)
+        (:wat::core::let*
+          (((next-form-h :wat::holon::HolonAST)
+            (:wat::holon::from-watast next-form-w))
+           ((_ :()) (:trading::cache::L1/put-next acc 50.0 current-h next-form-h)))
+          (:wat::eval::WalkStep::Continue acc))))))
 
 (:wat::core::define
   (:trading::cache::resolve
