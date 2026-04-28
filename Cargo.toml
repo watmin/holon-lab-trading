@@ -90,6 +90,10 @@ name = "experiment_022"
 path = "tests/experiment/experiment_022.rs"
 
 [[test]]
+name = "experiment_023"
+path = "tests/experiment/experiment_023.rs"
+
+[[test]]
 name = "experiment_099"
 path = "tests/experiment/experiment_099.rs"
 
@@ -124,12 +128,15 @@ experiment-019 = []
 experiment-020 = []
 experiment-021 = []
 experiment-022 = []
+experiment-023 = []
 experiment-099 = []
 
 [dependencies]
-wat        = { path = "../wat-rs" }
-wat-macros = { path = "../wat-rs/wat-macros" }
-parquet    = "53"
+wat              = { path = "../wat-rs" }
+wat-macros       = { path = "../wat-rs/wat-macros" }
+wat-lru          = { path = "../wat-rs/crates/wat-lru" }
+wat-hologram-lru = { path = "../wat-rs/crates/wat-hologram-lru" }
+parquet          = "53"
 arrow      = "53"
 chrono     = "0.4"
 rusqlite   = { version = "0.31", features = ["bundled"] }
