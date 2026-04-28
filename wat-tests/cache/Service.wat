@@ -184,7 +184,7 @@
     (((handle :wat::kernel::ProgramHandle<()>)
       (:wat::core::let*
         (((spawn :trading::cache::Spawn)
-          (:trading::cache::Service 2 16))
+          (:trading::cache::Service/spawn 2 16))
          ((pool :trading::cache::ReqTxPool) (:wat::core::first spawn))
          ((driver :wat::kernel::ProgramHandle<()>) (:wat::core::second spawn))
 
@@ -244,6 +244,77 @@
                 ((Some _val) ())
                 (:None (:wat::test::assert-eq "client-b-miss" ""))))
             (:None (:wat::test::assert-eq "client-b-no-reply" "")))))
+        driver)))
+    (:wat::core::match (:wat::kernel::join-result handle) -> :()
+      ((Ok _) ())
+      ((Err _) (:wat::test::assert-eq "service-died" "")))))
+
+;; ─── T6: LRU eviction visible through Service Get/Put round-trips ──
+;;
+;; Probe T6 from DESIGN.md, lab-side. cap=2 cache; Put k1, Put k2,
+;; Put k3 — k1 should be evicted. Subsequent Get(k1) returns None;
+;; Get(k2) returns Some. This proves the queue-addressed wrapper
+;; preserves the HologramLRU eviction semantics — eviction visible
+;; from the client's view, not just at the substrate.
+
+(:deftest-hermetic :trading::test::cache::Service::test-step6-lru-eviction-via-service
+  (:wat::core::let*
+    (((handle :wat::kernel::ProgramHandle<()>)
+      (:wat::core::let*
+        (((spawn :trading::cache::Spawn)
+          (:trading::cache::Service/spawn 1 2))
+         ((pool :trading::cache::ReqTxPool) (:wat::core::first spawn))
+         ((driver :wat::kernel::ProgramHandle<()>) (:wat::core::second spawn))
+         ((tx :trading::cache::ReqTx) (:wat::kernel::HandlePool::pop pool))
+         ((_finish :()) (:wat::kernel::HandlePool::finish pool))
+
+         ((reply-pair :wat::kernel::QueuePair<Option<wat::holon::HolonAST>>)
+          (:wat::kernel::make-bounded-queue :Option<wat::holon::HolonAST> 1))
+         ((reply-tx :trading::cache::GetReplyTx)
+          (:wat::core::first reply-pair))
+         ((reply-rx :trading::cache::GetReplyRx)
+          (:wat::core::second reply-pair))
+
+         ((k1 :wat::holon::HolonAST) (:wat::holon::leaf :first))
+         ((k2 :wat::holon::HolonAST) (:wat::holon::leaf :second))
+         ((k3 :wat::holon::HolonAST) (:wat::holon::leaf :third))
+         ((v :wat::holon::HolonAST) (:wat::holon::leaf :payload))
+
+         ;; Three puts at cap=2; k1 gets evicted by k3.
+         ((_p1 :wat::kernel::Sent)
+          (:wat::kernel::send tx (:trading::cache::Request::Put k1 v)))
+         ((_p2 :wat::kernel::Sent)
+          (:wat::kernel::send tx (:trading::cache::Request::Put k2 v)))
+         ((_p3 :wat::kernel::Sent)
+          (:wat::kernel::send tx (:trading::cache::Request::Put k3 v)))
+
+         ;; Get k1 — evicted, expect None.
+         ((_g1 :wat::kernel::Sent)
+          (:wat::kernel::send tx
+            (:trading::cache::Request::Get k1 reply-tx)))
+         ((reply-1 :Option<Option<wat::holon::HolonAST>>)
+          (:wat::kernel::recv reply-rx))
+         ((_check-1 :())
+          (:wat::core::match reply-1 -> :()
+            ((Some inner)
+              (:wat::core::match inner -> :()
+                ((Some _) (:wat::test::assert-eq "k1-not-evicted" ""))
+                (:None ())))
+            (:None (:wat::test::assert-eq "no-reply-1" ""))))
+
+         ;; Get k2 — survived, expect Some.
+         ((_g2 :wat::kernel::Sent)
+          (:wat::kernel::send tx
+            (:trading::cache::Request::Get k2 reply-tx)))
+         ((reply-2 :Option<Option<wat::holon::HolonAST>>)
+          (:wat::kernel::recv reply-rx))
+         ((_check-2 :())
+          (:wat::core::match reply-2 -> :()
+            ((Some inner)
+              (:wat::core::match inner -> :()
+                ((Some _) ())
+                (:None (:wat::test::assert-eq "k2-evicted" ""))))
+            (:None (:wat::test::assert-eq "no-reply-2" "")))))
         driver)))
     (:wat::core::match (:wat::kernel::join-result handle) -> :()
       ((Ok _) ())

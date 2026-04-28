@@ -149,7 +149,7 @@
 ;; scope (drops the pool's tail), and joins the driver.
 
 (:wat::core::define
-  (:trading::cache::Service
+  (:trading::cache::Service/spawn
     (count :i64)
     (cap :i64)
     -> :trading::cache::Spawn)

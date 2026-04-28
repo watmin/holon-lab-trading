@@ -138,3 +138,38 @@
         ((Some _) false)
         (:None    true))))
     (:wat::test::assert-eq is-none true)))
+
+;; ─── T6: LRU eviction at cap drops oldest from BOTH sidecar + Hologram ──
+;;
+;; L1's terminal-cache is a HologramLRU. cap=2 forces eviction on the
+;; third put. After (k1, v1) → (k2, v2) → (k3, v3) puts, k1 should be
+;; gone from the cache: get-terminal(k1) returns None even though the
+;; LRU is full. This is the lab-side mirror of
+;; wat-hologram-lru's test-lru-evicts-from-hologram, exercised through
+;; the L1 wrapper.
+
+(:deftest :trading::test::cache::L1::test-lru-eviction-at-cap
+  (:wat::core::let*
+    (((l1 :trading::cache::L1) (:trading::cache::L1/make 2))
+     ((k1 :wat::holon::HolonAST) (:wat::holon::leaf :first))
+     ((k2 :wat::holon::HolonAST) (:wat::holon::leaf :second))
+     ((k3 :wat::holon::HolonAST) (:wat::holon::leaf :third))
+     ((v :wat::holon::HolonAST) (:wat::holon::leaf :payload))
+     ((_ :()) (:trading::cache::L1/put-terminal l1 k1 v))
+     ((_ :()) (:trading::cache::L1/put-terminal l1 k2 v))
+     ((_ :()) (:trading::cache::L1/put-terminal l1 k3 v))
+     ;; k1 evicted
+     ((g1 :Option<wat::holon::HolonAST>) (:trading::cache::L1/get-terminal l1 k1))
+     ((k1-evicted :bool)
+      (:wat::core::match g1 -> :bool
+        ((Some _) false)
+        (:None    true)))
+     ;; k2 still there
+     ((g2 :Option<wat::holon::HolonAST>) (:trading::cache::L1/get-terminal l1 k2))
+     ((k2-present :bool)
+      (:wat::core::match g2 -> :bool
+        ((Some _) true)
+        (:None    false))))
+    (:wat::test::assert-eq
+      (:wat::core::if k1-evicted -> :bool k2-present false)
+      true)))
