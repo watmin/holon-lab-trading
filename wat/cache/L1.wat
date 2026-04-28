@@ -99,3 +99,33 @@
   (:wat::core::i64::+
     (:wat::holon::HologramLRU/len (:trading::cache::L1/next l1))
     (:wat::holon::HologramLRU/len (:trading::cache::L1/terminal l1))))
+
+;; ─── lookup — cache-only chain traversal ─────────────────────────
+;;
+;; Walks through the L1 caches WITHOUT invoking the substrate walker.
+;; Three outcomes:
+;;
+;;   1. terminal-cache hit on form-h → return Some(terminal)
+;;   2. next-cache hit on form-h → recurse on next-h
+;;   3. neither → return None (caller decides what to do)
+;;
+;; This is the pure-cache primitive. The walker (a separate file
+;; that also calls :wat::eval::walk on miss) composes lookup + walk.
+;; Splitting the two pieces means we can test cache-traversal
+;; semantics independent of the walker integration.
+(:wat::core::define
+  (:trading::cache::L1/lookup
+    (l1 :trading::cache::L1)
+    (pos :f64)
+    (form-h :wat::holon::HolonAST)
+    -> :Option<wat::holon::HolonAST>)
+  (:wat::core::match
+    (:trading::cache::L1/get-terminal l1 pos form-h)
+    -> :Option<wat::holon::HolonAST>
+    ((Some t) (Some t))
+    (:None
+      (:wat::core::match
+        (:trading::cache::L1/get-next l1 pos form-h)
+        -> :Option<wat::holon::HolonAST>
+        ((Some next-h) (:trading::cache::L1/lookup l1 pos next-h))
+        (:None :None)))))

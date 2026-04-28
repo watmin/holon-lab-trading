@@ -83,3 +83,55 @@
      ((_ :()) (:trading::cache::L1/put-terminal l1 5.0 k2 v2))
      ((n :i64) (:trading::cache::L1/len l1)))
     (:wat::test::assert-eq n 2)))
+
+;; ─── lookup: terminal hit on direct form ────────────────────────
+
+(:deftest :trading::test::cache::L1::test-lookup-terminal-direct
+  (:wat::core::let*
+    (((l1 :trading::cache::L1) (:trading::cache::L1/make 10000 16))
+     ((form :wat::holon::HolonAST) (:wat::holon::leaf :form))
+     ((terminal :wat::holon::HolonAST) (:wat::holon::leaf :answer))
+     ((_ :()) (:trading::cache::L1/put-terminal l1 5.0 form terminal))
+     ((got :Option<wat::holon::HolonAST>)
+      (:trading::cache::L1/lookup l1 5.0 form))
+     ((found :wat::holon::HolonAST)
+      (:wat::core::match got -> :wat::holon::HolonAST
+        ((Some h) h)
+        (:None    (:wat::holon::leaf :unreachable)))))
+    (:wat::test::assert-eq found terminal)))
+
+;; ─── lookup: chain through next-cache to terminal-cache ─────────
+;;
+;; pre-seed: form → next, next → terminal. lookup(form) follows
+;; next, then hits terminal. Tests the recursive chain-walking
+;; without involving :wat::eval::walk.
+
+(:deftest :trading::test::cache::L1::test-lookup-chain-via-next
+  (:wat::core::let*
+    (((l1 :trading::cache::L1) (:trading::cache::L1/make 10000 16))
+     ((form :wat::holon::HolonAST) (:wat::holon::leaf :form))
+     ((next :wat::holon::HolonAST) (:wat::holon::leaf :next))
+     ((terminal :wat::holon::HolonAST) (:wat::holon::leaf :terminal))
+     ((_ :()) (:trading::cache::L1/put-next l1 5.0 form next))
+     ((_ :()) (:trading::cache::L1/put-terminal l1 5.0 next terminal))
+     ((got :Option<wat::holon::HolonAST>)
+      (:trading::cache::L1/lookup l1 5.0 form))
+     ((found :wat::holon::HolonAST)
+      (:wat::core::match got -> :wat::holon::HolonAST
+        ((Some h) h)
+        (:None    (:wat::holon::leaf :unreachable)))))
+    (:wat::test::assert-eq found terminal)))
+
+;; ─── lookup: empty caches return None ───────────────────────────
+
+(:deftest :trading::test::cache::L1::test-lookup-empty-returns-none
+  (:wat::core::let*
+    (((l1 :trading::cache::L1) (:trading::cache::L1/make 10000 16))
+     ((form :wat::holon::HolonAST) (:wat::holon::leaf :form))
+     ((got :Option<wat::holon::HolonAST>)
+      (:trading::cache::L1/lookup l1 5.0 form))
+     ((is-none :bool)
+      (:wat::core::match got -> :bool
+        ((Some _) false)
+        (:None    true))))
+    (:wat::test::assert-eq is-none true)))
