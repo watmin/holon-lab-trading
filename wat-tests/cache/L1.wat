@@ -145,7 +145,7 @@
 ;; third put. After (k1, v1) → (k2, v2) → (k3, v3) puts, k1 should be
 ;; gone from the cache: get-terminal(k1) returns None even though the
 ;; LRU is full. This is the lab-side mirror of
-;; wat-hologram-lru's test-lru-evicts-from-hologram, exercised through
+;; wat-holon-lru's test-lru-evicts-from-hologram, exercised through
 ;; the L1 wrapper.
 
 (:deftest :trading::test::cache::L1::test-lru-eviction-at-cap

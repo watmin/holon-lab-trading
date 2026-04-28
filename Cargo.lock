@@ -731,7 +731,7 @@ dependencies = [
  "parquet",
  "rusqlite",
  "wat",
- "wat-hologram-lru",
+ "wat-holon-lru",
  "wat-lru",
  "wat-macros",
 ]
@@ -1533,7 +1533,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "wat-hologram-lru"
+name = "wat-holon-lru"
 version = "0.1.0"
 dependencies = [
  "wat",
