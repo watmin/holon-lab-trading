@@ -2,8 +2,9 @@
 ;;
 ;; The L2 cache layer is two parallel cache services — one for
 ;; (form-h → next-h) edges and one for (form-h → terminal-h) answers
-;; (mirroring the L1 split). Each is a `:trading::cache::Service`
-;; instance with its own HandlePool and driver thread.
+;; (mirroring the L1 split). Each is a
+;; `:wat::holon::lru::HologramCacheService` instance with its own
+;; HandlePool and driver thread.
 ;;
 ;; This file ships the orchestrator: one `L2/spawn count cap` call
 ;; returns both spawns wrapped in a `:trading::cache::L2` struct.
@@ -17,9 +18,9 @@
 ;; outer joins both drivers.
 
 (:wat::core::struct :trading::cache::L2
-  (next-pool :trading::cache::ReqTxPool)
+  (next-pool :wat::holon::lru::HologramCacheService::ReqTxPool)
   (next-driver :wat::kernel::ProgramHandle<()>)
-  (terminal-pool :trading::cache::ReqTxPool)
+  (terminal-pool :wat::holon::lru::HologramCacheService::ReqTxPool)
   (terminal-driver :wat::kernel::ProgramHandle<()>))
 
 ;; Spawn both cache services. `count` is per-cache (each cache gets
@@ -31,21 +32,23 @@
 ;; The reporter + metrics-cadence pair is shared across both services
 ;; (next + terminal). Caller passes once; both services use them.
 ;; Each service runs its own cadence-gate independently — they don't
-;; coordinate. Pass `(:trading::cache::null-reporter)` /
-;; `(:trading::cache::null-metrics-cadence)` for the no-reporting case.
+;; coordinate. Pass `:wat::holon::lru::HologramCacheService/null-reporter`
+;; (fn-by-path) and
+;; `(:wat::holon::lru::HologramCacheService/null-metrics-cadence)`
+;; (nullary call returning the struct) for the no-reporting case.
 (:wat::core::define
   (:trading::cache::L2/spawn<G>
     (count :i64)
     (cap :i64)
-    (reporter :trading::cache::Reporter)
-    (metrics-cadence :trading::cache::MetricsCadence<G>)
+    (reporter :wat::holon::lru::HologramCacheService::Reporter)
+    (metrics-cadence :wat::holon::lru::HologramCacheService::MetricsCadence<G>)
     -> :trading::cache::L2)
   (:wat::core::let*
-    (((next-spawn :trading::cache::Spawn)
-      (:trading::cache::Service/spawn
+    (((next-spawn :wat::holon::lru::HologramCacheService::Spawn)
+      (:wat::holon::lru::HologramCacheService/spawn
         count cap reporter metrics-cadence))
-     ((terminal-spawn :trading::cache::Spawn)
-      (:trading::cache::Service/spawn
+     ((terminal-spawn :wat::holon::lru::HologramCacheService::Spawn)
+      (:wat::holon::lru::HologramCacheService/spawn
         count cap reporter metrics-cadence)))
     (:trading::cache::L2/new
       (:wat::core::first next-spawn)

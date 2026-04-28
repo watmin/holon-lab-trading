@@ -4,13 +4,12 @@
 ;; come up, accept Put + Get round-trips on each, and shut down
 ;; cleanly when the client scope drops the popped handles.
 ;;
-;; Same nested-let* shape as Service.wat's step5 multi-client test —
-;; outer holds the two drivers; inner owns the popped per-cache
-;; handles + reply channels.
+;; Same nested-let* shape as substrate HologramCacheService's
+;; step5 multi-client test — outer holds the two drivers; inner owns
+;; the popped per-cache handles + reply channels.
 
 (:wat::test::make-deftest :deftest-hermetic
-  ((:wat::load-file! "wat/cache/Service.wat")
-   (:wat::load-file! "wat/cache/L2-spawn.wat")))
+  ((:wat::load-file! "wat/cache/L2-spawn.wat")))
 
 ;; ─── L2 spawn + put/get round-trip on each cache ────────────────
 
@@ -19,38 +18,38 @@
     (((drivers :(wat::kernel::ProgramHandle<()>,wat::kernel::ProgramHandle<()>))
       (:wat::core::let*
         (((l2 :trading::cache::L2)
-          (:trading::cache::L2/spawn 1 16 :trading::cache::null-reporter (:trading::cache::null-metrics-cadence)))
-         ((next-pool :trading::cache::ReqTxPool)
+          (:trading::cache::L2/spawn 1 16 :wat::holon::lru::HologramCacheService/null-reporter (:wat::holon::lru::HologramCacheService/null-metrics-cadence)))
+         ((next-pool :wat::holon::lru::HologramCacheService::ReqTxPool)
           (:trading::cache::L2/next-pool l2))
          ((next-driver :wat::kernel::ProgramHandle<()>)
           (:trading::cache::L2/next-driver l2))
-         ((terminal-pool :trading::cache::ReqTxPool)
+         ((terminal-pool :wat::holon::lru::HologramCacheService::ReqTxPool)
           (:trading::cache::L2/terminal-pool l2))
          ((terminal-driver :wat::kernel::ProgramHandle<()>)
           (:trading::cache::L2/terminal-driver l2))
 
          ;; Pop one client handle from each pool; finish to assert
          ;; no orphans (count=1 means exactly one handle each).
-         ((next-tx :trading::cache::ReqTx)
+         ((next-tx :wat::holon::lru::HologramCacheService::ReqTx)
           (:wat::kernel::HandlePool::pop next-pool))
          ((_finish-next :()) (:wat::kernel::HandlePool::finish next-pool))
-         ((terminal-tx :trading::cache::ReqTx)
+         ((terminal-tx :wat::holon::lru::HologramCacheService::ReqTx)
           (:wat::kernel::HandlePool::pop terminal-pool))
          ((_finish-terminal :()) (:wat::kernel::HandlePool::finish terminal-pool))
 
          ;; Reply channels — one per cache, single-shot for the test.
          ((reply-pair-n :wat::kernel::QueuePair<Option<wat::holon::HolonAST>>)
           (:wat::kernel::make-bounded-queue :Option<wat::holon::HolonAST> 1))
-         ((reply-tx-n :trading::cache::GetReplyTx)
+         ((reply-tx-n :wat::holon::lru::HologramCacheService::GetReplyTx)
           (:wat::core::first reply-pair-n))
-         ((reply-rx-n :trading::cache::GetReplyRx)
+         ((reply-rx-n :wat::holon::lru::HologramCacheService::GetReplyRx)
           (:wat::core::second reply-pair-n))
 
          ((reply-pair-t :wat::kernel::QueuePair<Option<wat::holon::HolonAST>>)
           (:wat::kernel::make-bounded-queue :Option<wat::holon::HolonAST> 1))
-         ((reply-tx-t :trading::cache::GetReplyTx)
+         ((reply-tx-t :wat::holon::lru::HologramCacheService::GetReplyTx)
           (:wat::core::first reply-pair-t))
-         ((reply-rx-t :trading::cache::GetReplyRx)
+         ((reply-rx-t :wat::holon::lru::HologramCacheService::GetReplyRx)
           (:wat::core::second reply-pair-t))
 
          ((kn :wat::holon::HolonAST) (:wat::holon::leaf :next-key))
@@ -61,10 +60,10 @@
          ;; cache-next: Put + Get
          ((_pn :wat::kernel::Sent)
           (:wat::kernel::send next-tx
-            (:trading::cache::Request::Put kn vn)))
+            (:wat::holon::lru::HologramCacheService::Request::Put kn vn)))
          ((_gn :wat::kernel::Sent)
           (:wat::kernel::send next-tx
-            (:trading::cache::Request::Get kn reply-tx-n)))
+            (:wat::holon::lru::HologramCacheService::Request::Get kn reply-tx-n)))
          ((reply-n :Option<Option<wat::holon::HolonAST>>)
           (:wat::kernel::recv reply-rx-n))
          ((_check-n :())
@@ -78,10 +77,10 @@
          ;; cache-terminal: Put + Get
          ((_pt :wat::kernel::Sent)
           (:wat::kernel::send terminal-tx
-            (:trading::cache::Request::Put kt vt)))
+            (:wat::holon::lru::HologramCacheService::Request::Put kt vt)))
          ((_gt :wat::kernel::Sent)
           (:wat::kernel::send terminal-tx
-            (:trading::cache::Request::Get kt reply-tx-t)))
+            (:wat::holon::lru::HologramCacheService::Request::Get kt reply-tx-t)))
          ((reply-t :Option<Option<wat::holon::HolonAST>>)
           (:wat::kernel::recv reply-rx-t))
          ((_check-t :())
@@ -115,28 +114,28 @@
     (((drivers :(wat::kernel::ProgramHandle<()>,wat::kernel::ProgramHandle<()>))
       (:wat::core::let*
         (((l2 :trading::cache::L2)
-          (:trading::cache::L2/spawn 1 16 :trading::cache::null-reporter (:trading::cache::null-metrics-cadence)))
-         ((next-pool :trading::cache::ReqTxPool)
+          (:trading::cache::L2/spawn 1 16 :wat::holon::lru::HologramCacheService/null-reporter (:wat::holon::lru::HologramCacheService/null-metrics-cadence)))
+         ((next-pool :wat::holon::lru::HologramCacheService::ReqTxPool)
           (:trading::cache::L2/next-pool l2))
          ((next-driver :wat::kernel::ProgramHandle<()>)
           (:trading::cache::L2/next-driver l2))
-         ((terminal-pool :trading::cache::ReqTxPool)
+         ((terminal-pool :wat::holon::lru::HologramCacheService::ReqTxPool)
           (:trading::cache::L2/terminal-pool l2))
          ((terminal-driver :wat::kernel::ProgramHandle<()>)
           (:trading::cache::L2/terminal-driver l2))
 
-         ((next-tx :trading::cache::ReqTx)
+         ((next-tx :wat::holon::lru::HologramCacheService::ReqTx)
           (:wat::kernel::HandlePool::pop next-pool))
          ((_finish-next :()) (:wat::kernel::HandlePool::finish next-pool))
-         ((terminal-tx :trading::cache::ReqTx)
+         ((terminal-tx :wat::holon::lru::HologramCacheService::ReqTx)
           (:wat::kernel::HandlePool::pop terminal-pool))
          ((_finish-terminal :()) (:wat::kernel::HandlePool::finish terminal-pool))
 
          ((reply-pair :wat::kernel::QueuePair<Option<wat::holon::HolonAST>>)
           (:wat::kernel::make-bounded-queue :Option<wat::holon::HolonAST> 1))
-         ((reply-tx :trading::cache::GetReplyTx)
+         ((reply-tx :wat::holon::lru::HologramCacheService::GetReplyTx)
           (:wat::core::first reply-pair))
-         ((reply-rx :trading::cache::GetReplyRx)
+         ((reply-rx :wat::holon::lru::HologramCacheService::GetReplyRx)
           (:wat::core::second reply-pair))
 
          ((k :wat::holon::HolonAST) (:wat::holon::leaf :only-in-next))
@@ -145,12 +144,12 @@
          ;; Put k → v ONLY on cache-next.
          ((_p :wat::kernel::Sent)
           (:wat::kernel::send next-tx
-            (:trading::cache::Request::Put k v)))
+            (:wat::holon::lru::HologramCacheService::Request::Put k v)))
          ;; Get k from cache-TERMINAL — should miss; key was never
          ;; put on this cache.
          ((_g :wat::kernel::Sent)
           (:wat::kernel::send terminal-tx
-            (:trading::cache::Request::Get k reply-tx)))
+            (:wat::holon::lru::HologramCacheService::Request::Get k reply-tx)))
          ((reply :Option<Option<wat::holon::HolonAST>>)
           (:wat::kernel::recv reply-rx))
          ((_check :())
