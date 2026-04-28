@@ -27,16 +27,26 @@
 ;; LRU global bound. Reasonable defaults for the trader: count =
 ;; thinker-count, cap = 10000 (~100 entries per slot at the default
 ;; dim-count).
+;;
+;; The reporter + metrics-cadence pair is shared across both services
+;; (next + terminal). Caller passes once; both services use them.
+;; Each service runs its own cadence-gate independently — they don't
+;; coordinate. Pass `(:trading::cache::null-reporter)` /
+;; `(:trading::cache::null-metrics-cadence)` for the no-reporting case.
 (:wat::core::define
-  (:trading::cache::L2/spawn
+  (:trading::cache::L2/spawn<G>
     (count :i64)
     (cap :i64)
+    (reporter :trading::cache::Reporter)
+    (metrics-cadence :trading::cache::MetricsCadence<G>)
     -> :trading::cache::L2)
   (:wat::core::let*
     (((next-spawn :trading::cache::Spawn)
-      (:trading::cache::Service/spawn count cap))
+      (:trading::cache::Service/spawn
+        count cap reporter metrics-cadence))
      ((terminal-spawn :trading::cache::Spawn)
-      (:trading::cache::Service/spawn count cap)))
+      (:trading::cache::Service/spawn
+        count cap reporter metrics-cadence)))
     (:trading::cache::L2/new
       (:wat::core::first next-spawn)
       (:wat::core::second next-spawn)

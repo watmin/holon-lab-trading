@@ -19,7 +19,7 @@
     (((drivers :(wat::kernel::ProgramHandle<()>,wat::kernel::ProgramHandle<()>))
       (:wat::core::let*
         (((l2 :trading::cache::L2)
-          (:trading::cache::L2/spawn 1 16))
+          (:trading::cache::L2/spawn 1 16 :trading::cache::null-reporter (:trading::cache::null-metrics-cadence)))
          ((next-pool :trading::cache::ReqTxPool)
           (:trading::cache::L2/next-pool l2))
          ((next-driver :wat::kernel::ProgramHandle<()>)
@@ -115,7 +115,7 @@
     (((drivers :(wat::kernel::ProgramHandle<()>,wat::kernel::ProgramHandle<()>))
       (:wat::core::let*
         (((l2 :trading::cache::L2)
-          (:trading::cache::L2/spawn 1 16))
+          (:trading::cache::L2/spawn 1 16 :trading::cache::null-reporter (:trading::cache::null-metrics-cadence)))
          ((next-pool :trading::cache::ReqTxPool)
           (:trading::cache::L2/next-pool l2))
          ((next-driver :wat::kernel::ProgramHandle<()>)

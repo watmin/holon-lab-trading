@@ -45,8 +45,8 @@
    ;; ─── Step 3 helper — drive Service/loop, return final len ──
    ;; HologramLRU is thread-owned; we cannot return the cache itself
    ;; across the join boundary. Compute len inside the worker; only
-   ;; the i64 crosses. The Service constructor wraps Service/loop
-   ;; the same way (returning :()) for the same reason.
+   ;; the i64 crosses. Pass null-metrics-cadence + null-reporter — these
+   ;; tests don't care about reporting.
    (:wat::core::define
      (:trading::test::cache::Service::run-loop-then-len
        (req-rxs :Vec<trading::cache::ReqRx>)
@@ -54,12 +54,18 @@
        -> :i64)
      (:wat::core::let*
        (((cache :wat::holon::HologramLRU)
+         (:wat::holon::HologramLRU/make
+           (:wat::holon::filter-coincident)
+           cap))
+        ((initial :trading::cache::State)
+         (:trading::cache::State/new cache (:trading::cache::Stats/zero)))
+        ((final :trading::cache::State)
          (:trading::cache::Service/loop
-           req-rxs
-           (:wat::holon::HologramLRU/make
-             (:wat::holon::filter-coincident)
-             cap))))
-       (:wat::holon::HologramLRU/len cache)))))
+           req-rxs initial
+           :trading::cache::null-reporter
+           (:trading::cache::null-metrics-cadence))))
+       (:wat::holon::HologramLRU/len
+         (:trading::cache::State/cache final))))))
 
 ;; ─── Step 1 — spawn + join, no channels ─────────────────────────
 
@@ -145,7 +151,7 @@
             req-rx))
          ((h :wat::kernel::ProgramHandle<()>)
           (:wat::kernel::spawn
-            :trading::cache::Service/run rxs 16))
+            :trading::cache::Service/run rxs 16 :trading::cache::null-reporter (:trading::cache::null-metrics-cadence)))
 
          ((reply-pair :wat::kernel::QueuePair<Option<wat::holon::HolonAST>>)
           (:wat::kernel::make-bounded-queue :Option<wat::holon::HolonAST> 1))
@@ -184,7 +190,7 @@
     (((handle :wat::kernel::ProgramHandle<()>)
       (:wat::core::let*
         (((spawn :trading::cache::Spawn)
-          (:trading::cache::Service/spawn 2 16))
+          (:trading::cache::Service/spawn 2 16 :trading::cache::null-reporter (:trading::cache::null-metrics-cadence)))
          ((pool :trading::cache::ReqTxPool) (:wat::core::first spawn))
          ((driver :wat::kernel::ProgramHandle<()>) (:wat::core::second spawn))
 
@@ -262,7 +268,7 @@
     (((handle :wat::kernel::ProgramHandle<()>)
       (:wat::core::let*
         (((spawn :trading::cache::Spawn)
-          (:trading::cache::Service/spawn 1 2))
+          (:trading::cache::Service/spawn 1 2 :trading::cache::null-reporter (:trading::cache::null-metrics-cadence)))
          ((pool :trading::cache::ReqTxPool) (:wat::core::first spawn))
          ((driver :wat::kernel::ProgramHandle<()>) (:wat::core::second spawn))
          ((tx :trading::cache::ReqTx) (:wat::kernel::HandlePool::pop pool))
