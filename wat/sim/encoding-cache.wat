@@ -66,9 +66,9 @@
   (:trading::sim::encode-stats-new -> :trading::sim::EncodeStats)
   (:wat::core::let*
     (((s :trading::sim::EncodeStats) (:wat::lru::LocalCache::new 16))
-     ((_ :()) (:wat::lru::LocalCache::put s "hits" 0))
-     ((_ :()) (:wat::lru::LocalCache::put s "misses" 0))
-     ((_ :()) (:wat::lru::LocalCache::put s "ops" 0)))
+     ((_ :Option<(String,i64)>) (:wat::lru::LocalCache::put s "hits" 0))
+     ((_ :Option<(String,i64)>) (:wat::lru::LocalCache::put s "misses" 0))
+     ((_ :Option<(String,i64)>) (:wat::lru::LocalCache::put s "ops" 0)))
     s))
 
 
@@ -83,7 +83,10 @@
       (:wat::core::match (:wat::lru::LocalCache::get stats key) -> :i64
         ((Some n) n)
         (:None 0))))
-    (:wat::lru::LocalCache::put stats key (:wat::core::+ current 1))))
+    (:wat::core::let*
+      (((_ :Option<(String,i64)>)
+        (:wat::lru::LocalCache::put stats key (:wat::core::+ current 1))))
+      ())))
 
 
 ;; Read a counter slot (0 if absent).
@@ -117,7 +120,8 @@
         (:wat::core::let*
           (((_ :()) (:trading::sim::encode-stats/incr stats "misses"))
            ((v :wat::holon::Vector) (:wat::holon::encode ast))
-           ((_ :()) (:wat::lru::LocalCache::put cache ast v)))
+           ((_ :Option<(wat::holon::HolonAST,wat::holon::Vector)>)
+            (:wat::lru::LocalCache::put cache ast v)))
           v)))))
 
 
