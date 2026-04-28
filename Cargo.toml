@@ -30,6 +30,10 @@ name = "proof_003"
 path = "tests/proof/proof_003.rs"
 
 [[test]]
+name = "proof_004"
+path = "tests/proof/proof_004.rs"
+
+[[test]]
 name = "experiment_008"
 path = "tests/experiment/experiment_008.rs"
 
@@ -113,6 +117,7 @@ sim-smoke = []
 proof-001 = []
 proof-002 = []
 proof-003 = []
+proof-004 = []
 experiment-008 = []
 experiment-009 = []
 experiment-010 = []
