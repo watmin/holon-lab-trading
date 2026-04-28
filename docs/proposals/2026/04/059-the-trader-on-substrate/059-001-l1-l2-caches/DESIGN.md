@@ -1,17 +1,25 @@
 # 059-001 — L1/L2 caches on the new substrate
 
-**Status:** PROPOSED 2026-04-27.
+**Status:** PROPOSED 2026-04-27. Reframed 2026-04-27 after study of
+BOOK Ch.65–68 + proofs 015 (expansion-chain) / 016 (dual-LRU) / 017
+(fuzzy-locality). v1 of this DESIGN proposed an exact+fuzzy hybrid;
+v2 (this one) drops the exact bucket per the substrate's
+chapter-66/67 framing — *the cache IS the algebra grid; there is no
+discretization to add back*.
+
 **Umbrella:** [`docs/proposals/2026/04/059-the-trader-on-substrate/`](../).
+
 **Predecessors:**
 - Substrate: arc 057 (typed HolonAST leaves), arc 058
   (`HashMap<HolonAST, V>`), arc 068 (`:wat::eval-step!`).
 - Lab proposal 057 (L1/L2 cache + parallel subtree compute) —
   approved with conditions; this sub-arc executes that design on
-  the new substrate.
-- Proofs: 016 v4 (dual-LRU coordinate cache), 017 (fuzzy-locality
-  cache via `coincident?`).
-- BOOK chapters 65 (the hologram), 66 (the fuzziness), 67 (the
-  spell).
+  the new substrate, *with the corrected fuzzy framing*.
+- Proofs: 015 (expansion-chain), 016 (dual-LRU coordinate cache —
+  exact-keyed v4), 017 (fuzzy-locality cache via `coincident?` —
+  v5 swapped exact for fuzzy on the terminal lookup).
+- BOOK chapters 59 (the dual-LRU named), 65 (the hologram), 66
+  (the fuzziness), 67 (the spell), 68 (the inscription).
 
 **Performance contract:** ≥272 candles/sec sustained on a 10k
 representative run after this slice ships.
@@ -21,15 +29,14 @@ representative run after this slice ships.
 ## Why this slice first
 
 The umbrella's chapter-65/66/67 claims rest on the cache being
-operational. Without L1+L2 wired, the substrate's distinctive
-properties (forms-as-coordinates, locality-keyed neighborhoods,
-spell-shareable work) are decorative. With the cache wired, every
-subsequent slice's thinker code automatically benefits from
-work-sharing — both within a thinker (L1 hit on repeated thoughts)
-and across thinkers (L2 hit on coincident thoughts).
+operational. Without it, the substrate's distinctive properties
+(forms-as-coordinates, locality-keyed neighborhoods, walker
+cooperation) are decorative. With the cache wired, every subsequent
+slice's thinker code automatically benefits from work-sharing —
+both within a thinker and across thinkers.
 
-The user's framing: *"the cache is required no matter what — it's an
-optimization that we must deliver on — not having it is
+The user's framing: *"the cache is required no matter what — it's
+an optimization that we must deliver on — not having it is
 disingenuous… the queues and services we've built are things in our
 cookbook."*
 
@@ -41,223 +48,351 @@ Slice 1 wires the cookbook. Subsequent slices stand on it.
 
 | Surface | Status |
 |---------|--------|
-| `wat::lru::LocalCache<K, V>` (arc 036) | Tier 2: thread-owned, zero-Mutex |
-| `wat::CacheService` program | Tier 3: cross-program, message-addressed |
-| `HashMap<HolonAST, V>` (arc 058) | exact-identity cache containers |
-| `coincident?` (arc 023) | algebra-grid identity predicate for fuzzy lookup |
-| Proof 016 v4's dual-LRU pattern | (form → next-form) + (form → terminal-value) |
-| Proof 017's fuzzy-locality pattern | linear-scan + `coincident?` |
-| `wat::eval-step!` (arc 068) | the stepper that fills the cache as it walks |
-| Proposal 057's design | approved blueprint; this sub-arc ships it |
-
-Nothing in the substrate needs to grow for this slice to land. The
-work is wiring + lab-side cache surface area.
+| `wat::lru::LocalCache<K, V>` (arc 036) | Tier 2: thread-owned, zero-Mutex (the substrate's exact-keyed LRU; this slice does NOT use it for the dual-LRU coordinate cache — see below — but encoding-cache scope may revisit) |
+| `wat::lru::CacheService` program (arc 036) | Tier 3: cross-program, message-addressed, generic over `<K,V>`. Shape we copy for the lab cache services — not the type we use directly because telemetry hooks aren't there. |
+| `HashMap<HolonAST, V>` (arc 058) | Available but **not load-bearing here** — exact equality is the wrong primitive for this cache (see "the cache primitive"). |
+| `:wat::holon::coincident?` (arc 023) | The substrate's "are these the same point on the algebra grid within sigma?" predicate. This IS the cache lookup. |
+| `:wat::holon::from-watast` (arc 057) | Canonical structural lift WatAST → HolonAST. Every cache key is a HolonAST produced by this. |
+| `:wat::eval-step!` (arc 068) | The stepper that fills the cache as it walks. |
+| `:trading::log::tick-gate` (lab) | Values-up rate gate; one tick per loop iteration; "open" every N ms. |
+| `:trading::log::LogEntry::Telemetry` (lab) | CloudWatch-style metric variant, batched through rundb. |
+| `:trading::rundb::Service/batch-log` (lab) | The metric pump destination. |
+| Proof 017's fuzzy walker | Reference implementation under `wat-tests-integ/experiment/021-fuzzy-locality/`. |
 
 ## What's missing (this slice)
 
-### A — Per-thinker L1 cache
+### A — The fuzzy cache primitive
 
-`wat::lru::LocalCache<HolonAST, Vector>` per thinker.
-Thread-owned, zero-Mutex, direct lookup.
-
-**Why dual-LRU (form → next-form + form → terminal-value):** per
-proof 016 v4. The next-cache catches partial work; the terminal-
-cache catches the answer. A walker mid-walk landing on a coordinate
-where next is known but terminal isn't has discovered shareable
-partial progress.
-
-**Why per-thinker rather than per-process:** a Market Observer's
-thoughts are largely disjoint from a Broker-Observer's. Per-thinker
-L1 keeps the working set bounded and keeps the cache thread-owned.
-
-**Capacity:** bounded by config; LRU eviction. Per Proposal 057's
-sizing analysis: 4K-8K entries covers the hot set across a few
-candles per thinker. Final number tunable.
-
-### B — Shared L2 cache
-
-`wat::CacheService` program shared across all thinkers in the
-process. Queue-addressed (queues only — no topics, no mailboxes).
-
-**Two cache modes inside the L2 service:**
-
-1. **Exact** — `HashMap<HolonAST, Vector>`. Pure structural identity;
-   O(1) lookup. Catches cross-thinker repetition of the same exact
-   thought form.
-2. **Fuzzy** — `Vec<(HolonAST, Vector)>` linear-scanned with
-   `coincident?` per proof 017. Catches near-equivalent thoughts
-   (e.g., two thinkers with slightly different scalar values that
-   land in the same Thermometer neighborhood).
-
-**The two modes coexist in one service.** A query passes through
-exact first; on miss, falls through to fuzzy; on miss, returns
-None. The thinker's worker computes fresh and writes back via the
-service.
-
-**Why the linear scan for fuzzy is acceptable here:** the L2's
-fuzzy bucket is bounded by configuration (e.g., 256 most-recent
-entries). For larger scales, future arc adds SimHash bucketing
-per Chapter 55's framing; this slice doesn't ship that.
-
-### C — Promotion + write-through protocol
-
-- Thinker queries L1 first. Exact match → use Vector.
-- L1 miss → query L2 (single request/reply queue pair).
-- L2 hit (exact OR fuzzy) → response includes the Vector;
-  thinker promotes to L1.
-- L2 miss → thinker computes the Vector via `:wat::holon::encode`;
-  writes it to L2 (request/reply queue pair); promotes to L1.
-
-**No locks anywhere.** L1 is thread-owned; L2's HashMap and
-fuzzy-Vec are owned by the CacheService program; queues do all
-the synchronization.
-
-### D — Encoding integration via `:wat::eval-step!`
-
-Per the umbrella's FOUNDATION.md, the per-thinker dataflow is:
+**One thing**, used everywhere:
 
 ```
-thought (HolonAST)
-  ├─ L1 lookup
-  │     ├─ hit → use cached Vector
-  │     └─ miss → L2 lookup
-  │            ├─ hit (exact or coincident?) → use; promote to L1
-  │            └─ miss → encode → store at L2 → promote to L1
-  └─ flow Vector to subspace + reckoner
+FuzzyCache<V> = Vec<(HolonAST, V)>
 ```
 
-The encode step is where `:wat::eval-step!` may help — if a
-thought's HolonAST has shared subtrees with previously-seen
-thoughts, `eval-step!`'s walk produces intermediate coordinates
-the cache can also catch. This sub-arc's slice keeps this simple:
-encode the WHOLE thought once, cache the (whole-thought → vector)
-mapping; later sub-arcs may instrument the per-step cache fill if
-profiling shows benefit.
+Bounded by capacity. Lookup is a linear `foldl` with
+`:wat::holon::coincident?` against the query key — first match
+wins. Insert appends to the end; on overflow, drop the oldest
+entry (FIFO). Optional move-to-front on hit (slice-1 ship
+without; revisit if profiling demands).
 
----
+**Why no exact bucket alongside.** BOOK Ch.66 + proof 017's v5:
 
-## Decisions to resolve
+- Byte-identical HolonASTs are coincident (cosine = 1). Linear scan
+  with `coincident?` subsumes exact match. An exact `HashMap`
+  alongside is dead weight that reintroduces the discretization
+  Ch.66 specifically architected away. (BOOK lines 30508–30514:
+  *"the cache is no longer a discretization of the algebra grid —
+  it IS the algebra grid, with its native tolerance."*)
+- The walker traverses chains whose leaves switch between F64
+  (quasi-orthogonal) and Thermometer (locality-preserving)
+  depending on the form's pre/post-β state. There's no clean point
+  to route some queries to an exact bucket and others to fuzzy —
+  the walker doesn't know in advance which depth carries the fuzz.
+  *"The same `coincident?` predicate runs at every level."* (BOOK
+  30461–30465.)
+- The fuzzy cache **is** the algebra grid. No second store needed.
 
-### Q1 — Where does the CacheService program live?
+**Linear-scan complexity is honest scope.** O(N) per lookup. SimHash
+bucketing (BOOK Ch.55) for sub-linear lookup is named on paper but
+not shipped. Slice 1 ships linear; future arc revisits when the
+benchmark surfaces a need.
 
-Two options:
+**Reference implementation: proof 018.** Slice 1 lifts proof 018's
+`:exp::CacheEntry` / `:exp::CoordinateCache` / `:exp::cache-empty`
+/ `:exp::cache-record` / `:exp::cache-lookup` shapes verbatim from
+`wat-tests-integ/experiment/022-fuzzy-on-both-stores/explore-fuzzy-on-both-stores.wat`
+into `wat/cache/FuzzyCache.wat`, generalized to take `<V>` so the
+EncodeCache (V = `Vector`) shares the primitive with the dual-LRU
+caches (V = `HolonAST`). The proof's lookup is a `foldl`
+short-circuiting via `match`-on-`(Some _)`; its insert is a
+`conj`. No more, no less.
 
-- **(a)** As a wat program in `wat/services/cache_service.wat` —
-  pure wat consumer using existing `wat::CacheService`-shaped
-  primitives.
-- **(b)** As a Rust struct in `src/cache/service.rs` — Rust-side
-  implementation with a wat-side wrapper for thinker queries.
+**Cap is `sqrt(d)`.** Per Q2/Q3 below: the algebra grid hosts
+~`sqrt(d)` distinguishable neighborhoods at d. The cache cap is
+the same number — beyond that, fuzzy lookups risk false-positive
+neighborhood matches. The cache constructor reads the ambient dim
+router at instantiation and computes the cap.
 
-**Recommended: (a) wat first, with the option to move to Rust if
-profiling demands.** The wat-vm's program shape supports this; the
-existing `wat::CacheService` from the substrate is the right shape
-to start with. If throughput at slice-5's 10k benchmark falls
-below 272/s, profile, decide.
+### B — The two coordinate caches
 
-### Q2 — L1 cache size per thinker
+Both `FuzzyCache<HolonAST>`. **Both fuzzy. Both store HolonAST
+values.** The terminal IS a HolonAST (Chapter 59: *42 IS an AST*) —
+encoding to a `Vector` is what `coincident?` does internally during
+lookup, not what the cache stores.
 
-Proposal 057 estimated 4K-8K entries cover the working set. Phase 1
-ships with 4096 entries per thinker; tunable via config.
+| Cache | Key | Value | What it serves |
+|---|---|---|---|
+| next-cache | `HolonAST` | `HolonAST` | "what's the next form after one rewrite?" — path edges |
+| terminal-cache | `HolonAST` | `HolonAST` | "what's this form's terminal value?" — answers (Ch.59: terminals are AST coordinates) |
 
-### Q3 — L2 fuzzy bucket size
+A walker landing on a coordinate where `next` is known but
+`terminal` isn't has discovered **partial work**. Even when the
+terminal misses, the next pointer moves the walker closer. Even
+when both miss exactly, fuzzy match against either may hit a
+neighborhood. They cooperate.
 
-Chapter 67's spell scales the cache across machines; this slice
-runs single-process. Bounded by config; ship at 256 entries; tune
-based on hit-rate observability.
+**Per the user's slice-1 directive: assume both caches are always
+fuzzy.** Proof 017 only swapped the terminal lookup explicitly; the
+proof session is producing reference code that fuzzes the next
+lookup too. Slice 1 commits to symmetric fuzzing as the foundation.
 
-### Q4 — Cache invalidation
+### C — Two layers (L1 + L2), same shape
 
-**There isn't any in slice 1.** A thought's Vector is deterministic
-given the form + the encoder + the seed. Forms don't drift; the
-algebra grid is timeless. LRU eviction is the only "removal";
-re-encountering an evicted form re-encodes from scratch.
+**L1 (per-thinker, thread-owned, value-up):**
 
-### Q5 — Where does `coincident?` live for L2 fuzzy lookup?
+Each thinker owns a `(next-cache, terminal-cache)` tuple of
+`FuzzyCache<HolonAST>`. Threaded through the thinker's tail-
+recursive loop. No Mutex. No queue. Direct lookup on the thinker's
+own thread. (Proof 016 line 134: *"No Mutex. No thread coordination.
+Just a HashMap value passed by ownership. Values up, not queues
+down."* — applies identically here, with `Vec` substituting for
+`HashMap`.)
 
-Per the substrate (arc 023), `:wat::holon::coincident?` is a
-runtime primitive callable from any wat program. The L2 fuzzy
-bucket scan calls it per entry. **Reuse the existing primitive.**
+**L2 (process-wide, queue-addressed):**
 
-### Q6 — Thread count
+Two cache service programs sharing the same `:trading::cache::
+Service<V>` shape (one instance per cache):
 
-Phase 1 doesn't specialize. The wat-vm's existing thread pool
-shape (per CLAUDE.md's archived description) handles the broker
-grid's parallelism. L1 is thread-owned (one cache per thinker
-thread); L2 is one program (one thread). Thread counts stay at
-the wat-vm defaults.
+- `cache-next: Service<HolonAST>` — owns a `FuzzyCache<HolonAST>` for next-form sharing.
+- `cache-terminal: Service<HolonAST>` — owns a `FuzzyCache<HolonAST>` for terminal sharing.
+
+Same protocol shape as `wat::lru::CacheService` (request/reply via
+queue + per-client reply channel) but lab-specific because the loop
+needs telemetry hooks (counters + tick-gate + LogEntry emission).
+Lab-side, not substrate.
+
+### D — The walker (cache-first then `:wat::eval::walk` on miss)
+
+`:trading::cache::resolve` is the cache-aware substitute for
+"encode a form" in the thinker's hot path. Reference shape lifted
+from proof 018's `wat-tests-integ/experiment/022-fuzzy-on-both-stores/explore-fuzzy-on-both-stores.wat`:
+
+```
+resolve(form-h, tier):
+  ;; 1. Cache lookup BEFORE the walker. Terminal hit ends.
+  on FuzzyCache.lookup(tier.terminal-cache, form-h) → Some(t):
+    return (t, tier)
+
+  ;; 2. Next-form hit short-circuits one or more steps.
+  on FuzzyCache.lookup(tier.next-cache, form-h) → Some(next-h):
+    return resolve(next-h, tier)
+
+  ;; 3. Both miss — invoke the substrate walker (arc 070).
+  ;;    The visit-fn fires once per coordinate with
+  ;;    (acc=tier, form-w, step-result) and returns Continue:
+  ;;
+  ;;    AlreadyTerminal t  → record (t → t) in terminal-cache
+  ;;    StepTerminal t     → record (form-h → t) in terminal-cache
+  ;;    StepNext next-w    → record (form-h → next-h) in next-cache
+  ;;
+  ;;    The walker handles iteration; the visit-fn just records.
+  case :wat::eval::walk(to-watast(form-h), tier, record-coordinate):
+    Ok((terminal, tier')): return (terminal, tier')
+    Err(_e): fall back to eval-ast!
+```
+
+**Skip is never used.** Proof 018's visitor returns `Continue` on
+every arm; all short-circuit logic happens in step 1 / step 2
+BEFORE `walk` is invoked. The arc-070 `WalkStep::Skip` variant
+remains available for consumers who want a different shape, but
+the cache walker doesn't need it — its short-circuit is
+structurally upstream.
+
+**The visit-fn is the lift point.** Proof 018's `record-coordinate`
+(`explore-fuzzy-on-both-stores.wat:191–217`) is the canonical
+shape for slice 1; reproducing it verbatim under the canonical
+`:trading::cache::*` paths is the right move.
+
+**Cache write strategy across L1 + L2:** L1 writes happen
+unconditionally (cheap, thread-local). L2 writes go through the
+service queue per step. The proof session noted batched L2 writes
+as a follow-up arc if profiling demands; slice 1 ships per-step
+and revisits on the throughput benchmark.
+
+### E — Telemetry (mandatory)
+
+The cache service program owns counters tracked across loop
+iterations. Each iteration ticks `:trading::log::tick-gate`; on
+"open" the loop packages the counters as `Vec<LogEntry::Telemetry>`,
+flushes via `:trading::rundb::Service/batch-log`, resets the
+window. Per the archive's `pre-wat-native/src/programs/{telemetry,
+stdlib/cache}.rs` cookbook the counter set is:
+
+| Metric | Unit | Meaning |
+|---|---|---|
+| `lookups` | Count | total `get` requests in the window |
+| `hits` | Count | fuzzy matches found (including byte-exact) |
+| `misses` | Count | scans that found no coincident entry |
+| `evictions` | Count | FIFO drops from the bounded Vec |
+| `size` | Count | Vec length at window close |
+| `scan_depth_avg` | Count | average entries scanned before terminate |
+| `ns_gets` | Microseconds | total time in lookup-side scans |
+| `ns_sets` | Microseconds | total time in insert + eviction |
+| `gets_serviced` | Count | requests dispatched to caller |
+| `sets_drained` | Count | inserts processed |
+
+Each metric becomes one `LogEntry::Telemetry` row. Dimensions JSON
+tags the cache identity (e.g., `{"cache":"next","layer":"L2"}` /
+`{"cache":"terminal","layer":"L2"}`). L1 emits the same metric set
+through the thinker's own gate cadence with
+`{"cache":"...","layer":"L1","thinker":"<name>"}`.
+
+Default rate gate: 5000ms (matches the archive's
+`make_rate_gate(Duration::from_secs(5))` default).
+
+### F — `:trading::sim::EncodeCache` migration (in scope)
+
+The lab's existing encoding hot-path cache `wat/sim/encoding-
+cache.wat` is a `wat::lru::LocalCache<HolonAST, Vector>` — exact
+key, no fuzz. Per the user's "everything fuzzy" mandate, this
+migrates to `FuzzyCache<Vector>` in this slice. The same FuzzyCache
+primitive instantiated with `V = wat::holon::Vector`. Telemetry
+counters apply identically.
+
+This migration is what guarantees ALL caches under the trader's
+hot path share the same fuzzy primitive — no exact-keyed leftover
+that surreptitiously routes around the algebra grid.
 
 ---
 
 ## What ships
 
-One slice. Single sub-arc. Pattern matches the substrate arcs
-(068's shape).
+One slice. One sub-arc. Two commits at natural boundaries: substrate
+gap first, lab walker second.
 
-### Files touched (probable layout — confirm at write time)
+### Substrate gap (commit 1)
 
-- `wat/services/cache_service.wat` (new) — the L2 program
-- `wat/cache/local.wat` (new) — the L1 wrapper around
-  `wat::lru::LocalCache`
-- `wat/cache/dual_lru.wat` (new) — proof 016 v4's dual-LRU pattern
-  expressed for thinker reuse
-- `wat/cache/fuzzy_lookup.wat` (new) — proof 017's fuzzy-locality
-  pattern for the L2 fuzzy bucket
-- `wat-tests-integ/059-001-l1-l2-caches/` (new) — probe tests
+`:wat::lru::LocalCache::len<K,V>` doesn't exist in wat-rs. We need
+it for the `size` telemetry metric on the LocalCache-backed encode
+cache during migration (and as a general capability). Small wat-rs
+arc:
+
+- `wat-rs/crates/wat-lru/src/lib.rs` — one-line `#[wat_dispatch]`
+  shim around `LruCache::len`.
+- `wat-rs/crates/wat-lru/wat/lru/LocalCache.wat` — `LocalCache::len`
+  wrapper.
+
+### Lab files (commit 2)
+
+- `wat/cache/FuzzyCache.wat` — the primitive (`new`, `lookup`,
+  `insert`, `len`, eviction). Generic over `V`. Linear-scan with
+  `coincident?`.
+- `wat/cache/Service.wat` — generic queue-addressed program.
+  Owns a `FuzzyCache<V>`. Tracks counters. Runs the tick-gate.
+  Emits `LogEntry::Telemetry` through rundb. Lifecycle mirrors
+  `RunDbService` / `wat::lru::CacheService`.
+- `wat/cache/L1.wat` — per-thinker dual cache helper. Two
+  `FuzzyCache<HolonAST>` threaded through the thinker's loop.
+- `wat/cache/walker.wat` — `:trading::cache::resolve`, the per-step
+  walker per § D. Calls `:wat::eval-step!`; writes per step to L1
+  and via service queues to L2.
+- `wat/cache/L2-spawn.wat` — setup helper that spawns the two cache
+  service drivers (`cache-next` + `cache-terminal`) and returns the
+  HandlePool tuple needed by thinkers for client distribution.
+- `wat/sim/encoding-cache.wat` — migrate from `LocalCache` to
+  `FuzzyCache<Vector>` per § F.
+- `wat-tests-integ/059-001-l1-l2-caches/` — probe tests + the
+  throughput gate.
 
 ### Probe tests
 
-- T1 — single-thinker exact hit. Encode thought twice; second
-  encoding hits L1.
-- T2 — single-thinker dual-LRU. Walk a multi-step form; cache
-  both (form → next) and (form → terminal); subsequent walk
-  short-circuits at the first cache hit.
-- T3 — cross-thinker exact hit. Two thinkers encode the same
-  exact thought; second thinker's L1 misses but L2 exact-bucket
-  hits.
-- T4 — cross-thinker fuzzy hit. Two thinkers encode coincident
-  but not byte-identical thoughts (one Thermometer's value
-  differs by ε within tolerance); second thinker's L2 fuzzy
-  bucket hits.
-- T5 — capacity probe. Fill L1 past its bound; verify LRU
-  eviction; oldest entry is gone; newest stays. Same for L2's
-  fuzzy bucket.
-- T6 — throughput baseline. With 10k synthetic candle-shaped
-  thought encodings, sustained throughput stays above 272
-  candles/sec on the test laptop class. The number is the
-  acceptance gate for this slice.
+| # | Probe | Acceptance |
+|---|-------|------------|
+| T1 | Single-thinker terminal-cache hit on a re-walked form | `coincident?` matches; cached terminal returned. |
+| T2 | Single-thinker next-cache hit shortcuts the walker | next-cache lookup returns the next form; walker recurses on it; terminal stored on unwind. |
+| T3 | Single-thinker fuzzy hit on coincident-but-not-byte-identical forms (Thermometer ε-perturbation) | second walk hits the first walk's cache entry. |
+| T4 | Cross-thinker L2 terminal hit via promotion | thinker B's L1 misses; L2 lookup hits; B promotes to its own L1. |
+| T5 | Cross-thinker L2 fuzzy hit | same as T4 but the keys differ within tolerance. |
+| T6 | FIFO eviction at capacity | both buckets, both layers; oldest entry gone, newest stays. |
+| T7 | Telemetry rows land in rundb at the gate cadence | window-close emits the full metric set; dimensions tag the cache identity. |
+| T8 | Throughput on 10k synthetic candle-shaped forms | sustained ≥272 c/s on the test laptop class. **Acceptance gate.** |
 
 ### Acceptance criteria
 
-- All six probe tests pass.
-- T6 throughput ≥272 candles/sec on a representative
-  10k-candle run.
-- No new substrate arcs needed (this is a pure consumer
-  slice).
-- No new wards filed (per BACKLOG B-5: *new wards only if we
-  need them*).
+- All eight probe tests pass.
+- T8 throughput ≥272 candles/sec on a representative 10k-candle
+  run.
+- One substrate arc shipped (`LocalCache::len` only — minimal
+  surface).
+- No new wards filed (per BACKLOG B-5).
+- `:trading::sim::EncodeCache` running on the same `FuzzyCache`
+  primitive as the dual-LRU caches.
 
 ---
 
-## Open questions (defer to inscription)
+## Open questions
 
-- **L1 + L2 hit-rate observability.** Slice 5's status panel
-  reads this. Slice 1 needs to expose hit/miss counters per
-  cache; the API surface for the panel can land in slice 5,
-  but the counters land here.
-- **Whether the L2's two cache modes (exact + fuzzy) should
-  be separate services or one service.** Default: one service,
-  two internal stores. If profiling shows contention, split.
-- **Whether `:wat::eval-step!`'s per-step caches go into L1, L2,
-  or both.** Default: per-step coordinates land in L1 only;
-  L2 holds whole-thought → Vector mappings. Revisit if
-  cross-thinker per-step sharing surfaces value.
+### Q1 — Where does the cache service program live? ✅ resolved (a)
+
+Lab-side wat (`wat/cache/Service.wat`) — substrate's
+`wat::lru::CacheService` doesn't have telemetry hooks; the lab's
+service knows about `LogEntry::Telemetry` and `RunDbService`. Same
+program shape, lab-specific concerns baked in.
+
+### Q2 — L1 fuzzy-cache size per thinker ✅ resolved sqrt(d)
+
+The Kanerva budget for the algebra grid at `d` is `floor(sqrt(d))`
+distinguishable neighborhoods — the same number that caps a
+Bundle's constituent count caps the cache's clean neighborhood
+count. Beyond sqrt(d), fuzzy lookups risk returning spurious
+coincident matches. Proof 018's T5 tests exactly this boundary.
+
+**Slice-1 default: `sqrt(d)` per cache.** Under the default
+router (arc 067, `DEFAULT_TIERS = [10000]`), that's 100 entries.
+A consumer can override and accept neighborhood-interference
+risk past sqrt(d).
+
+The cache constructor reads the ambient router at instantiation
+and computes the cap from there. No literal 100 baked in; when
+a consumer reconfigures the router (`set-dim-router!` to a
+different tier), the cache cap follows.
+
+### Q3 — L2 fuzzy-cache size per service ✅ resolved sqrt(d)
+
+Same primitive, same constraint. Defaults to `sqrt(d)` per cache
+(100 at d=10000). Cross-thinker breadth doesn't license
+neighborhood interference; if the working set exceeds sqrt(d),
+the consumer wants SimHash bucketing (Ch.55, Q7), not a bigger
+linear-scan Vec.
+
+### Q4 — Cache invalidation
+
+There isn't any in slice 1. A thought's terminal is deterministic
+given the form + the substrate. Forms don't drift; the algebra grid
+is timeless. FIFO eviction is the only "removal"; re-encountering
+an evicted form re-walks from scratch.
+
+### Q5 — Should fuzzy lookups also apply to the next-cache? ✅ yes
+
+Proof 017 only fuzzed the terminal lookup. The user's slice-1
+directive: **assume both caches are always fuzzy.** The proof
+session is producing reference code; slice 1 ships symmetric
+fuzzing.
+
+### Q6 — Per-step vs batched L2 writes
+
+Slice 1 ships per-step writes. The proof session is exploring
+whether batching materially outperforms; if it does, a follow-up
+arc adds a batched-write mode. Per-step is the foundation; batching
+is optimization.
+
+### Q7 — SimHash bucketing for sub-linear lookup
+
+Out of scope for slice 1 — BOOK Ch.55 names it as future work.
+Linear scan is the slice-1 substrate; the bench tells us when
+sub-linear is worth shipping.
+
+### Q8 — Networked cache (BOOK Ch.67's "Spell")
+
+Out of scope. Single-process. Future arc when cross-machine
+work-sharing matters.
 
 ---
 
 ## Slices
 
-One slice in this sub-arc. Single commit. Pattern matches
-arcs 058–068.
+One slice. Two commits at natural boundaries (substrate gap →
+lab walker). Pattern matches arcs 058 / 060 / 062 / 068.
 
 If during implementation the work surfaces a natural split, fork
 into sub-slices documented in the sub-arc's BACKLOG.md.
@@ -270,9 +405,12 @@ After this slice lands:
   the cache.
 - The status panel's hit-rate counters get wired in
   `059-005-status-panel-and-run/`.
+- A potential `059-006-simhash-bucketing` if T8 throughput
+  surfaces a need.
 
-The substrate-and-consumer cycle: this sub-arc is pure
-consumer; it builds on the substrate's caching primitives
-without growing the substrate itself.
+The substrate-and-consumer cycle: this sub-arc is mostly consumer
+(one minimal substrate gap for `LocalCache::len`); it builds on the
+substrate's caching primitives without growing the substrate
+fundamentally.
 
 PERSEVERARE
