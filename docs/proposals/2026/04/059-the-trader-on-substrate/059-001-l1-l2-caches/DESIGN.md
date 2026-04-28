@@ -1,25 +1,31 @@
 # 059-001 — L1/L2 caches on the new substrate
 
-**Status:** PROPOSED 2026-04-27. Reframed 2026-04-27 after study of
-BOOK Ch.65–68 + proofs 015 (expansion-chain) / 016 (dual-LRU) / 017
-(fuzzy-locality). v1 of this DESIGN proposed an exact+fuzzy hybrid;
-v2 (this one) drops the exact bucket per the substrate's
-chapter-66/67 framing — *the cache IS the algebra grid; there is no
-discretization to add back*.
+**Status:** PROPOSED 2026-04-27. Reframed 2026-04-27 (proof 018 →
+templates → coordinate cells). Reframed again 2026-04-28 after wat-rs
+arc 074 + 074 slice 2 shipped: substrate now exposes
+`:wat::holon::Hologram` (unbounded coordinate-cell store) and
+`:wat::holon::HologramLRU` (bounded sibling, wat-stdlib composition
+in `crates/wat-hologram-lru/`). v3 of this DESIGN replaces the
+proposed `FuzzyCache<V>` primitive with the substrate-shipped
+`HologramLRU` and drops the substrate-gap section (everything the lab
+needs is now in core or in wat-hologram-lru).
 
 **Umbrella:** [`docs/proposals/2026/04/059-the-trader-on-substrate/`](../).
 
 **Predecessors:**
 - Substrate: arc 057 (typed HolonAST leaves), arc 058
-  (`HashMap<HolonAST, V>`), arc 068 (`:wat::eval-step!`).
+  (`HashMap<HolonAST, V>`), arc 068 (`:wat::eval-step!`), arc 070
+  (`:wat::eval::walk`), arc 074 + slice 2 (`Hologram` + `HologramLRU`).
 - Lab proposal 057 (L1/L2 cache + parallel subtree compute) —
-  approved with conditions; this sub-arc executes that design on
-  the new substrate, *with the corrected fuzzy framing*.
+  approved with conditions; this sub-arc executes that design on the
+  new substrate.
 - Proofs: 015 (expansion-chain), 016 (dual-LRU coordinate cache —
-  exact-keyed v4), 017 (fuzzy-locality cache via `coincident?` —
-  v5 swapped exact for fuzzy on the terminal lookup).
-- BOOK chapters 59 (the dual-LRU named), 65 (the hologram), 66
-  (the fuzziness), 67 (the spell), 68 (the inscription).
+  exact-keyed v4), 017 (fuzzy-locality cache via `coincident?`), 018
+  (flat-fuzzy reference; superseded by HologramLRU's coordinate-cell
+  shape).
+- BOOK chapters 59 (the dual-LRU named), 65 (the hologram), 66 (the
+  fuzziness), 67 (the spell), 68 (the inscription), 70 (Jesus built
+  my hotrod — the recognition that drove arc 074).
 
 **Performance contract:** ≥272 candles/sec sustained on a 10k
 representative run after this slice ships.
@@ -32,11 +38,11 @@ The umbrella's chapter-65/66/67 claims rest on the cache being
 operational. Without it, the substrate's distinctive properties
 (forms-as-coordinates, locality-keyed neighborhoods, walker
 cooperation) are decorative. With the cache wired, every subsequent
-slice's thinker code automatically benefits from work-sharing —
-both within a thinker and across thinkers.
+slice's thinker code automatically benefits from work-sharing — both
+within a thinker and across thinkers.
 
-The user's framing: *"the cache is required no matter what — it's
-an optimization that we must deliver on — not having it is
+The user's framing: *"the cache is required no matter what — it's an
+optimization that we must deliver on — not having it is
 disingenuous… the queues and services we've built are things in our
 cookbook."*
 
@@ -48,249 +54,185 @@ Slice 1 wires the cookbook. Subsequent slices stand on it.
 
 | Surface | Status |
 |---------|--------|
-| `wat::lru::LocalCache<K, V>` (arc 036) | Tier 2: thread-owned, zero-Mutex (the substrate's exact-keyed LRU; this slice does NOT use it for the dual-LRU coordinate cache — see below — but encoding-cache scope may revisit) |
-| `wat::lru::CacheService` program (arc 036) | Tier 3: cross-program, message-addressed, generic over `<K,V>`. Shape we copy for the lab cache services — not the type we use directly because telemetry hooks aren't there. |
-| `HashMap<HolonAST, V>` (arc 058) | Available but **not load-bearing here** — exact equality is the wrong primitive for this cache (see "the cache primitive"). |
-| `:wat::holon::coincident?` (arc 023) | The substrate's "are these the same point on the algebra grid within sigma?" predicate. This IS the cache lookup. |
-| `:wat::holon::from-watast` (arc 057) | Canonical structural lift WatAST → HolonAST. Every cache key is a HolonAST produced by this. |
-| `:wat::eval-step!` (arc 068) | The stepper that fills the cache as it walks. |
-| `:trading::log::tick-gate` (lab) | Values-up rate gate; one tick per loop iteration; "open" every N ms. |
-| `:trading::log::LogEntry::Telemetry` (lab) | CloudWatch-style metric variant, batched through rundb. |
-| `:trading::rundb::Service/batch-log` (lab) | The metric pump destination. |
-| Proof 017's fuzzy walker | Reference implementation under `wat-tests-integ/experiment/021-fuzzy-locality/`. |
+| `:wat::holon::Hologram` | wat-rs core (arc 074 slice 1). Coordinate-cell store with cosine readout. HolonAST → HolonAST. Unbounded. |
+| `:wat::holon::HologramLRU` | `crates/wat-hologram-lru/` (arc 074 slice 2). Bounded sibling. Pure-wat composition: `Hologram` + `wat::lru::LocalCache`. LRU eviction + cosine readout + cell isolation. HolonAST → HolonAST. |
+| `:wat::holon::Hologram/coincident-get` / `present-get` | wat-stdlib convenience getters. The lab's hot path uses these (no filter-construction at call sites). |
+| `:wat::lru::LocalCache<K, V>` | wat-lru. Eviction-aware put returns `Option<(K, V)>` (after the slice-2 prep commit). Used here for the encode-cache (HolonAST → Vector — exact lookup, no fuzz). |
+| `:wat::lru::CacheService` program | Reference shape for the L2 cache services. Lab-side L2 has telemetry hooks; same protocol skeleton. |
+| `:wat::eval-step!` (arc 068) | The stepper. The cache-aware walker calls it on miss. |
+| `:wat::eval::walk` (arc 070) | The fold over `eval-step!` — the structure the cache-aware walker mirrors. |
+| `:trading::log::tick-gate` | Values-up rate gate; one tick per loop iteration; "open" every N ms. |
+| `:trading::log::LogEntry::Telemetry` | CloudWatch-style metric variant, batched through rundb. |
+| `:trading::rundb::Service/batch-log` | The metric pump destination. |
 
-## What's missing (this slice)
+**Substrate gap closed.** v2 of this DESIGN listed a `LocalCache::len`
+addition as a substrate prerequisite. That shipped in arc 036; the
+slice-2 prep commit on wat-lru also added eviction-aware put. There's
+no remaining wat-rs work for slice 1.
 
-### A — The fuzzy cache primitive
+---
 
-**One thing**, used everywhere:
+## What's missing (this slice — all lab-side)
 
-```
-FuzzyCache<V> = Vec<(HolonAST, V)>
-```
+### A — The cache primitive (substrate-provided)
 
-Bounded by capacity. Lookup is a linear `foldl` with
-`:wat::holon::coincident?` against the query key — first match
-wins. Insert appends to the end; on overflow, drop the oldest
-entry (FIFO). Optional move-to-front on hit (slice-1 ship
-without; revisit if profiling demands).
+`:wat::holon::HologramLRU` is the cache. **HolonAST → HolonAST.** Not
+parametric. The trader's two caches (next, terminal) both use this
+type directly. Every HolonAST IS its own vector (deterministically,
+through the substrate's encoder); HologramLRU's `find-best` re-encodes
+candidate keys per get, no separate vector cache layer needed. The
+existing `:trading::sim::EncodeCache` (a `LocalCache<HolonAST, Vector>`)
+memoizes encoding for code paths outside HologramLRU that need
+explicit Vectors — a separate concern; not load-bearing for this
+slice; stays as-is.
 
-**Why no exact bucket alongside.** BOOK Ch.66 + proof 017's v5:
+Per-cell capacity defaults to `sqrt(d)` (the algebra grid's resolution
+limit at d). At d=10000, that's 100 entries per cell, with ~100 cells
+across the spread — total cap ~10k entries per HologramLRU instance.
+Consumers tune via `HologramLRU/make d cap`.
 
-- Byte-identical HolonASTs are coincident (cosine = 1). Linear scan
-  with `coincident?` subsumes exact match. An exact `HashMap`
-  alongside is dead weight that reintroduces the discretization
-  Ch.66 specifically architected away. (BOOK lines 30508–30514:
-  *"the cache is no longer a discretization of the algebra grid —
-  it IS the algebra grid, with its native tolerance."*)
-- The walker traverses chains whose leaves switch between F64
-  (quasi-orthogonal) and Thermometer (locality-preserving)
-  depending on the form's pre/post-β state. There's no clean point
-  to route some queries to an exact bucket and others to fuzzy —
-  the walker doesn't know in advance which depth carries the fuzz.
-  *"The same `coincident?` predicate runs at every level."* (BOOK
-  30461–30465.)
-- The fuzzy cache **is** the algebra grid. No second store needed.
+### B — The two coordinate caches (lab-side wrappers)
 
-**Linear-scan complexity is honest scope.** O(N) per lookup. SimHash
-bucketing (BOOK Ch.55) for sub-linear lookup is named on paper but
-not shipped. Slice 1 ships linear; future arc revisits when the
-benchmark surfaces a need.
+Both `:wat::holon::HologramLRU`. Both keyed by HolonAST. Both
+HolonAST → HolonAST.
 
-**Reference implementation: proof 018.** Slice 1 lifts proof 018's
-`:exp::CacheEntry` / `:exp::CoordinateCache` / `:exp::cache-empty`
-/ `:exp::cache-record` / `:exp::cache-lookup` shapes verbatim from
-`wat-tests-integ/experiment/022-fuzzy-on-both-stores/explore-fuzzy-on-both-stores.wat`
-into `wat/cache/FuzzyCache.wat`, generalized to take `<V>` so the
-EncodeCache (V = `Vector`) shares the primitive with the dual-LRU
-caches (V = `HolonAST`). The proof's lookup is a `foldl`
-short-circuiting via `match`-on-`(Some _)`; its insert is a
-`conj`. No more, no less.
+| Cache | Stored | What it serves |
+|---|---|---|
+| `next-cache` | `(form-h → next-h)` | "what's the next form after one rewrite?" — path edges |
+| `terminal-cache` | `(form-h → terminal-h)` | "what's this form's terminal value?" — answers (Ch.59: terminals are AST coordinates) |
 
-**Cap is `sqrt(d)`.** Per Q2/Q3 below: the algebra grid hosts
-~`sqrt(d)` distinguishable neighborhoods at d. The cache cap is
-the same number — beyond that, fuzzy lookups risk false-positive
-neighborhood matches. The cache constructor reads the ambient dim
-router at instantiation and computes the cap.
+A walker landing on a coordinate where `next` is known but `terminal`
+isn't has discovered **partial work**. Fuzzy hits via cosine readout
+expand work-sharing across coincident neighborhoods.
 
-### B — The two coordinate caches
+### C — Two layers (L1 + L2), same primitive
 
-Both `FuzzyCache<HolonAST>`. **Both fuzzy. Both store HolonAST
-values.** The terminal IS a HolonAST (Chapter 59: *42 IS an AST*) —
-encoding to a `Vector` is what `coincident?` does internally during
-lookup, not what the cache stores.
+**L1 (per-thinker, thread-owned):**
 
-| Cache | Key | Value | What it serves |
-|---|---|---|---|
-| next-cache | `HolonAST` | `HolonAST` | "what's the next form after one rewrite?" — path edges |
-| terminal-cache | `HolonAST` | `HolonAST` | "what's this form's terminal value?" — answers (Ch.59: terminals are AST coordinates) |
-
-A walker landing on a coordinate where `next` is known but
-`terminal` isn't has discovered **partial work**. Even when the
-terminal misses, the next pointer moves the walker closer. Even
-when both miss exactly, fuzzy match against either may hit a
-neighborhood. They cooperate.
-
-**Per the user's slice-1 directive: assume both caches are always
-fuzzy.** Proof 017 only swapped the terminal lookup explicitly; the
-proof session is producing reference code that fuzzes the next
-lookup too. Slice 1 commits to symmetric fuzzing as the foundation.
-
-### C — Two layers (L1 + L2), same shape
-
-**L1 (per-thinker, thread-owned, value-up):**
-
-Each thinker owns a `(next-cache, terminal-cache)` tuple of
-`FuzzyCache<HolonAST>`. Threaded through the thinker's tail-
-recursive loop. No Mutex. No queue. Direct lookup on the thinker's
-own thread. (Proof 016 line 134: *"No Mutex. No thread coordination.
-Just a HashMap value passed by ownership. Values up, not queues
-down."* — applies identically here, with `Vec` substituting for
-`HashMap`.)
+Each thinker owns a `(next-cache, terminal-cache)` pair of
+`HologramLRU` instances threaded through its tail-recursive loop.
+HologramLRU is thread-owned mutable; the thinker holds it directly.
+No Mutex, no queue, no service.
 
 **L2 (process-wide, queue-addressed):**
 
-Two cache service programs sharing the same `:trading::cache::
-Service<V>` shape (one instance per cache):
+Two cache service programs sharing the same lab-side `:trading::
+cache::Service` shape (one instance per cache):
 
-- `cache-next: Service<HolonAST>` — owns a `FuzzyCache<HolonAST>` for next-form sharing.
-- `cache-terminal: Service<HolonAST>` — owns a `FuzzyCache<HolonAST>` for terminal sharing.
+- `cache-next: Service` — owns a `HologramLRU` for next-form sharing.
+- `cache-terminal: Service` — owns a `HologramLRU` for terminal sharing.
 
-Same protocol shape as `wat::lru::CacheService` (request/reply via
+Same protocol shape as `:wat::lru::CacheService` (request/reply via
 queue + per-client reply channel) but lab-specific because the loop
 needs telemetry hooks (counters + tick-gate + LogEntry emission).
-Lab-side, not substrate.
 
-### D — The walker (cache-first then `:wat::eval::walk` on miss)
+### D — The walker (`:trading::cache::resolve`)
 
-`:trading::cache::resolve` is the cache-aware substitute for
-"encode a form" in the thinker's hot path. Reference shape lifted
-from proof 018's `wat-tests-integ/experiment/022-fuzzy-on-both-stores/explore-fuzzy-on-both-stores.wat`:
+`:trading::cache::resolve` is the cache-aware substitute for "encode
+a form" in the thinker's hot path. Same idea as proof 018's reference,
+adapted to HologramLRU's coordinate-cell shape:
 
 ```
-resolve(form-h, tier):
-  ;; 1. Cache lookup BEFORE the walker. Terminal hit ends.
-  on FuzzyCache.lookup(tier.terminal-cache, form-h) → Some(t):
-    return (t, tier)
+resolve(form-h, pos, l1, l2):
+  ;; 1. Terminal cache lookup. Hit ends the walk.
+  on HologramLRU/coincident-get(l1.terminal-cache, pos, form-h) → Some(t):
+    return t
 
-  ;; 2. Next-form hit short-circuits one or more steps.
-  on FuzzyCache.lookup(tier.next-cache, form-h) → Some(next-h):
-    return resolve(next-h, tier)
+  ;; 2. Next-form cache lookup. Hit short-circuits one or more steps.
+  on HologramLRU/coincident-get(l1.next-cache, pos, form-h) → Some(next-h):
+    return resolve(next-h, pos, l1, l2)
 
-  ;; 3. Both miss — invoke the substrate walker (arc 070).
-  ;;    The visit-fn fires once per coordinate with
-  ;;    (acc=tier, form-w, step-result) and returns Continue:
-  ;;
-  ;;    AlreadyTerminal t  → record (t → t) in terminal-cache
-  ;;    StepTerminal t     → record (form-h → t) in terminal-cache
-  ;;    StepNext next-w    → record (form-h → next-h) in next-cache
-  ;;
-  ;;    The walker handles iteration; the visit-fn just records.
-  case :wat::eval::walk(to-watast(form-h), tier, record-coordinate):
-    Ok((terminal, tier')): return (terminal, tier')
-    Err(_e): fall back to eval-ast!
+  ;; 3. Both miss — invoke :wat::eval::walk on the form.
+  ;;    The visit-fn fires once per coordinate; it RECORDS into both
+  ;;    caches as the walk progresses, and returns Continue.
+  case :wat::eval::walk(to-watast(form-h), l1, record-coordinate):
+    Ok((terminal, l1')): return terminal
+    Err(_e): fall back to eval-ast! (without caching)
 ```
 
-**Skip is never used.** Proof 018's visitor returns `Continue` on
-every arm; all short-circuit logic happens in step 1 / step 2
-BEFORE `walk` is invoked. The arc-070 `WalkStep::Skip` variant
-remains available for consumers who want a different shape, but
-the cache walker doesn't need it — its short-circuit is
-structurally upstream.
+The visit-fn writes per-step:
+- `Next next-h` → record `(form-h → next-h)` in next-cache
+- `Terminal t` → record `(form-h → t)` in terminal-cache
+- `AlreadyTerminal t` → record `(t → t)` in terminal-cache (idempotent)
 
-**The visit-fn is the lift point.** Proof 018's `record-coordinate`
-(`explore-fuzzy-on-both-stores.wat:191–217`) is the canonical
-shape for slice 1; reproducing it verbatim under the canonical
-`:trading::cache::*` paths is the right move.
+L1 writes happen unconditionally (cheap, thread-local). L2 writes go
+through the service queue per step. (Batching L2 is a follow-up arc
+if profiling demands.)
 
-**Cache write strategy across L1 + L2:** L1 writes happen
-unconditionally (cheap, thread-local). L2 writes go through the
-service queue per step. The proof session noted batched L2 writes
-as a follow-up arc if profiling demands; slice 1 ships per-step
-and revisits on the throughput benchmark.
+`:wat::eval::walk`'s `Skip` variant is unused here — short-circuit
+logic happens in step 1 / step 2 BEFORE walk is invoked.
+
+**`pos` provenance.** Each form's `pos` is computed once before
+entering `resolve` — typically by the trader's coordinate function
+(cosine readout against a reference, SimHash bucket, or domain
+projection). The lab can keep using its existing pos discipline; this
+arc doesn't pick a default.
 
 ### E — Telemetry (mandatory)
 
 The cache service program owns counters tracked across loop
 iterations. Each iteration ticks `:trading::log::tick-gate`; on
 "open" the loop packages the counters as `Vec<LogEntry::Telemetry>`,
-flushes via `:trading::rundb::Service/batch-log`, resets the
-window. Per the archive's `pre-wat-native/src/programs/{telemetry,
-stdlib/cache}.rs` cookbook the counter set is:
+flushes via `:trading::rundb::Service/batch-log`, resets the window.
+
+Counter set (per-cache):
 
 | Metric | Unit | Meaning |
 |---|---|---|
 | `lookups` | Count | total `get` requests in the window |
-| `hits` | Count | fuzzy matches found (including byte-exact) |
-| `misses` | Count | scans that found no coincident entry |
-| `evictions` | Count | FIFO drops from the bounded Vec |
-| `size` | Count | Vec length at window close |
-| `scan_depth_avg` | Count | average entries scanned before terminate |
+| `hits` | Count | matches accepted by the filter (incl. self-cosine) |
+| `misses` | Count | filter rejected or candidates empty |
+| `evictions` | Count | LRU evictions (visible via `LocalCache::put`'s return) |
+| `size` | Count | `HologramLRU/len` at window close |
 | `ns_gets` | Microseconds | total time in lookup-side scans |
-| `ns_sets` | Microseconds | total time in insert + eviction |
+| `ns_sets` | Microseconds | total time in put + cell-cleanup |
 | `gets_serviced` | Count | requests dispatched to caller |
 | `sets_drained` | Count | inserts processed |
 
 Each metric becomes one `LogEntry::Telemetry` row. Dimensions JSON
-tags the cache identity (e.g., `{"cache":"next","layer":"L2"}` /
-`{"cache":"terminal","layer":"L2"}`). L1 emits the same metric set
-through the thinker's own gate cadence with
-`{"cache":"...","layer":"L1","thinker":"<name>"}`.
+tags the cache identity (e.g., `{"cache":"next","layer":"L2"}`). L1
+emits the same metric set through the thinker's own gate cadence
+with `{"cache":"...","layer":"L1","thinker":"<name>"}`.
 
-Default rate gate: 5000ms (matches the archive's
-`make_rate_gate(Duration::from_secs(5))` default).
+Default rate gate: 5000ms.
 
-### F — `:trading::sim::EncodeCache` migration (in scope)
+### F — `:trading::sim::EncodeCache` (no migration)
 
-The lab's existing encoding hot-path cache `wat/sim/encoding-
-cache.wat` is a `wat::lru::LocalCache<HolonAST, Vector>` — exact
-key, no fuzz. Per the user's "everything fuzzy" mandate, this
-migrates to `FuzzyCache<Vector>` in this slice. The same FuzzyCache
-primitive instantiated with `V = wat::holon::Vector`. Telemetry
-counters apply identically.
+The lab's existing `wat/sim/encoding-cache.wat` uses
+`:wat::lru::LocalCache<HolonAST, Vector>` — exact key, no fuzz.
 
-This migration is what guarantees ALL caches under the trader's
-hot path share the same fuzzy primitive — no exact-keyed leftover
-that surreptitiously routes around the algebra grid.
+**Stays as-is.** Encoding is deterministic: same HolonAST → same
+Vector at the same encoder. There's nothing to fuzzy-match — exact
+lookup is the right primitive. (Earlier reframes pushed for "all
+caches fuzzy"; that turned out wrong for the deterministic encoding
+case. The fuzziness is for the algebra-grid thinking caches; encoding
+is just memoization.)
+
+After the wat-lru eviction-aware-put change (slice-2 prep), the
+encoding cache automatically gets eviction visibility — the slice 1
+work doesn't need to touch this file beyond the type-annotation
+sweep that already shipped at commit a42c576 (lab repo).
 
 ---
 
 ## What ships
 
-One slice. One sub-arc. Two commits at natural boundaries: substrate
-gap first, lab walker second.
+One slice. Lab-only — substrate work was finished by arc 074 + slice 2.
 
-### Substrate gap (commit 1)
+### Lab files
 
-`:wat::lru::LocalCache::len<K,V>` doesn't exist in wat-rs. We need
-it for the `size` telemetry metric on the LocalCache-backed encode
-cache during migration (and as a general capability). Small wat-rs
-arc:
-
-- `wat-rs/crates/wat-lru/src/lib.rs` — one-line `#[wat_dispatch]`
-  shim around `LruCache::len`.
-- `wat-rs/crates/wat-lru/wat/lru/LocalCache.wat` — `LocalCache::len`
-  wrapper.
-
-### Lab files (commit 2)
-
-- `wat/cache/FuzzyCache.wat` — the primitive (`new`, `lookup`,
-  `insert`, `len`, eviction). Generic over `V`. Linear-scan with
-  `coincident?`.
-- `wat/cache/Service.wat` — generic queue-addressed program.
-  Owns a `FuzzyCache<V>`. Tracks counters. Runs the tick-gate.
-  Emits `LogEntry::Telemetry` through rundb. Lifecycle mirrors
-  `RunDbService` / `wat::lru::CacheService`.
-- `wat/cache/L1.wat` — per-thinker dual cache helper. Two
-  `FuzzyCache<HolonAST>` threaded through the thinker's loop.
+- `wat/cache/L1.wat` — per-thinker dual cache struct + helpers.
+  Two `HologramLRU` instances threaded through the thinker's loop.
+- `wat/cache/Service.wat` — generic queue-addressed program. Owns a
+  `HologramLRU`. Tracks counters. Runs the tick-gate. Emits
+  `LogEntry::Telemetry` through rundb. Lifecycle mirrors
+  `RunDbService` and `:wat::lru::CacheService`.
 - `wat/cache/walker.wat` — `:trading::cache::resolve`, the per-step
-  walker per § D. Calls `:wat::eval-step!`; writes per step to L1
-  and via service queues to L2.
+  cache-aware walker per § D. Calls `:wat::eval::walk`; writes per
+  step to L1 and via service queues to L2.
 - `wat/cache/L2-spawn.wat` — setup helper that spawns the two cache
   service drivers (`cache-next` + `cache-terminal`) and returns the
   HandlePool tuple needed by thinkers for client distribution.
-- `wat/sim/encoding-cache.wat` — migrate from `LocalCache` to
-  `FuzzyCache<Vector>` per § F.
 - `wat-tests-integ/059-001-l1-l2-caches/` — probe tests + the
   throughput gate.
 
@@ -298,25 +240,23 @@ arc:
 
 | # | Probe | Acceptance |
 |---|-------|------------|
-| T1 | Single-thinker terminal-cache hit on a re-walked form | `coincident?` matches; cached terminal returned. |
+| T1 | Single-thinker terminal-cache hit on a re-walked form | `coincident-get` matches; cached terminal returned. |
 | T2 | Single-thinker next-cache hit shortcuts the walker | next-cache lookup returns the next form; walker recurses on it; terminal stored on unwind. |
 | T3 | Single-thinker fuzzy hit on coincident-but-not-byte-identical forms (Thermometer ε-perturbation) | second walk hits the first walk's cache entry. |
 | T4 | Cross-thinker L2 terminal hit via promotion | thinker B's L1 misses; L2 lookup hits; B promotes to its own L1. |
 | T5 | Cross-thinker L2 fuzzy hit | same as T4 but the keys differ within tolerance. |
-| T6 | FIFO eviction at capacity | both buckets, both layers; oldest entry gone, newest stays. |
+| T6 | LRU eviction at capacity, both layers | filling past cap drops the oldest-by-retrieval-rate entry; gone from BOTH the LRU sidecar AND the underlying Hologram cell. |
 | T7 | Telemetry rows land in rundb at the gate cadence | window-close emits the full metric set; dimensions tag the cache identity. |
 | T8 | Throughput on 10k synthetic candle-shaped forms | sustained ≥272 c/s on the test laptop class. **Acceptance gate.** |
 
 ### Acceptance criteria
 
 - All eight probe tests pass.
-- T8 throughput ≥272 candles/sec on a representative 10k-candle
-  run.
-- One substrate arc shipped (`LocalCache::len` only — minimal
-  surface).
-- No new wards filed (per BACKLOG B-5).
-- `:trading::sim::EncodeCache` running on the same `FuzzyCache`
-  primitive as the dual-LRU caches.
+- T8 throughput ≥272 candles/sec on a representative 10k-candle run.
+- Zero substrate arcs needed (everything's there already).
+- No new wards filed.
+- `:trading::sim::EncodeCache` unchanged structurally; works through
+  the eviction-aware-put surface change.
 
 ---
 
@@ -325,92 +265,90 @@ arc:
 ### Q1 — Where does the cache service program live? ✅ resolved (a)
 
 Lab-side wat (`wat/cache/Service.wat`) — substrate's
-`wat::lru::CacheService` doesn't have telemetry hooks; the lab's
+`:wat::lru::CacheService` doesn't have telemetry hooks; the lab's
 service knows about `LogEntry::Telemetry` and `RunDbService`. Same
 program shape, lab-specific concerns baked in.
 
-### Q2 — L1 fuzzy-cache size per thinker ✅ resolved sqrt(d)
+### Q2 — L1 cache size per thinker ✅ resolved sqrt(d)
 
 The Kanerva budget for the algebra grid at `d` is `floor(sqrt(d))`
-distinguishable neighborhoods — the same number that caps a
-Bundle's constituent count caps the cache's clean neighborhood
-count. Beyond sqrt(d), fuzzy lookups risk returning spurious
-coincident matches. Proof 018's T5 tests exactly this boundary.
+distinguishable neighborhoods — the same number that caps a Bundle's
+constituent count caps the cache's clean neighborhood count. Beyond
+sqrt(d), the LRU evicts old entries automatically.
 
-**Slice-1 default: `sqrt(d)` per cache.** Under the default
-router (arc 067, `DEFAULT_TIERS = [10000]`), that's 100 entries.
-A consumer can override and accept neighborhood-interference
-risk past sqrt(d).
+**Slice-1 default: `cap = sqrt(d) × sqrt(d) = d`** for the global LRU
+(at d=10000: 10000 entries total, ~100 per cell). The HologramLRU
+internally bounds per-cell behavior through its global LRU + the
+substrate's sqrt(d) cell count. Consumers tune via `HologramLRU/make`.
 
-The cache constructor reads the ambient router at instantiation
-and computes the cap from there. No literal 100 baked in; when
-a consumer reconfigures the router (`set-dim-router!` to a
-different tier), the cache cap follows.
+### Q3 — L2 cache size per service ✅ resolved sqrt(d)
 
-### Q3 — L2 fuzzy-cache size per service ✅ resolved sqrt(d)
-
-Same primitive, same constraint. Defaults to `sqrt(d)` per cache
-(100 at d=10000). Cross-thinker breadth doesn't license
-neighborhood interference; if the working set exceeds sqrt(d),
-the consumer wants SimHash bucketing (Ch.55, Q7), not a bigger
-linear-scan Vec.
+Same primitive, same sizing. Cross-thinker breadth doesn't license
+neighborhood interference; if the working set exceeds the cap, the
+LRU evicts cold entries. SimHash bucketing for sub-linear lookup
+(Ch.55) remains future work.
 
 ### Q4 — Cache invalidation
 
 There isn't any in slice 1. A thought's terminal is deterministic
 given the form + the substrate. Forms don't drift; the algebra grid
-is timeless. FIFO eviction is the only "removal"; re-encountering
-an evicted form re-walks from scratch.
+is timeless. LRU eviction is the only "removal"; re-encountering an
+evicted form re-walks from scratch.
 
-### Q5 — Should fuzzy lookups also apply to the next-cache? ✅ yes
+### Q5 — Both caches always fuzzy ✅ yes
 
-Proof 017 only fuzzed the terminal lookup. The user's slice-1
-directive: **assume both caches are always fuzzy.** The proof
-session is producing reference code; slice 1 ships symmetric
-fuzzing.
+Proof 017 only fuzzed the terminal lookup. Slice 1 commits to
+symmetric fuzzing — both caches use `HologramLRU/coincident-get`
+which applies the same cosine + filter machinery on both
+directions.
 
 ### Q6 — Per-step vs batched L2 writes
 
-Slice 1 ships per-step writes. The proof session is exploring
-whether batching materially outperforms; if it does, a follow-up
-arc adds a batched-write mode. Per-step is the foundation; batching
-is optimization.
+Slice 1 ships per-step writes. Batched writes ship as a follow-up
+arc if the throughput benchmark demands it.
 
 ### Q7 — SimHash bucketing for sub-linear lookup
 
-Out of scope for slice 1 — BOOK Ch.55 names it as future work.
-Linear scan is the slice-1 substrate; the bench tells us when
-sub-linear is worth shipping.
+Out of scope for slice 1. HologramLRU's coordinate-cell pre-filter
+already gives O(2 × cell_size) instead of O(N) — that's structurally
+sub-linear under typical pos distributions. SimHash adds another
+layer and ships when consumers surface a need.
 
 ### Q8 — Networked cache (BOOK Ch.67's "Spell")
 
-Out of scope. Single-process. Future arc when cross-machine
-work-sharing matters.
+Out of scope. Single-process. Future arc.
 
 ---
 
-## Slices
+## Slice plan
 
-One slice. Two commits at natural boundaries (substrate gap →
-lab walker). Pattern matches arcs 058 / 060 / 062 / 068.
+One slice. One commit at the natural boundary: lab walker + tests +
+docs.
 
-If during implementation the work surfaces a natural split, fork
-into sub-slices documented in the sub-arc's BACKLOG.md.
+If during implementation the work surfaces a natural split, fork into
+sub-slices documented in the sub-arc's BACKLOG.md.
 
-## Consumer follow-up
+---
 
-After this slice lands:
+## Differences from v2
 
-- `059-002-treasury-deadlines/` opens. Treasury wiring on top of
-  the cache.
-- The status panel's hit-rate counters get wired in
-  `059-005-status-panel-and-run/`.
-- A potential `059-006-simhash-bucketing` if T8 throughput
-  surfaces a need.
+For readers landing on v3:
 
-The substrate-and-consumer cycle: this sub-arc is mostly consumer
-(one minimal substrate gap for `LocalCache::len`); it builds on the
-substrate's caching primitives without growing the substrate
-fundamentally.
-
-PERSEVERARE
+- v2 proposed `FuzzyCache<V>` as a new primitive lifted from proof
+  018. **v3 uses `:wat::holon::HologramLRU` instead** — substrate
+  shipped this in arc 074 + slice 2. HologramLRU is a coordinate-cell
+  store with cosine readout AND LRU eviction; v2's FuzzyCache was
+  flat-fuzzy linear scan.
+- v2 listed `LocalCache::len` as a substrate-gap commit. **v3 drops
+  it** — already shipped, plus the eviction-aware put under
+  slice-2 prep.
+- v2 proposed migrating EncodeCache to FuzzyCache for "everything
+  fuzzy." **v3 keeps EncodeCache on LocalCache** — encoding is
+  deterministic, no fuzz needed.
+- v2 had `<V>` parametric framing throughout. **v3 drops it** —
+  Hologram and HologramLRU are concrete HolonAST → HolonAST. The
+  encode-cache uses parametric LocalCache because it ALSO carries
+  Vector values.
+- v2 referenced proof 018's `FuzzyCache` shape verbatim. **v3
+  references arc 074 / slice 2** — the substrate-blessed primitive
+  that subsumed and replaced proof 018's flat-fuzzy approach.
