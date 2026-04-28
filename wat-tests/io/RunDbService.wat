@@ -41,7 +41,7 @@
   ()
   (:wat::core::let*
     (((path :String) "/tmp/rundb-service-test-001.db")
-     ((spawn :trading::rundb::Service::Spawn) (:trading::rundb::Service path 1))
+     ((spawn :trading::rundb::Service::Spawn) (:trading::rundb::Service path 1 (:trading::rundb::Service/null-metrics-cadence)))
      ((pool :trading::rundb::Service::ReqTxPool) (:wat::core::first spawn))
      ((driver :wat::kernel::ProgramHandle<()>) (:wat::core::second spawn))
      ;; Inner let*: every client-side ReqTx lives only here. When
@@ -99,7 +99,7 @@
        (:trading::rundb::Service/batch-log req-tx ack-tx ack-rx entries))))
   (:wat::core::let*
     (((path :String) "/tmp/rundb-service-test-002.db")
-     ((spawn :trading::rundb::Service::Spawn) (:trading::rundb::Service path 3))
+     ((spawn :trading::rundb::Service::Spawn) (:trading::rundb::Service path 3 (:trading::rundb::Service/null-metrics-cadence)))
      ((pool :trading::rundb::Service::ReqTxPool) (:wat::core::first spawn))
      ((driver :wat::kernel::ProgramHandle<()>) (:wat::core::second spawn))
      ;; Inner scope owns all popped ReqTxs. Spawn moves a clone
@@ -133,7 +133,7 @@
   ()
   (:wat::core::let*
     (((path :String) "/tmp/rundb-service-test-003.db")
-     ((spawn :trading::rundb::Service::Spawn) (:trading::rundb::Service path 2))
+     ((spawn :trading::rundb::Service::Spawn) (:trading::rundb::Service path 2 (:trading::rundb::Service/null-metrics-cadence)))
      ((pool :trading::rundb::Service::ReqTxPool) (:wat::core::first spawn))
      ((driver :wat::kernel::ProgramHandle<()>) (:wat::core::second spawn))
      ;; Inner scope: pop both handles, finish pool, do nothing.

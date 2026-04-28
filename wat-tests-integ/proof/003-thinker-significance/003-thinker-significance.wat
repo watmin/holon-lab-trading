@@ -210,7 +210,7 @@
 
      ;; Spawn the service with N=1 client (single-thread deftest;
      ;; future multi-thread version would pop N>1 handles).
-     ((spawn :trading::rundb::Service::Spawn) (:trading::rundb::Service db-path 1))
+     ((spawn :trading::rundb::Service::Spawn) (:trading::rundb::Service db-path 1 (:trading::rundb::Service/null-metrics-cadence)))
      ((pool :trading::rundb::Service::ReqTxPool) (:wat::core::first spawn))
      ((driver :wat::kernel::ProgramHandle<()>) (:wat::core::second spawn))
 

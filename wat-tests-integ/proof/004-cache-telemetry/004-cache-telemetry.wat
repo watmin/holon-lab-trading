@@ -188,7 +188,7 @@
      ((db-path :String)
       (:wat::core::string::concat "runs/proof-004-" epoch-str ".db"))
      ((rundb-spawn :trading::rundb::Service::Spawn)
-      (:trading::rundb::Service db-path 1))
+      (:trading::rundb::Service db-path 1 (:trading::rundb::Service/null-metrics-cadence)))
      ((rundb-pool :trading::rundb::Service::ReqTxPool)
       (:wat::core::first rundb-spawn))
      ((rundb-driver :wat::kernel::ProgramHandle<()>)

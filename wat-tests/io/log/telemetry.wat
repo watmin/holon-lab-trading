@@ -25,7 +25,7 @@
   ()
   (:wat::core::let*
     (((path :String) "/tmp/telemetry-test-001.db")
-     ((spawn :trading::rundb::Service::Spawn) (:trading::rundb::Service path 1))
+     ((spawn :trading::rundb::Service::Spawn) (:trading::rundb::Service path 1 (:trading::rundb::Service/null-metrics-cadence)))
      ((pool :trading::rundb::Service::ReqTxPool) (:wat::core::first spawn))
      ((driver :wat::kernel::ProgramHandle<()>) (:wat::core::second spawn))
      ((_inner :())
