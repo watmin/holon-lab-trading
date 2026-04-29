@@ -116,6 +116,7 @@
 ;; friendly) and Sqlite/auto-spawn (high-fidelity LogEntry rows).
 (:wat::load-file! "programs/run.wat")
 (:wat::load-file! "programs/smoke.wat")
+(:wat::load-file! "programs/pulse.wat")
 
 
 (:wat::core::define (:user::main
@@ -123,4 +124,4 @@
                      (stdout :wat::io::IOWriter)
                      (stderr :wat::io::IOWriter)
                      -> :())
-  (:trading::smoke/main stdin stdout stderr))
+  (:trading::pulse/main stdin stdout stderr))
