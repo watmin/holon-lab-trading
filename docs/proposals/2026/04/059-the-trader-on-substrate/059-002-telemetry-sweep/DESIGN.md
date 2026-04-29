@@ -1,21 +1,91 @@
 # 059-002 — Telemetry sweep on the new substrate
 
-**Status:** PROPOSED 2026-04-29. Pre-implementation reasoning artifact. Depends on the substrate arcs 079 + 080 + 081 landing first.
+**Status:** SHIPPED 2026-04-29 by a different path than this DESIGN proposed. See § Reframe history (v2) and § What actually shipped.
+
+**Open follow-up:** `proof_005` (substrate-cadence self-heartbeat) deferred until `:wat::std::telemetry::Sqlite/auto-spawn` supports a non-null cadence — current substrate forces null because no consumer-derived stats-translator emerges from enum reflection. Tracked in § Open follow-ups.
 
 **Umbrella:** [`docs/proposals/2026/04/059-the-trader-on-substrate/`](../).
 
 **Predecessors:**
-- 059-001 (L1/L2 caches) — milestone 1 + 2 shipped (cache primitives + substrate uplift). Milestone 3 (thinker integration with reporters) lands in this sub-arc.
-- Substrate arc 079 (wat-edn shims).
-- Substrate arc 080 (`:wat::std::telemetry::Sqlite<E,G>` — generic Service shell with caller-provided dispatcher + stats-translator).
-- Substrate arc 081 (`:wat::std::telemetry::Console<E,G>` — EDN/JSON-per-line dev sink).
+- 059-001 (L1/L2 caches) — milestone 1 + 2 shipped (cache primitives + substrate uplift). Milestone 3 (thinker integration) is the **actual remaining umbrella work**, partially unblocked by what shipped here.
+- Substrate arc 079 (wat-edn shims) — shipped 2026-04-29.
+- Substrate arc 080 (`:wat::std::telemetry::Service<E,G>` — generic Service shell; renamed from "Sqlite" during ship — the shell is destination-agnostic) — shipped 2026-04-29.
+- Substrate arc 081 (`:wat::std::telemetry::Console/dispatcher<E>` — EDN/JSON-per-line dev sink) — shipped 2026-04-29.
+- Substrate arc 083 (`crates/wat-sqlite/`) — shipped 2026-04-29.
+- Substrate arc 084 (`:wat::sqlite::execute` + `Param` enum) — shipped 2026-04-29.
+- Substrate arc 085 (`:wat::std::telemetry::Sqlite/auto-spawn` — derives schemas + INSERTs from enum decls) — shipped 2026-04-29.
 
 **Surfaced by:** Building proof_004 (cache telemetry, T7) revealed that the lab's `:trading::rundb::Service` is a generic Service with a trader-specific entry enum welded in. The user's recognition (2026-04-29):
 
 > "RunDbService - is a bad name... we need something generic"
 > "the LogEntry /must/ be user defined - we do not provide anything here"
 
-The substrate arcs above expose the right primitives. This sub-arc is the lab-side sweep that consumes them.
+The substrate arcs 080/081 codified the generic Service contract. Then 083/084/085 went further than this DESIGN anticipated — arc 085's `auto-spawn` reflects on the consumer's enum decl to synthesize schemas, INSERTs, and per-entry binders, **eliminating most of the lab-side machinery this DESIGN had planned**.
+
+---
+
+## What actually shipped (post-arc-085 reality)
+
+The sub-arc's goal — "lab consumes substrate's generic telemetry shell instead of the trader-welded `:trading::rundb::Service`" — landed via the substrate auto-spawn path:
+
+| Original DESIGN plan | What actually shipped |
+|---|---|
+| Lab `:trading::telemetry::Entry` enum (Metric + PaperResolved + …) | Reused existing `:trading::log::LogEntry` (PaperResolved + Telemetry); arc 085's `auto-spawn` derives schemas + INSERTs directly from this enum decl. No new enum. |
+| Lab `:trading::telemetry::dispatch (db entry)` | **Deleted.** `auto-spawn` synthesizes the per-entry dispatcher from variant_name → cached INSERT in the substrate. |
+| Lab `translate-stats (Stats → Vec<Entry>)` | **Deleted.** auto-spawn uses `null-metrics-cadence`; stats-translator never invoked. |
+| Lab `EntryMaker` (closure over a clock) | **Deleted.** No translate-stats, no maker needed. |
+| Lab `:trading::telemetry::Sqlite/spawn` thin wrapper | ✅ shipped (5 lines, delegates to substrate's `:wat::std::telemetry::Sqlite/auto-spawn :trading::log::LogEntry path count cadence`). |
+| Sweep all rundb call sites | ✅ done. cache reporter, treasury service, proofs 002/003/004, experiment 008/explore-handles, lab `wat-tests/` — every site migrated. |
+| Delete the lab's RunDb Rust shim | ✅ done. `WatRunDb` struct + impl block + RUNDB_SCHEMA all deleted from `src/shims.rs`; lab no longer depends on `rusqlite` directly. |
+
+**Files deleted in slice 3 of arc 083:**
+- `wat/io/RunDb.wat` (the lab's `:trading::rundb::*` shim wrapper)
+- `wat/io/RunDbService.wat` (the lab's CSP service driver)
+- `wat/io/log/schema.wat` (substrate derives schemas)
+- `wat/io/telemetry/dispatch.wat` (substrate derives dispatcher)
+- `wat/io/telemetry/maker.wat` (no maker needed without stats-translator)
+- `wat/io/telemetry/translate-stats.wat` (no stats-translator under null cadence)
+- `wat-tests/io/RunDb.wat`, `wat-tests/io/RunDbService.wat`, the now-orphan telemetry tests
+
+**Files added/changed:**
+- `wat/io/telemetry/Sqlite.wat` — the 5-line typealias + auto-spawn delegate.
+- `wat/io/log/LogEntry.wat` — header rewritten; the enum is now the source of truth for the on-disk schema.
+- `wat/cache/reporter.wat` — switched typed handles from `:trading::rundb::Service::*` to `:wat::std::telemetry::Service::*<trading::log::LogEntry>`.
+- `wat/services/treasury.wat` — same swap (~6 sites).
+- `wat/main.wat` — load list updated.
+
+**Schema rename consequence:** auto-spawn derives table names PascalCase → snake_case from variant names. `PaperResolved` → `paper_resolved` (was `paper_resolutions`); `Telemetry` → `telemetry` (unchanged). Existing on-disk runs from before this work need either a manual rename or a fresh DB. PRIMARY KEY (run_name, paper_id) is gone — auto-derivation produces NOT NULL columns with no constraints. Re-runs accumulate rows.
+
+**Verification:**
+- Lab fast wat-suite (346+ deftests) green.
+- Workspace tests (728 substrate Rust + every wat-suite) green.
+- All proof binaries (002, 003, 004) compile under their feature flags. Running them on real data is gated behind `--features proof-*` and takes minutes; deferred to a separate session.
+
+---
+
+## Open follow-ups
+
+### proof_005 (self-heartbeat through cadence)
+
+The originally-planned proof_005 ("Service spawns with a counter-cadence; sends N batches; assert telemetry table has heartbeat rows") is **not yet shipped**.
+
+Why: arc 085's `auto-spawn` forces `null-metrics-cadence` because the substrate has no enum-decl-derivable way to produce a stats-translator. Heartbeat would emit `:wat::std::telemetry::Service::Stats` rows; the consumer's enum doesn't necessarily have a Stats-shaped variant; the substrate can't auto-build one.
+
+Options for shipping it:
+- **(a) Extend auto-spawn** with an optional cadence + auto-translator. The substrate could derive a Telemetry-shaped variant from `Stats` if the consumer enum has a `Telemetry` variant matching the right shape (heuristic: variant with `(namespace, id, dimensions, timestamp-ns, metric-name, metric-value, metric-unit)` fields).
+- **(b) Hybrid spawn factory** that takes an enum-name + a stats-translator override. Caller writes 5 lines instead of auto-spawn's 0.
+- **(c) Skip heartbeat for the trader.** Per arc 085's Q1 ("auto-spawn is for entries; heartbeat needs the explicit factory"), the trader uses null cadence; if it ever needs self-telemetry, it switches to the explicit `Sqlite/spawn`.
+
+Default: **(c) for now.** The trader doesn't have a concrete need for substrate self-heartbeat; the surrounding `:trading::log::LogEntry::Telemetry` variant + the `:trading::log::emit-metric` helper let the trader emit its own application-layer metrics through the same sink. Revisit if a real consumer surfaces a need.
+
+### `wat/io/log/*.wat` cleanup
+
+The `wat/io/log/` directory still contains:
+- `LogEntry.wat` — kept; enum is the source of truth for the schema.
+- `telemetry.wat` — kept; `:trading::log::emit-metric` helper used by reporters.
+- `rate-gate.wat` — kept; `:trading::log::tick-gate` is the body of `MetricsCadence` tick fns when the lab does spawn with non-null cadence.
+
+The DESIGN's slice-3 plan to retire `LogEntry.wat` + `telemetry.wat` was wrong — both stay because `auto-spawn` wants the enum decl AND reporters still need a way to construct Telemetry entries.
 
 ---
 
@@ -164,6 +234,8 @@ Treasury (already a heavy rundb consumer per existing call sites) updates simila
 ---
 
 ## Slice plan
+
+> ⚠️ **Historical record only.** The slice plan below was the pre-arc-085 path. What actually shipped did NOT follow these slices — see § What actually shipped above. The substrate's `auto-spawn` reflects on the consumer's enum decl and synthesizes everything the lab was going to build (dispatcher, schemas, INSERTs, binders), so the lab work collapsed to a 5-line wrapper + a deletion sweep. Slices 1 and 2 below are obsolete; slice 3's proof_005 is captured in § Open follow-ups.
 
 Three slices, each with its own green checkpoint per the iterative-complexity discipline.
 

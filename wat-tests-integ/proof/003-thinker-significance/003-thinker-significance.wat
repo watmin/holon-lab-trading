@@ -55,6 +55,7 @@
 (:wat::test::make-deftest :deftest
   ((:wat::load-file! "wat/sim/paper.wat")
    (:wat::load-file! "wat/sim/v1.wat")
+   (:wat::load-file! "wat/io/telemetry/Sqlite.wat")
 
    ;; Direction → "Up" | "Down".
    (:wat::core::define
@@ -133,9 +134,9 @@
    ;; per batch).
    (:wat::core::define
      (:trading::test::proofs::003::run-window
-       (req-tx :trading::rundb::Service::ReqTx)
-       (ack-tx :trading::rundb::Service::AckTx)
-       (ack-rx :trading::rundb::Service::AckRx)
+       (req-tx :wat::std::telemetry::Service::ReqTx<trading::log::LogEntry>)
+       (ack-tx :wat::std::telemetry::Service::AckTx)
+       (ack-rx :wat::std::telemetry::Service::AckRx)
        (path :String)
        (start :i64)
        (n :i64)
@@ -160,15 +161,15 @@
         ((entries :Vec<trading::log::LogEntry>)
          (:trading::test::proofs::003::outcomes-to-entries
            outcomes run-name thinker-name predictor-name)))
-       (:trading::rundb::Service/batch-log req-tx ack-tx ack-rx entries)))
+       (:wat::std::telemetry::Service/batch-log req-tx ack-tx ack-rx entries)))
 
    ;; Walk 0..10 (window indices). For each i: start = i * stride,
    ;; run-window with run-name "<thinker>-w<i>-<iso>".
    (:wat::core::define
      (:trading::test::proofs::003::run-thinker-windows
-       (req-tx :trading::rundb::Service::ReqTx)
-       (ack-tx :trading::rundb::Service::AckTx)
-       (ack-rx :trading::rundb::Service::AckRx)
+       (req-tx :wat::std::telemetry::Service::ReqTx<trading::log::LogEntry>)
+       (ack-tx :wat::std::telemetry::Service::AckTx)
+       (ack-rx :wat::std::telemetry::Service::AckRx)
        (path :String)
        (cfg :trading::sim::Config)
        (thinker :trading::sim::Thinker)
@@ -210,8 +211,11 @@
 
      ;; Spawn the service with N=1 client (single-thread deftest;
      ;; future multi-thread version would pop N>1 handles).
-     ((spawn :trading::rundb::Service::Spawn) (:trading::rundb::Service db-path 1 (:trading::rundb::Service/null-metrics-cadence)))
-     ((pool :trading::rundb::Service::ReqTxPool) (:wat::core::first spawn))
+     ((spawn :trading::telemetry::Spawn)
+      (:trading::telemetry::Sqlite/spawn db-path 1
+        (:wat::std::telemetry::Service/null-metrics-cadence)))
+     ((pool :wat::std::telemetry::Service::ReqTxPool<trading::log::LogEntry>)
+      (:wat::core::first spawn))
      ((driver :wat::kernel::ProgramHandle<()>) (:wat::core::second spawn))
 
      ;; Inner let*: every client-side ReqTx + ack channel lives only
@@ -219,13 +223,13 @@
      ;; disconnects → loop exits → outer (join driver) unblocks.
      ((_inner :())
       (:wat::core::let*
-        (((req-tx :trading::rundb::Service::ReqTx)
+        (((req-tx :wat::std::telemetry::Service::ReqTx<trading::log::LogEntry>)
           (:wat::kernel::HandlePool::pop pool))
          ((_finish :()) (:wat::kernel::HandlePool::finish pool))
-         ((ack-channel :trading::rundb::Service::AckChannel)
+         ((ack-channel :wat::std::telemetry::Service::AckChannel)
           (:wat::kernel::make-bounded-queue :() 1))
-         ((ack-tx :trading::rundb::Service::AckTx) (:wat::core::first ack-channel))
-         ((ack-rx :trading::rundb::Service::AckRx) (:wat::core::second ack-channel))
+         ((ack-tx :wat::std::telemetry::Service::AckTx) (:wat::core::first ack-channel))
+         ((ack-rx :wat::std::telemetry::Service::AckRx) (:wat::core::second ack-channel))
 
          ;; Always-up across 10 windows.
          ((_run-up :())

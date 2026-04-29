@@ -5,10 +5,13 @@
 //! (source = `include_str!(<crate>/wat/main.wat)`, loader =
 //! `ScopedLoader` at `<crate>/wat`).
 //!
-//! The empty `deps: []` grows as sibling wat crates ship — `wat-holon`
-//! when Phase 3 (encoding) needs VSA primitives, `wat-rusqlite` when
-//! Phase 5's ledger lands, etc. See `docs/rewrite-backlog.md`.
+//! Deps: in-crate `shims` (CandleStream) plus the substrate
+//! `wat-sqlite` crate (arcs 083 / 084 / 085) for sqlite-backed
+//! telemetry. The lab's enum decl in `wat/io/log/LogEntry.wat`
+//! drives schema + INSERT derivation through
+//! `:wat::std::telemetry::Sqlite/auto-spawn` — no domain-typed
+//! sqlite Rust shim of our own.
 
 mod shims;
 
-wat::main! { deps: [shims] }
+wat::main! { deps: [shims, wat_sqlite] }

@@ -11,19 +11,16 @@
 //!   `archived/pre-wat-native/src/domain/candle_stream.rs` reader,
 //!   cut down to a 6-field tuple emit (asset metadata is wat-side
 //!   configuration, not a parquet payload).
-//! - `:rust::trading::RunDb` — a thread-owned SQLite writer for
-//!   per-paper resolution rows. Expressed at the wat surface as
-//!   `:trading::rundb::*` via `wat/io/RunDb.wat`. Single in-crate shim;
-//!   `archived/pre-wat-native/src/programs/stdlib/database.rs`'s
-//!   627-LOC CSP-style writer is deliberately out of scope for v1
-//!   (Phase 7's `wat-rusqlite` sibling crate territory).
+//! Sqlite persistence is provided by the `wat-sqlite` substrate crate
+//! (arcs 083 / 084 / 085) — `:wat::sqlite::Db` opens the file and
+//! `:wat::std::telemetry::Sqlite/auto-spawn` derives schemas + INSERTs
+//! from the lab's `:trading::log::LogEntry` enum decl. The lab no
+//! longer needs a typed-row Rust shim of its own.
 
 use std::path::Path;
 
 use arrow::array::{Array, Float64Array, TimestampMicrosecondArray, TimestampMillisecondArray};
 use parquet::arrow::arrow_reader::{ParquetRecordBatchReader, ParquetRecordBatchReaderBuilder};
-use rusqlite::{params, Connection};
-
 use wat::rust_deps::RustDepsBuilder;
 use wat::WatSource;
 
@@ -222,174 +219,6 @@ impl WatCandleStream {
     }
 }
 
-/// `:rust::trading::RunDb` — thread-owned SQLite writer.
-///
-/// Holds an open `Connection`. Schema (`paper_resolutions`) is
-/// created if absent; every `log_paper` call inserts one row,
-/// taking the `run_name` discriminator as its first parameter
-/// (per-message routing rather than per-handle). Auto-commit; no
-/// batching; idempotent on `(run_name, paper_id)` PRIMARY KEY via
-/// `INSERT OR REPLACE` (test-rerun friendly without a
-/// `remove-file!` helper).
-///
-/// Arc 029 refactored `run_name` from a struct field into a
-/// per-call parameter — lets one shim handle drive multiple run
-/// names, which is the prerequisite for the `:trading::rundb::Service`
-/// CSP wrapper that fans in N clients (each with its own
-/// run_name) onto one underlying connection.
-///
-/// Per `feedback_shim_panic_vs_option`: construction-time errors
-/// panic with diagnostic; per-call write errors panic in v1 (a
-/// future arc returns `:Result<()>` once a caller wants to handle
-/// disk-full / permission failures gracefully).
-pub struct WatRunDb {
-    conn: Connection,
-}
-
-const RUNDB_SCHEMA: &str = "
-CREATE TABLE IF NOT EXISTS paper_resolutions (
-  run_name     TEXT NOT NULL,
-  thinker      TEXT NOT NULL,
-  predictor    TEXT NOT NULL,
-  paper_id     INTEGER NOT NULL,
-  direction    TEXT NOT NULL,
-  opened_at    INTEGER NOT NULL,
-  resolved_at  INTEGER NOT NULL,
-  state        TEXT NOT NULL,
-  residue      REAL NOT NULL,
-  loss         REAL NOT NULL,
-  PRIMARY KEY (run_name, paper_id)
-);
-";
-
-#[wat_dispatch(
-    path = ":rust::trading::RunDb",
-    scope = "thread_owned"
-)]
-impl WatRunDb {
-    /// `:rust::trading::RunDb::open path` — open or create a SQLite
-    /// database at `path` and ensure the `paper_resolutions` schema
-    /// exists. Panics on any rusqlite error (bad path, permission,
-    /// schema creation failure). Arc 029 dropped the `run_name`
-    /// parameter — it now rides per-call on `log_paper_resolved`.
-    /// Auto-schema-on-open stays for backward compat with direct-
-    /// shim callers (proof 002); service-mode callers (slice 2)
-    /// install schemas explicitly via `execute_ddl`. Both paths
-    /// CREATE TABLE IF NOT EXISTS — re-installs are no-ops.
-    pub fn open(path: String) -> Self {
-        let conn = Connection::open(&path).unwrap_or_else(|e| {
-            panic!(":rust::trading::RunDb::open: cannot open {path}: {e}")
-        });
-        conn.execute_batch(RUNDB_SCHEMA).unwrap_or_else(|e| {
-            panic!(":rust::trading::RunDb::open: schema creation failed at {path}: {e}")
-        });
-        Self { conn }
-    }
-
-    /// `:rust::trading::RunDb::execute-ddl db ddl_str` — run a DDL
-    /// string (CREATE TABLE, CREATE INDEX, etc.). Used by the
-    /// slice-2 `:trading::rundb::Service` driver at startup to install
-    /// schemas from `:trading::log::all-schemas`. Idempotent — every
-    /// schema string uses CREATE TABLE IF NOT EXISTS so re-installs
-    /// are no-ops. Panics on rusqlite errors (syntax, permission,
-    /// etc.).
-    pub fn execute_ddl(&mut self, ddl_str: String) {
-        self.conn.execute_batch(&ddl_str).unwrap_or_else(|e| {
-            panic!(":rust::trading::RunDb::execute-ddl: {e}")
-        });
-    }
-
-    /// `:rust::trading::RunDb::log-paper-resolved db run_name ...` —
-    /// insert one row into `paper_resolutions` under the given
-    /// `run_name`. `INSERT OR REPLACE` semantics — the same
-    /// `(run_name, paper_id)` re-logged overwrites the prior row.
-    /// Panics on rusqlite write errors. Arc 029 (a) renamed from
-    /// `log_paper` to align with the `LogEntry::PaperResolved`
-    /// variant the slice-2 service wraps and (b) promoted
-    /// `run_name` from struct field to first parameter so one shim
-    /// handle can drive multiple run names (the prerequisite for
-    /// per-message routing through `:trading::rundb::Service`).
-    #[allow(clippy::too_many_arguments)]
-    pub fn log_paper_resolved(
-        &mut self,
-        run_name: String,
-        thinker: String,
-        predictor: String,
-        paper_id: i64,
-        direction: String,
-        opened_at: i64,
-        resolved_at: i64,
-        state: String,
-        residue: f64,
-        loss: f64,
-    ) {
-        self.conn
-            .execute(
-                "INSERT OR REPLACE INTO paper_resolutions \
-                 (run_name, thinker, predictor, paper_id, direction, \
-                  opened_at, resolved_at, state, residue, loss) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-                params![
-                    run_name,
-                    thinker,
-                    predictor,
-                    paper_id,
-                    direction,
-                    opened_at,
-                    resolved_at,
-                    state,
-                    residue,
-                    loss,
-                ],
-            )
-            .unwrap_or_else(|e| {
-                panic!(":rust::trading::RunDb::log-paper-resolved: insert failed: {e}")
-            });
-    }
-
-    /// `:rust::trading::RunDb::log-telemetry db ...` — insert one row
-    /// into the `telemetry` table. CloudWatch-style payload:
-    /// `(namespace, id, dimensions, timestamp_ns, metric_name,
-    /// metric_value, metric_unit)`. No PRIMARY KEY on the table —
-    /// every emit is a unique observation; SQLite's implicit rowid
-    /// distinguishes them. Mirrors the archive's
-    /// `archived/pre-wat-native/src/types/log_entry.rs::LogEntry::Telemetry`
-    /// shape; arc 030 brings it into the wat surface as the second
-    /// LogEntry variant.
-    #[allow(clippy::too_many_arguments)]
-    pub fn log_telemetry(
-        &mut self,
-        namespace: String,
-        id: String,
-        dimensions: String,
-        timestamp_ns: i64,
-        metric_name: String,
-        metric_value: f64,
-        metric_unit: String,
-    ) {
-        self.conn
-            .execute(
-                "INSERT INTO telemetry \
-                 (namespace, id, dimensions, timestamp_ns, \
-                  metric_name, metric_value, metric_unit) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                params![
-                    namespace,
-                    id,
-                    dimensions,
-                    timestamp_ns,
-                    metric_name,
-                    metric_value,
-                    metric_unit,
-                ],
-            )
-            .unwrap_or_else(|e| {
-                panic!(":rust::trading::RunDb::log-telemetry: insert failed: {e}")
-            });
-    }
-
-}
-
 /// wat-side wrappers contributed by this shim. The deps mechanism
 /// concatenates this slice into the global `WatSource` list before
 /// parsing the entry file, so `(:wat::load-file! "io/CandleStream.wat")`
@@ -401,32 +230,22 @@ pub fn wat_sources() -> &'static [WatSource] {
             source: include_str!("../wat/io/CandleStream.wat"),
         },
         WatSource {
-            path: "io/RunDb.wat",
-            source: include_str!("../wat/io/RunDb.wat"),
-        },
-        WatSource {
             path: "io/log/LogEntry.wat",
             source: include_str!("../wat/io/log/LogEntry.wat"),
         },
         WatSource {
-            path: "io/log/schema.wat",
-            source: include_str!("../wat/io/log/schema.wat"),
-        },
-        WatSource {
             path: "io/log/telemetry.wat",
             source: include_str!("../wat/io/log/telemetry.wat"),
-        },
-        WatSource {
-            path: "io/RunDbService.wat",
-            source: include_str!("../wat/io/RunDbService.wat"),
         },
     ];
     FILES
 }
 
 /// Wire the dispatch into the runtime. `#[wat_dispatch]` generated the
-/// type-name-prefixed register fn per impl block; we forward both.
+/// type-name-prefixed register fn per impl block; we forward only the
+/// in-crate shims (CandleStream). Sqlite persistence is now provided
+/// by `wat-sqlite` (arcs 083/084/085); the `deps: [wat_sqlite]` entry
+/// in `src/main.rs` registers its surface.
 pub fn register(builder: &mut RustDepsBuilder) {
     __wat_dispatch_WatCandleStream::register(builder);
-    __wat_dispatch_WatRunDb::register(builder);
 }

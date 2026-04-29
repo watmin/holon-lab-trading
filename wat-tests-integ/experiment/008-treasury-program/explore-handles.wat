@@ -118,7 +118,7 @@
    ;; Step 6 helper — req/resp PLUS telemetry shadow.
    ;;
    ;; Each request: emit to resp-tx (caller's reply) AND telem-tx
-   ;; (side surface, RunDb-shaped). Mirrors the Treasury pattern where
+   ;; (side surface, telemetry-sink-shaped). Mirrors the Treasury pattern where
    ;; the program owes its caller a response AND owes the run ledger a
    ;; telemetry event. Both happen inside the same recv handler so the
    ;; client sees a single coherent step.

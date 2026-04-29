@@ -29,5 +29,5 @@ mod shims;
 
 wat::test! {
     path: "wat-tests-integ/proof/004-cache-telemetry",
-    deps: [shims, wat_lru, wat_holon_lru]
+    deps: [shims, wat_lru, wat_holon_lru, wat_sqlite]
 }

@@ -21,4 +21,4 @@
 #[path = "../../src/shims.rs"]
 mod shims;
 
-wat::test! { path: "wat-tests-integ/proof/002-thinker-baseline", deps: [shims] }
+wat::test! { path: "wat-tests-integ/proof/002-thinker-baseline", deps: [shims, wat_sqlite] }

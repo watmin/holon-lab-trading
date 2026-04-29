@@ -56,6 +56,7 @@
 
 (:wat::test::make-deftest :deftest
   ((:wat::load-file! "wat/cache/reporter.wat")
+   (:wat::load-file! "wat/io/telemetry/Sqlite.wat")
 
    ;; ─── Helper 1: drive 30 Put/Get requests ───────────────────────
    ;;
@@ -118,9 +119,9 @@
    ;; return — caller drops them when its own scope exits.
    (:wat::core::define
      (:trading::test::proofs::004::run-cache-with-rundb-tx
-       (rundb-req-tx :trading::rundb::Service::ReqTx)
-       (ack-tx :trading::rundb::Service::AckTx)
-       (ack-rx :trading::rundb::Service::AckRx)
+       (rundb-req-tx :wat::std::telemetry::Service::ReqTx<trading::log::LogEntry>)
+       (ack-tx :wat::std::telemetry::Service::AckTx)
+       (ack-rx :wat::std::telemetry::Service::AckRx)
        -> :())
      (:wat::core::let*
        (;; Cache reporter — closure over rundb handles.
@@ -187,9 +188,10 @@
       (:wat::core::i64::to-string (:wat::time::epoch-seconds now)))
      ((db-path :String)
       (:wat::core::string::concat "runs/proof-004-" epoch-str ".db"))
-     ((rundb-spawn :trading::rundb::Service::Spawn)
-      (:trading::rundb::Service db-path 1 (:trading::rundb::Service/null-metrics-cadence)))
-     ((rundb-pool :trading::rundb::Service::ReqTxPool)
+     ((rundb-spawn :trading::telemetry::Spawn)
+      (:trading::telemetry::Sqlite/spawn db-path 1
+        (:wat::std::telemetry::Service/null-metrics-cadence)))
+     ((rundb-pool :wat::std::telemetry::Service::ReqTxPool<trading::log::LogEntry>)
       (:wat::core::first rundb-spawn))
      ((rundb-driver :wat::kernel::ProgramHandle<()>)
       (:wat::core::second rundb-spawn))
@@ -197,14 +199,14 @@
      ;; Inner — pop rundb client handle, open ack pair, run cache.
      ((_inner :())
       (:wat::core::let*
-        (((rundb-req-tx :trading::rundb::Service::ReqTx)
+        (((rundb-req-tx :wat::std::telemetry::Service::ReqTx<trading::log::LogEntry>)
           (:wat::kernel::HandlePool::pop rundb-pool))
          ((_finish-rundb :()) (:wat::kernel::HandlePool::finish rundb-pool))
-         ((ack-channel :trading::rundb::Service::AckChannel)
+         ((ack-channel :wat::std::telemetry::Service::AckChannel)
           (:wat::kernel::make-bounded-queue :() 1))
-         ((ack-tx :trading::rundb::Service::AckTx)
+         ((ack-tx :wat::std::telemetry::Service::AckTx)
           (:wat::core::first ack-channel))
-         ((ack-rx :trading::rundb::Service::AckRx)
+         ((ack-rx :wat::std::telemetry::Service::AckRx)
           (:wat::core::second ack-channel))
          ((_run :())
           (:trading::test::proofs::004::run-cache-with-rundb-tx

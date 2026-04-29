@@ -47,7 +47,7 @@
 (:wat::load-file! "../treasury/treasury.wat")
 (:wat::load-file! "../io/log/LogEntry.wat")
 (:wat::load-file! "../io/log/telemetry.wat")
-(:wat::load-file! "../io/RunDbService.wat")
+(:wat::load-file! "../io/telemetry/Sqlite.wat")
 
 
 ;; ─── Protocol — Event + Response enums ──────────────────────────
@@ -206,9 +206,9 @@
     (event :trading::treasury::Service::Event)
     (resp-tx :trading::treasury::Service::RespTx)
     (broker-idx :i64)
-    (rundb-req-tx :trading::rundb::Service::ReqTx)
-    (rundb-ack-tx :trading::rundb::Service::AckTx)
-    (rundb-ack-rx :trading::rundb::Service::AckRx)
+    (rundb-req-tx :wat::std::telemetry::Service::ReqTx<trading::log::LogEntry>)
+    (rundb-ack-tx :wat::std::telemetry::Service::AckTx)
+    (rundb-ack-rx :wat::std::telemetry::Service::AckRx)
     -> :trading::treasury::Treasury)
   (:wat::core::let*
     (((t-start :wat::time::Instant) (:wat::time::now))
@@ -285,7 +285,7 @@
       (:trading::treasury::Service/build-request-telemetry
         broker-idx req-name ns-request ts-ns))
      ((_log :())
-      (:trading::rundb::Service/batch-log
+      (:wat::std::telemetry::Service/batch-log
         rundb-req-tx rundb-ack-tx rundb-ack-rx entries)))
     t'))
 
@@ -295,9 +295,9 @@
     (treasury :trading::treasury::Treasury)
     (candle :i64)
     (price :f64)
-    (rundb-req-tx :trading::rundb::Service::ReqTx)
-    (rundb-ack-tx :trading::rundb::Service::AckTx)
-    (rundb-ack-rx :trading::rundb::Service::AckRx)
+    (rundb-req-tx :wat::std::telemetry::Service::ReqTx<trading::log::LogEntry>)
+    (rundb-ack-tx :wat::std::telemetry::Service::AckTx)
+    (rundb-ack-rx :wat::std::telemetry::Service::AckRx)
     -> :trading::treasury::Treasury)
   (:wat::core::let*
     (((t-start :wat::time::Instant) (:wat::time::now))
@@ -318,7 +318,7 @@
      ;; ns-emit measured AFTER the entries are built so it captures
      ;; the build cost itself; close enough for v1.
      ((_log :())
-      (:trading::rundb::Service/batch-log
+      (:wat::std::telemetry::Service/batch-log
         rundb-req-tx rundb-ack-tx rundb-ack-rx entries)))
     t'))
 
@@ -337,9 +337,9 @@
     (rxs :Vec<trading::treasury::Service::EventRx>)
     (slots :Vec<trading::treasury::Service::Slot>)
     (broker-indices :Vec<i64>)
-    (rundb-req-tx :trading::rundb::Service::ReqTx)
-    (rundb-ack-tx :trading::rundb::Service::AckTx)
-    (rundb-ack-rx :trading::rundb::Service::AckRx)
+    (rundb-req-tx :wat::std::telemetry::Service::ReqTx<trading::log::LogEntry>)
+    (rundb-ack-tx :wat::std::telemetry::Service::AckTx)
+    (rundb-ack-rx :wat::std::telemetry::Service::AckRx)
     -> :())
   (:wat::core::if (:wat::core::empty? rxs) -> :()
     ()
@@ -407,9 +407,9 @@
     (tick-rx :trading::treasury::Service::EventRx)
     (broker-rxs :Vec<trading::treasury::Service::EventRx>)
     (broker-resp-txs :Vec<trading::treasury::Service::RespTx>)
-    (rundb-req-tx :trading::rundb::Service::ReqTx)
-    (rundb-ack-tx :trading::rundb::Service::AckTx)
-    (rundb-ack-rx :trading::rundb::Service::AckRx)
+    (rundb-req-tx :wat::std::telemetry::Service::ReqTx<trading::log::LogEntry>)
+    (rundb-ack-tx :wat::std::telemetry::Service::AckTx)
+    (rundb-ack-rx :wat::std::telemetry::Service::AckRx)
     -> :())
   (:wat::core::let*
     (((treasury :trading::treasury::Treasury)
@@ -526,9 +526,9 @@
 ;; Returns (HandlePool<BrokerHandle>, TickTx, ProgramHandle).
 (:wat::core::define
   (:trading::treasury::Service
-    (rundb-req-tx :trading::rundb::Service::ReqTx)
-    (rundb-ack-tx :trading::rundb::Service::AckTx)
-    (rundb-ack-rx :trading::rundb::Service::AckRx)
+    (rundb-req-tx :wat::std::telemetry::Service::ReqTx<trading::log::LogEntry>)
+    (rundb-ack-tx :wat::std::telemetry::Service::AckTx)
+    (rundb-ack-rx :wat::std::telemetry::Service::AckRx)
     (entry-fee :f64)
     (exit-fee :f64)
     (initial-balances :trading::treasury::Balances)

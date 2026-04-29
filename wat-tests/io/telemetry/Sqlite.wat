@@ -1,7 +1,9 @@
 ;; wat-tests/io/telemetry/Sqlite.wat — smoke tests for the lab
-;; telemetry::Sqlite wrapper. Same shape as
-;; wat-tests/io/RunDbService.wat (the predecessor under arc 029):
-;; spawn → pop handle → batch-log → drop → join.
+;; telemetry::Sqlite wrapper. Post arc 085: the wrapper delegates
+;; to the substrate's `:wat::std::telemetry::Sqlite/auto-spawn`
+;; which derives schemas + INSERTs + per-entry binders from the
+;; `:trading::log::LogEntry` enum decl. Test pattern unchanged from
+;; the pre-085 wrapper: spawn → pop handle → batch-log → drop → join.
 ;;
 ;; Verification beyond "no crash" happens out-of-band via sqlite3
 ;; CLI on /tmp/telemetry-sqlite-*.db (per arc 027/029 no-read-API

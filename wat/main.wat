@@ -10,14 +10,17 @@
 ;; See `docs/rewrite-backlog.md` for the leaves-to-root build order.
 
 
-;; Phase 0 — Rust interop (shims/parquet candle stream + sqlite logger)
+;; Phase 0 — Rust interop (shims/parquet candle stream) + telemetry
+;; surface. Sqlite persistence comes from the substrate's wat-sqlite
+;; crate (arcs 083 / 084 / 085); the lab declares LogEntry as the
+;; source of truth and `:trading::telemetry::Sqlite/spawn` delegates
+;; to `:wat::std::telemetry::Sqlite/auto-spawn` which derives schemas
+;; + INSERTs from the enum decl.
 (:wat::load-file! "io/CandleStream.wat")
-(:wat::load-file! "io/RunDb.wat")
 (:wat::load-file! "io/log/LogEntry.wat")
-(:wat::load-file! "io/log/schema.wat")
 (:wat::load-file! "io/log/telemetry.wat")
 (:wat::load-file! "io/log/rate-gate.wat")
-(:wat::load-file! "io/RunDbService.wat")
+(:wat::load-file! "io/telemetry/Sqlite.wat")
 
 ;; Phase 1 — types
 (:wat::load-file! "types/enums.wat")
@@ -107,9 +110,17 @@
 (:wat::load-file! "treasury/treasury.wat")
 (:wat::load-file! "services/treasury.wat")
 
+;; Programs — the runnable shapes :user::main dispatches to. Each
+;; program owns its own per-run identity (runs/<descriptor>-<epoch>.{out,err,db})
+;; and double-writes through both ConsoleLogger (occasional, human-
+;; friendly) and Sqlite/auto-spawn (high-fidelity LogEntry rows).
+(:wat::load-file! "programs/run.wat")
+(:wat::load-file! "programs/smoke.wat")
+
+
 (:wat::core::define (:user::main
                      (stdin  :wat::io::IOReader)
                      (stdout :wat::io::IOWriter)
                      (stderr :wat::io::IOWriter)
                      -> :())
-  (:wat::io::IOWriter/println stdout "holon-lab-trading scaffold is alive"))
+  (:trading::smoke/main stdin stdout stderr))

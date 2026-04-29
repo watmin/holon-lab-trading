@@ -141,7 +141,7 @@ wat              = { path = "../wat-rs" }
 wat-macros       = { path = "../wat-rs/crates/wat-macros" }
 wat-lru          = { path = "../wat-rs/crates/wat-lru" }
 wat-holon-lru    = { path = "../wat-rs/crates/wat-holon-lru" }
+wat-sqlite       = { path = "../wat-rs/crates/wat-sqlite" }
 parquet          = "53"
-arrow      = "53"
-chrono     = "0.4"
-rusqlite   = { version = "0.31", features = ["bundled"] }
+arrow            = "53"
+chrono           = "0.4"

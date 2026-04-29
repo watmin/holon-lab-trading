@@ -16,4 +16,4 @@
 #[path = "../src/shims.rs"]
 mod shims;
 
-wat::test! { deps: [shims, wat_lru, wat_holon_lru] }
+wat::test! { deps: [shims, wat_lru, wat_holon_lru, wat_sqlite] }

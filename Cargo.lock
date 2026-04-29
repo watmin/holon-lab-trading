@@ -765,11 +765,11 @@ dependencies = [
  "arrow",
  "chrono",
  "parquet",
- "rusqlite",
  "wat",
  "wat-holon-lru",
  "wat-lru",
  "wat-macros",
+ "wat-sqlite",
 ]
 
 [[package]]
@@ -1617,6 +1617,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "wat-sqlite"
+version = "0.1.0"
+dependencies = [
+ "rusqlite",
+ "wat",
+ "wat-macros",
 ]
 
 [[package]]

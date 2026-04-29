@@ -37,16 +37,29 @@ chapter-65/66/67 cache primitives are how this fits.
 
 Phase 1 — the playground:
 
-- `059-001-l1-l2-caches/` — L1 thread-owned + L2 queue-addressed shared
-  cache, wired before any thinker code. Cache is non-negotiable.
-- `059-002-treasury-deadlines/` (next) — `Active`/`Grace`/`Violence`
+- `059-001-l1-l2-caches/` — **PARTIAL.** Milestones 1+2 shipped (lab
+  cache primitives + substrate uplift via wat-rs arcs 074/076/077/078).
+  Milestone 3 (thinker hot-path integration + probe tests T4–T8 +
+  `:user::main` wiring) is the actual unblocking step for the
+  umbrella. **The cache exists; nothing uses it yet.**
+- `059-002-telemetry-sweep/` — **SHIPPED 2026-04-29 by a different
+  path than the DESIGN proposed.** Substrate arcs 083/084/085 + slice 3
+  collapsed the originally-proposed 3-slice plan to a 5-line lab
+  wrapper plus a deletion sweep. The trader's `:trading::log::LogEntry`
+  enum decl IS the schema; substrate's `Sqlite/auto-spawn` derives
+  schemas + INSERTs + binders from the decl. `proof_005` (substrate
+  self-heartbeat through cadence) deferred — see the sub-arc's
+  § Open follow-ups.
+- `059-003-treasury-deadlines/` (next) — `Active`/`Grace`/`Violence`
   state machine, ATR-proportional deadlines, `ProposerRecord`,
-  conservation invariant.
-- `059-003-three-role-skeleton/` (next) — Market / Regime / Broker
+  conservation invariant. *Note: numbering shift — earlier this
+  sub-arc was tentatively `059-002`; the telemetry sweep claimed 002
+  during the data-not-text rebuild.*
+- `059-004-three-role-skeleton/` (next) — Market / Regime / Broker
   observers wired with placeholder thoughts; data flows end-to-end.
-- `059-004-four-gates-and-trail/` (next) — the four 055 gates +
+- `059-005-four-gates-and-trail/` (next) — the four 055 gates +
   retroactive labeling at paper resolution.
-- `059-005-status-panel-and-run/` (next) — terminal status panel +
+- `059-006-status-panel-and-run/` (next) — terminal status panel +
   cold-start 6-year backtest.
 
 Phase 2 — the thoughts (sub-arcs emerge from the iteration; not

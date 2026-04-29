@@ -1,6 +1,6 @@
 # 059-001 — L1/L2 caches on the new substrate
 
-**Status:** PARTIAL 2026-04-29. Cache primitives shipped; cache **integration** (thinker-side consumption + telemetry Reporter + probe-tests T4–T8) is the remaining work. See § What's done and § What remains.
+**Status:** PARTIAL 2026-04-29. Cache primitives shipped; cache **integration** (thinker-side consumption + probe-tests T4–T8) is the remaining work — and is the umbrella's actual unblocking step. See § What's done and § What remains.
 
 **Reframe history:**
 - PROPOSED 2026-04-27.
@@ -10,6 +10,7 @@
   1. **Type rename.** `:wat::holon::HologramLRU` → `:wat::holon::lru::HologramCache` (arc 078 slice 1). The "LRU" qualifier moved from type name to namespace; the type name describes what the thing IS. See [`wat-rs/docs/arc/2026/04/078-service-contract/INSCRIPTION.md`](../../../../../../wat-rs/docs/arc/2026/04/078-service-contract/INSCRIPTION.md).
   2. **Service.wat lifted to substrate.** What was originally lab-specific (`:trading::cache::Service`) became the canonical service-contract substrate (`:wat::holon::lru::HologramCacheService`) under arc 078 slice 2. The lab's `wat/cache/Service.wat` is **deleted**; the lab's `wat/cache/L2-spawn.wat` now delegates spawn to the substrate type. See [`wat-rs/docs/CONVENTIONS.md`](../../../../../../wat-rs/docs/CONVENTIONS.md) "Service contract — Reporter + MetricsCadence" section.
   3. **Telemetry contract changed.** The original DESIGN had Service.wat owning counters, running `:trading::log::tick-gate` inline, and emitting `LogEntry::Telemetry` directly. The substrate's Reporter + MetricsCadence contract inverts this: substrate emits typed `Report::Metrics` events; the lab supplies a Reporter fn that match-dispatches those to whatever sink it wants (rundb, CloudWatch, stdout). § E rewritten to the new contract.
+- Updated 2026-04-29 (v5) after substrate arcs 083/084/085 + sub-arc 059-002 sweep landed. The Reporter implementation now closes over substrate-typed handles (not the lab-specific `:trading::rundb::Service` pre-rename). See § "What's done" row "Cache reporter" — the file `wat/cache/reporter.wat` exists and works; its handles changed shape during the rundb→auto-spawn migration. Milestone 3 (thinker integration) is unchanged: the cache code still has zero callers in the trader's hot path.
 
 These shifts kept the *intent* of the cache architecture intact while moving the implementation seam: most of what was originally listed as lab-side work is now substrate-shared work that any consumer (this lab, future MTG / truth-engine consumers) gets for free.
 
@@ -30,18 +31,19 @@ The progress accounting splits cleanly into "primitives shipped" (with substrate
 
 ### What remains
 
-The cache exists. The cache is not used. A grep for `trading::cache::*` callers outside `wat/cache/` itself returns zero — no thinker, no observer, no broker invokes the resolve-walker or holds an L1 instance. Until a hot path consumes the cache, T7 (telemetry rows in rundb) and T8 (≥272 candles/sec on a 10k run, the **acceptance gate**) cannot be measured.
+The cache exists. The cache is not used. A grep for `trading::cache::*` callers outside `wat/cache/` itself returns zero — no thinker, no observer, no broker invokes the resolve-walker or holds an L1 instance. Until a hot path consumes the cache, T7 (telemetry rows at cadence) and T8 (≥272 candles/sec on a 10k run, the **acceptance gate**) cannot be measured.
 
 The remaining work is integration, not primitives:
 
 | Item | Owner | Notes |
 |---|---|---|
-| Reporter implementation | lab | Lab writes a `:wat::holon::lru::HologramCacheService::Reporter` fn that match-dispatches `Report::Metrics stats` → `:trading::log::LogEntry::Telemetry` rows + flushes via `:trading::rundb::Service/batch-log`. Replaces what was originally inline in Service.wat. |
-| MetricsCadence wiring | lab | Pick a gate type. Existing `:trading::log::tick-gate` operates over `wat::time::Instant`; build a `MetricsCadence<wat::time::Instant>` wrapping it. 5000ms default still applies. |
-| Stats counter set decision | lab | Substrate ships 5 counters (lookups, hits, misses, puts, cache-size). DESIGN § E originally listed 9 (added: evictions, ns_gets, ns_sets, gets_serviced, sets_drained). Three options: (a) live with 5; (b) extend substrate Stats (substrate arc — eviction is interesting cross-consumer signal); (c) wrap timing in the Reporter without touching substrate. See § E. |
-| L1 telemetry path | lab | Substrate models service telemetry only. L1 is thread-owned, not a service — no substrate Reporter applies. Either build a parallel L1 metric pump in the thinker (using `:trading::log::tick-gate` + `LogEntry::Telemetry` directly) or accept L1 as silent for slice 1 and add it as a follow-up. |
-| Thinker hot-path integration | lab | Wire `:trading::cache::resolve` (or its post-arc-078 successor) into the thinker so a real run exercises the cache. T4 / T5 (cross-thinker promotion) require this. |
-| Probe tests T4–T8 | lab | `wat-tests-integ/059-001-l1-l2-caches/` directory exists but is **empty**. T4/T5 (cross-thinker), T7 (telemetry rows), T8 (throughput gate) all unblocked once the integration items above land. |
+| Reporter implementation | lab | ✅ shipped at `wat/cache/reporter.wat`. Match-dispatches `Report::Metrics stats` → 5 `:trading::log::LogEntry::Telemetry` rows; flushes via the substrate telemetry sink's `Service/batch-log`. Reporter handles are now substrate-typed (`:wat::std::telemetry::Service::ReqTx<trading::log::LogEntry>` etc.) post-arc-085. |
+| MetricsCadence wiring | lab | Code present in proof_004's deftest (counter-based cadence at threshold 10). Production wiring at `:user::main` blocked on milestone-3 spawn-site work. |
+| Stats counter set decision | lab | Resolved as **(a) — live with the substrate's 5 counters** (lookups, hits, misses, puts, cache-size) for milestone 3. Original DESIGN § E proposed 9; the additional four (`evictions`, `ns_gets`, `ns_sets`, `gets_serviced`/`sets_drained`) are deferred until a real telemetry consumer surfaces a concrete need for them. |
+| L1 telemetry path | lab | Resolved as **L1 emits silently** for milestone 3. Thread-owned cache has no substrate Reporter contract; if the operator wants L1 visibility post-integration, ship as a follow-up arc using `:trading::log::tick-gate` + `:trading::log::emit-metric` directly inside the thinker loop. |
+| **Thinker hot-path integration** | lab | ❌ **the actual remaining unblocking work.** Wire `:trading::cache::resolve` into the thinker so a real run exercises the cache. The thinker holds an L1 instance, pops a per-thinker `(next-tx, terminal-tx)` pair from L2's HandlePools at startup. T4 / T5 (cross-thinker promotion) require this. |
+| Probe tests T4–T8 | lab | `wat-tests-integ/059-001-l1-l2-caches/` directory exists but is **empty**. T4/T5 (cross-thinker), T7 (telemetry rows), T8 (throughput gate) all unblocked once the hot-path integration lands. |
+| `:user::main` wiring | lab | Currently a Phase-0 hello-world (`println "holon-lab-trading scaffold is alive"`). Milestone 3 needs main.wat to spawn the telemetry sink + L2 cache pair, distribute L2 handles to N thinkers, spawn the thinkers + producers, run the candle stream as the program's pulse, join everything in cascade. The CIRCUIT.md wiring discipline applies. |
 
 **Substrate finding logged in source.** `:wat::holon::lru::HologramCache`'s underlying `:wat::lru::LocalCache` is thread-owned (lives in a `ThreadOwnedCell`), so a spawned worker holding one cannot return the cache through `join-result` and have the caller invoke methods on it. Substrate's `HologramCacheService/run` wraps `loop` in a thunk that drops the cache on the worker thread and returns `:()` — the spawn-handle type is `ProgramHandle<()>`. Live state is observable only through `Get` queries during operation. This is the same shape as `:wat::lru::CacheService`; both substrate cache services follow this discipline. Record-keeping note in case follow-up work reaches for cache-as-return-value and finds it absent.
 
