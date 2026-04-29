@@ -32,6 +32,22 @@
   :wat::std::telemetry::Service::Spawn<trading::log::LogEntry>)
 
 
+;; Lab's pragma policy. Substrate ships zero defaults; the lab makes
+;; its own choice. WAL gives concurrent reads while a writer holds
+;; the connection; synchronous=NORMAL trades a tiny crash-window for
+;; ~10x flush throughput. Both are the lab's decision, not the
+;; language's. Other labs (or future trading subdomains with
+;; different durability needs) pick their own.
+(:wat::core::define
+  (:trading::telemetry::Sqlite::pre-install
+    (db :wat::sqlite::Db)
+    -> :())
+  (:wat::core::let*
+    (((_w :()) (:wat::sqlite::pragma db "journal_mode" "WAL"))
+     ((_s :()) (:wat::sqlite::pragma db "synchronous" "NORMAL")))
+    ()))
+
+
 (:wat::core::define
   (:trading::telemetry::Sqlite/spawn<G>
     (path :String)
@@ -39,4 +55,5 @@
     (cadence :wat::std::telemetry::Service::MetricsCadence<G>)
     -> :trading::telemetry::Spawn)
   (:wat::std::telemetry::Sqlite/auto-spawn
-    :trading::log::LogEntry path count cadence))
+    :trading::log::LogEntry path count cadence
+    :trading::telemetry::Sqlite::pre-install))

@@ -117,6 +117,7 @@
 (:wat::load-file! "programs/run.wat")
 (:wat::load-file! "programs/smoke.wat")
 (:wat::load-file! "programs/pulse.wat")
+(:wat::load-file! "programs/bare-walk.wat")
 
 
 (:wat::core::define (:user::main
