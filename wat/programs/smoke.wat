@@ -36,27 +36,30 @@
     (((_started :())
       (:wat::telemetry::ConsoleLogger/info logger
         (:trading::smoke::Event::Started run-name)))
+     ((p1 :trading::PaperResolved)
+      (:trading::PaperResolved/new
+        run-name "always-up" "cosine" 1 "Up" 100 388 "Grace" 0.04 0.0))
      ((_l1 :())
       (:wat::telemetry::WorkUnitLog/info wlog wu
-        (:wat::core::quasiquote
-          (:trading::PaperResolved/new
-            ,run-name "always-up" "cosine" 1 "Up" 100 388 "Grace" 0.04 0.0))))
+        (:wat::core::struct->form p1)))
      ((_h1 :())
       (:wat::telemetry::ConsoleLogger/info logger
         (:trading::smoke::Event::Heartbeat 1)))
+     ((p2 :trading::PaperResolved)
+      (:trading::PaperResolved/new
+        run-name "always-up" "cosine" 2 "Up" 200 488 "Violence" 0.0 0.12))
      ((_l2 :())
       (:wat::telemetry::WorkUnitLog/info wlog wu
-        (:wat::core::quasiquote
-          (:trading::PaperResolved/new
-            ,run-name "always-up" "cosine" 2 "Up" 200 488 "Violence" 0.0 0.12))))
+        (:wat::core::struct->form p2)))
      ((_h2 :())
       (:wat::telemetry::ConsoleLogger/info logger
         (:trading::smoke::Event::Heartbeat 2)))
+     ((p3 :trading::PaperResolved)
+      (:trading::PaperResolved/new
+        run-name "sma-cross" "cosine" 3 "Down" 300 588 "Grace" 0.07 0.0))
      ((_l3 :())
       (:wat::telemetry::WorkUnitLog/info wlog wu
-        (:wat::core::quasiquote
-          (:trading::PaperResolved/new
-            ,run-name "sma-cross" "cosine" 3 "Down" 300 588 "Grace" 0.07 0.0))))
+        (:wat::core::struct->form p3)))
      ((_stopped :())
       (:wat::telemetry::ConsoleLogger/info logger
         (:trading::smoke::Event::Stopped "smoke complete"))))

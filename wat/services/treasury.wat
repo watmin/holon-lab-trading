@@ -159,10 +159,11 @@
            ((t' :trading::treasury::Treasury) (:wat::core::first tup))
            ((_verdicts :trading::treasury::Verdicts) (:wat::core::second tup))
            ((active :i64) (:trading::treasury::Treasury::active-paper-count t'))
+           ((snap :trading::treasury::TickSnapshot)
+            (:trading::treasury::TickSnapshot/new candle price active))
            ((_obs :())
             (:wat::telemetry::WorkUnitLog/info wlog wu
-              (:wat::core::quasiquote
-                (:trading::treasury::TickSnapshot/new ,candle ,price ,active)))))
+              (:wat::core::struct->form snap))))
           t')))))
 
 

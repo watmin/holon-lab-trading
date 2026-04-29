@@ -44,17 +44,14 @@
            (:trading::candles::next! stream)))
          (:trading::test::proofs::003::skip-n stream (:wat::core::- n 1)))))
 
-   ;; Slice 6 (arc 091): build a quasiquoted CONSTRUCTOR FORM for the
-   ;; per-Outcome Log row's data column. WorkUnitLog/info takes
-   ;; :wat::WatAST; substrate's Atom/watast_to_holon lowers the form
-   ;; to a HolonAST at emit time. The form round-trips back to a
-   ;; PaperResolved on read.
+   ;; Slice 6 (arc 091) + slice 8: helper builds the per-Outcome
+   ;; PaperResolved struct; emit-site lifts via :wat::core::struct->form.
    (:wat::core::define
-     (:trading::test::proofs::003::outcome->form
+     (:trading::test::proofs::003::outcome->resolved
        (run-name :String)
        (thinker-name :String) (predictor-name :String)
        (out :trading::sim::Outcome)
-       -> :Option<wat::WatAST>)
+       -> :Option<trading::PaperResolved>)
      (:wat::core::let*
        (((paper :trading::sim::Paper) (:trading::sim::Outcome/paper out))
         ((paper-id :i64)              (:trading::sim::Paper/id paper))
@@ -66,23 +63,19 @@
                                       (:trading::sim::Paper/state paper))
         ((final-residue :f64)         (:trading::sim::Outcome/final-residue out))
         ((dir-str :String)            (:trading::test::proofs::003::dir-str dir)))
-       (:wat::core::match state -> :Option<wat::WatAST>
+       (:wat::core::match state -> :Option<trading::PaperResolved>
          ((:trading::sim::PositionState::Grace _r)
            (Some
-             (:wat::core::quasiquote
-               (:trading::PaperResolved/new
-                 ,run-name ,thinker-name ,predictor-name
-                 ,paper-id ,dir-str ,entry-candle ,closed-at
-                 "Grace" ,final-residue 0.0))))
+             (:trading::PaperResolved/new
+               run-name thinker-name predictor-name
+               paper-id dir-str entry-candle closed-at
+               "Grace" final-residue 0.0)))
          (:trading::sim::PositionState::Violence
-           (:wat::core::let*
-             (((loss :f64) (:wat::core::f64::abs final-residue)))
-             (Some
-               (:wat::core::quasiquote
-                 (:trading::PaperResolved/new
-                   ,run-name ,thinker-name ,predictor-name
-                   ,paper-id ,dir-str ,entry-candle ,closed-at
-                   "Violence" 0.0 ,loss)))))
+           (Some
+             (:trading::PaperResolved/new
+               run-name thinker-name predictor-name
+               paper-id dir-str entry-candle closed-at
+               "Violence" 0.0 (:wat::core::f64::abs final-residue))))
          (:trading::sim::PositionState::Active :None))))
 
    ;; Run one window: open bounded stream sized for `start + n`,
@@ -137,11 +130,12 @@
                   (out :trading::sim::Outcome)
                   -> :())
                  (:wat::core::match
-                   (:trading::test::proofs::003::outcome->form
+                   (:trading::test::proofs::003::outcome->resolved
                      run-name thinker-name predictor-name out)
                    -> :()
-                   ((Some form)
-                     (:wat::telemetry::WorkUnitLog/info wlog wu form))
+                   ((Some pr)
+                     (:wat::telemetry::WorkUnitLog/info wlog wu
+                       (:wat::core::struct->form pr)))
                    (:None ())))))))))
 
    ;; Walk 0..10 windows for one thinker.

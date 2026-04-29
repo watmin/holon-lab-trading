@@ -31,6 +31,19 @@
   (Stopped (n :i64)))
 
 
+;; ─── Pulse summary form — Event::Log payload ───────────────────
+;;
+;; Slice 6's "both tables joinable via uuid" verification. The wu
+;; running through walk-step bumps :candle (one Event::Metric row at
+;; scope-close); before scope-close we also emit ONE Event::Log row
+;; carrying this RunSummary. Both rows share the wu's uuid; SQL can
+;; cross-join via `metric.uuid = log.uuid`.
+(:wat::core::struct :trading::pulse::RunSummary
+  (run-name :String)
+  (planned  :i64)
+  (walked   :i64))
+
+
 ;; ─── Walker — tail-recursive count over the stream ──────────────
 
 (:wat::core::define
@@ -45,6 +58,8 @@
         (((_ :()) (:wat::telemetry::WorkUnit/incr! wu (:wat::holon::Atom :candle))))
         (:trading::pulse/walk-step wu stream (:wat::core::+ n 1))))
     (:None n)))
+
+
 
 
 ;; ─── Inner — make-scope around the walk; substrate ships at close ─
@@ -70,6 +85,11 @@
         (:wat::core::lambda ((_u :()) -> :wat::time::Instant)
           (:wat::time::now))
         :wat::telemetry::Console::Format::Edn))
+     ((wlog :wat::telemetry::WorkUnitLog)
+      (:wat::telemetry::WorkUnitLog/new
+        sqlite-handle :pulse
+        (:wat::core::lambda ((_u :()) -> :wat::time::Instant)
+          (:wat::time::now))))
      ((_started :())
       (:wat::telemetry::ConsoleLogger/info logger
         (:trading::pulse::Tick::Started run-name planned)))
@@ -83,7 +103,14 @@
      ((n :i64)
       (scope tags
         (:wat::core::lambda ((wu :wat::telemetry::WorkUnit) -> :i64)
-          (:trading::pulse/walk-step wu stream 0))))
+          (:wat::core::let*
+            (((walked :i64) (:trading::pulse/walk-step wu stream 0))
+             ((summary :trading::pulse::RunSummary)
+              (:trading::pulse::RunSummary/new run-name planned walked))
+             ((_log :())
+              (:wat::telemetry::WorkUnitLog/info wlog wu
+                (:wat::core::struct->form summary))))
+            walked))))
      ((_stopped :())
       (:wat::telemetry::ConsoleLogger/info logger
         (:trading::pulse::Tick::Stopped n))))

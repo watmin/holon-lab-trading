@@ -14,4 +14,4 @@
 
 mod shims;
 
-wat::main! { deps: [shims, wat_telemetry, wat_telemetry_sqlite] }
+wat::main! { deps: [shims, wat_sqlite, wat_telemetry, wat_telemetry_sqlite] }
