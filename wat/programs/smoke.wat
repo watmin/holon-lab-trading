@@ -106,12 +106,12 @@
 
 (:wat::core::define
   (:trading::smoke/inner
-    (con-pool :wat::kernel::HandlePool<wat::std::service::Console::Tx>)
+    (con-pool :wat::kernel::HandlePool<wat::std::service::Console::Handle>)
     (sqlite-pool :wat::std::telemetry::Service::ReqTxPool<trading::log::LogEntry>)
     (run-name :String)
     -> :())
   (:wat::core::let*
-    (((con-tx :wat::std::service::Console::Tx)
+    (((con-handle :wat::std::service::Console::Handle)
       (:wat::kernel::HandlePool::pop con-pool))
      ((_finish-con :()) (:wat::kernel::HandlePool::finish con-pool))
      ((sqlite-tx :wat::std::telemetry::Service::ReqTx<trading::log::LogEntry>)
@@ -128,7 +128,7 @@
      ;; :smoke for this program.
      ((logger :wat::std::telemetry::ConsoleLogger)
       (:wat::std::telemetry::ConsoleLogger/new
-        con-tx :smoke
+        con-handle :smoke
         (:wat::core::lambda ((_u :()) -> :wat::time::Instant)
           (:wat::time::now))
         :wat::std::telemetry::Console::Format::Edn)))
@@ -172,7 +172,7 @@
      ;; Spawn Console — count=1 (single producer in this smoke).
      ((con-spawn :wat::std::service::Console::Spawn)
       (:wat::std::service::Console/spawn out-writer err-writer 1))
-     ((con-pool :wat::kernel::HandlePool<wat::std::service::Console::Tx>)
+     ((con-pool :wat::kernel::HandlePool<wat::std::service::Console::Handle>)
       (:wat::core::first con-spawn))
      ((con-driver :wat::kernel::ProgramHandle<()>)
       (:wat::core::second con-spawn))

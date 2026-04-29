@@ -35,18 +35,18 @@
 
 (:wat::core::define
   (:trading::bare/inner
-    (con-pool :wat::kernel::HandlePool<wat::std::service::Console::Tx>)
+    (con-pool :wat::kernel::HandlePool<wat::std::service::Console::Handle>)
     (stream :trading::candles::Stream)
     (run-name :String)
     (planned :i64)
     -> :())
   (:wat::core::let*
-    (((con-tx :wat::std::service::Console::Tx)
+    (((con-handle :wat::std::service::Console::Handle)
       (:wat::kernel::HandlePool::pop con-pool))
      ((_finish-con :()) (:wat::kernel::HandlePool::finish con-pool))
      ((logger :wat::std::telemetry::ConsoleLogger)
       (:wat::std::telemetry::ConsoleLogger/new
-        con-tx :bare
+        con-handle :bare
         (:wat::core::lambda ((_u :()) -> :wat::time::Instant)
           (:wat::time::now))
         :wat::std::telemetry::Console::Format::Edn))
@@ -63,7 +63,7 @@
       (:wat::std::telemetry::ConsoleLogger/info logger
         (:trading::bare::Tick::Stopped n))))
     ;; Print wall_ns to stdout via console for visibility.
-    (:wat::std::service::Console/out con-tx
+    (:wat::std::service::Console/out con-handle
       (:wat::core::string::concat
         "BARE WALK: " (:wat::core::string::concat
           (:wat::core::i64::to-string n)
@@ -92,7 +92,7 @@
       (:trading::candles::open-bounded "data/btc_5m_raw.parquet" planned))
      ((con-spawn :wat::std::service::Console::Spawn)
       (:wat::std::service::Console/spawn out-writer err-writer 1))
-     ((con-pool :wat::kernel::HandlePool<wat::std::service::Console::Tx>)
+     ((con-pool :wat::kernel::HandlePool<wat::std::service::Console::Handle>)
       (:wat::core::first con-spawn))
      ((con-driver :wat::kernel::ProgramHandle<()>)
       (:wat::core::second con-spawn))
