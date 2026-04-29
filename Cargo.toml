@@ -138,7 +138,7 @@ experiment-099 = []
 
 [dependencies]
 wat              = { path = "../wat-rs" }
-wat-macros       = { path = "../wat-rs/wat-macros" }
+wat-macros       = { path = "../wat-rs/crates/wat-macros" }
 wat-lru          = { path = "../wat-rs/crates/wat-lru" }
 wat-holon-lru    = { path = "../wat-rs/crates/wat-holon-lru" }
 parquet          = "53"
