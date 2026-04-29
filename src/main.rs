@@ -5,13 +5,13 @@
 //! (source = `include_str!(<crate>/wat/main.wat)`, loader =
 //! `ScopedLoader` at `<crate>/wat`).
 //!
-//! Deps: in-crate `shims` (CandleStream) plus the substrate
-//! `wat-sqlite` crate (arcs 083 / 084 / 085) for sqlite-backed
-//! telemetry. The lab's enum decl in `wat/io/log/LogEntry.wat`
-//! drives schema + INSERT derivation through
-//! `:wat::std::telemetry::Sqlite/auto-spawn` — no domain-typed
-//! sqlite Rust shim of our own.
+//! Deps: in-crate `shims` (CandleStream) plus the substrate's
+//! `wat-telemetry-sqlite` crate (arc 091 slice 6) — schema +
+//! INSERT derivation comes from the substrate's
+//! `:wat::telemetry::Event` enum (Metric + Log variants), shipped
+//! through `:wat::telemetry::Sqlite/auto-spawn`. The lab keeps no
+//! domain-typed sqlite Rust shim of its own.
 
 mod shims;
 
-wat::main! { deps: [shims, wat_sqlite] }
+wat::main! { deps: [shims, wat_telemetry, wat_telemetry_sqlite] }

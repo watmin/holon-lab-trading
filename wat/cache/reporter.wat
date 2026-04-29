@@ -1,91 +1,60 @@
 ;; :trading::cache::reporter — closure-over-telemetry-handles factory
 ;; for HologramCacheService::Reporter.
 ;;
-;; Arc 078 ships :wat::holon::lru::HologramCacheService::Reporter as
-;; :fn(Report) -> :() — a pure function from the substrate's typed
+;; Arc 078 ships `:wat::holon::lru::HologramCacheService::Reporter` as
+;; `:fn(Report) -> :()` — a pure function from the substrate's typed
 ;; emission to whatever sink the lab wants. This file is the lab's
-;; sink: a Reporter that translates Report::Metrics stats into 5
-;; LogEntry::Telemetry rows and flushes them through the substrate
-;; telemetry sink's batch-log.
+;; sink.
 ;;
-;; Why a factory and not a top-level fn: the substrate's Reporter
-;; type takes one arg (Report). The flush needs three telemetry
-;; handles (req-tx, ack-tx, ack-rx). Wat lambdas close over their
-;; enclosing environment (per runtime.rs:30 — "evaluation time
-;; captures the enclosing Environment"), so make-reporter binds the
-;; handles in a let* scope and returns a lambda that uses them on
-;; call. The substrate calls reporter(report); the closure builds
-;; rows + flushes synchronously through the telemetry queue.
+;; Slice 6 (arc 091): the substrate's Event::Log carries the cache
+;; stats as a single structured observation per Report::Metrics fire.
+;; The 5 stats fields (lookups, hits, misses, puts, cache-size) are
+;; SNAPSHOTS — observations of cache state at a moment. Per the
+;; metric/log discipline arc 091 surfaced: snapshot-shaped values
+;; are Log data, not Metric rows. (Counter-shaped values bumped per
+;; occurrence belong on a wu via incr!; duration-shaped values from
+;; blocking calls belong on a wu via timed. Cache stats are neither —
+;; they're cumulative aggregates the cache service already maintains.)
 ;;
-;; Why cache-side and not telemetry-side: the inversion arc 078
-;; closed. If the sink provided make-reporter for cache, then for
-;; broker, then for treasury, the sink would re-acquire knowledge
-;; of every consumer's typed events — recoupling what the
-;; service-contract decoupling just separated. Each
-;; service-with-reporter owns its own translate (cache-specific) +
-;; closes over telemetry handles (sink destination) + ships rows
-;; through batch-log (substrate's surface).
-;;
-;; Counter set ships the substrate's 5: lookups / hits / misses /
-;; puts / cache-size. Each becomes one LogEntry::Telemetry row.
-;; Dimensions JSON tags cache identity per
-;; docs/proposals/2026/04/059-the-trader-on-substrate/059-001-l1-l2-caches/DESIGN.md
-;; § E: `{"cache":"<id>","layer":"<layer>"}`.
-
-(:wat::load-file! "../io/log/telemetry.wat")
+;; Each Report::Metrics fires ONE Event::Log row. Tags carry cache
+;; identity (cache-id + layer) so SQL queries can filter per-cache.
+;; Data is the Stats struct lifted to HolonAST + wrapped Tagged so
+;; round-trip parsing reads back the typed fields.
 
 (:wat::core::define
   (:trading::cache::reporter/make
-    (req-tx :wat::std::telemetry::Service::ReqTx<trading::log::LogEntry>)
-    (ack-tx :wat::std::telemetry::Service::AckTx)
-    (ack-rx :wat::std::telemetry::Service::AckRx)
-    (cache-id :String)        ;; "next" | "terminal" | caller's choice
-    (layer :String)           ;; "L1" | "L2" | caller's choice
+    (req-tx :wat::telemetry::Service::ReqTx<wat::telemetry::Event>)
+    (ack-rx :wat::telemetry::Service::AckRx)
+    (cache-id :wat::core::keyword)        ;; :next | :terminal | caller's choice
+    (layer    :wat::core::keyword)        ;; :L1 | :L2 | caller's choice
     -> :wat::holon::lru::HologramCacheService::Reporter)
   (:wat::core::lambda
     ((report :wat::holon::lru::HologramCacheService::Report) -> :())
     (:wat::core::match report -> :()
       ((:wat::holon::lru::HologramCacheService::Report::Metrics stats)
         (:wat::core::let*
-          (((dimensions :String)
-            (:wat::core::string::concat
-              "{\"cache\":\"" cache-id
-              "\",\"layer\":\""  layer
-              "\"}"))
-           ((ts :i64) (:wat::time::epoch-millis (:wat::time::now)))
-           ((entries :Vec<trading::log::LogEntry>)
-            (:wat::core::vec :trading::log::LogEntry
-              (:trading::log::emit-metric
-                "cache" cache-id dimensions ts
-                "lookups"
-                (:wat::core::i64::to-f64
-                  (:wat::holon::lru::HologramCacheService::Stats/lookups stats))
-                "Count")
-              (:trading::log::emit-metric
-                "cache" cache-id dimensions ts
-                "hits"
-                (:wat::core::i64::to-f64
-                  (:wat::holon::lru::HologramCacheService::Stats/hits stats))
-                "Count")
-              (:trading::log::emit-metric
-                "cache" cache-id dimensions ts
-                "misses"
-                (:wat::core::i64::to-f64
-                  (:wat::holon::lru::HologramCacheService::Stats/misses stats))
-                "Count")
-              (:trading::log::emit-metric
-                "cache" cache-id dimensions ts
-                "puts"
-                (:wat::core::i64::to-f64
-                  (:wat::holon::lru::HologramCacheService::Stats/puts stats))
-                "Count")
-              (:trading::log::emit-metric
-                "cache" cache-id dimensions ts
-                "cache-size"
-                (:wat::core::i64::to-f64
-                  (:wat::holon::lru::HologramCacheService::Stats/cache-size stats))
-                "Count")))
-           ((_ :())
-            (:wat::std::telemetry::Service/batch-log
-              req-tx ack-tx ack-rx entries)))
-          ())))))
+          (((time-ns :i64)
+            (:wat::time::epoch-nanos (:wat::time::now)))
+           ((uuid :String) (:wat::telemetry::uuid::v4))
+           ((ns-ast    :wat::holon::HolonAST) (:wat::holon::Atom :trading.cache))
+           ((cal-ast   :wat::holon::HolonAST) (:wat::holon::Atom :cache.reporter))
+           ((level-ast :wat::holon::HolonAST) (:wat::holon::Atom :info))
+           ((tags :wat::telemetry::Tags)
+            (:wat::core::assoc
+              (:wat::core::assoc
+                (:wat::core::HashMap :wat::telemetry::Tag)
+                (:wat::holon::Atom :cache-id) (:wat::holon::Atom cache-id))
+              (:wat::holon::Atom :layer) (:wat::holon::Atom layer)))
+           ((data-ast :wat::holon::HolonAST) (:wat::holon::Atom stats))
+           ((event :wat::telemetry::Event)
+            (:wat::telemetry::Event::Log
+              time-ns
+              (:wat::edn::NoTag/new ns-ast)
+              (:wat::edn::NoTag/new cal-ast)
+              (:wat::edn::NoTag/new level-ast)
+              uuid
+              tags
+              (:wat::edn::Tagged/new data-ast)))
+           ((entries :Vec<wat::telemetry::Event>)
+            (:wat::core::vec :wat::telemetry::Event event)))
+          (:wat::telemetry::Service/batch-log req-tx ack-rx entries))))))

@@ -11,16 +11,15 @@
 
 
 ;; Phase 0 — Rust interop (shims/parquet candle stream) + telemetry
-;; surface. Sqlite persistence comes from the substrate's wat-sqlite
-;; crate (arcs 083 / 084 / 085); the lab declares LogEntry as the
-;; source of truth and `:trading::telemetry::Sqlite/spawn` delegates
-;; to `:wat::std::telemetry::Sqlite/auto-spawn` which derives schemas
-;; + INSERTs from the enum decl.
+;; surface. Sqlite persistence consumes the substrate's
+;; `:wat::telemetry::Event` enum directly (arc 091 slice 6); the lab
+;; supplies just a thin spawn wrapper + pragma policy. Counters and
+;; durations come from `WorkUnit/incr!` / `WorkUnit/timed`; state-
+;; snapshot logs come from `WorkUnitLog/info|warn|error|debug`. The
+;; pre-arc-091 `:trading::log::LogEntry` enum + `emit-metric` helper
+;; + `make-rate-gate` retired this slice.
 (:wat::load-file! "io/CandleStream.wat")
-(:wat::load-file! "io/log/LogEntry.wat")
-(:wat::load-file! "io/log/telemetry.wat")
-(:wat::load-file! "io/log/rate-gate.wat")
-(:wat::load-file! "io/telemetry/Sqlite.wat")
+(:wat::load-file! "telemetry/Sqlite.wat")
 
 ;; Phase 1 — types
 (:wat::load-file! "types/enums.wat")
@@ -31,6 +30,7 @@
 (:wat::load-file! "types/candle.wat")
 (:wat::load-file! "types/portfolio.wat")
 (:wat::load-file! "types/paper-entry.wat")
+(:wat::load-file! "types/paper-resolved.wat")
 
 ;; Phase 3 — encoding helpers
 (:wat::load-file! "encoding/round.wat")

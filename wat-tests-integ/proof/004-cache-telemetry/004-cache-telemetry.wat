@@ -119,16 +119,14 @@
    ;; return — caller drops them when its own scope exits.
    (:wat::core::define
      (:trading::test::proofs::004::run-cache-with-rundb-tx
-       (rundb-req-tx :wat::std::telemetry::Service::ReqTx<trading::log::LogEntry>)
-       (ack-tx :wat::std::telemetry::Service::AckTx)
-       (ack-rx :wat::std::telemetry::Service::AckRx)
+       (rundb-req-tx :wat::telemetry::Service::ReqTx<wat::telemetry::Event>)
+       (ack-rx :wat::telemetry::Service::AckRx)
        -> :())
      (:wat::core::let*
        (;; Cache reporter — closure over rundb handles.
         ((reporter :wat::holon::lru::HologramCacheService::Reporter)
          (:trading::cache::reporter/make
-           rundb-req-tx ack-tx ack-rx
-           "test-cache" "L2"))
+           rundb-req-tx ack-rx :test-cache :L2))
         ;; Counter-based MetricsCadence — fires every 10 events.
         ((cadence :wat::holon::lru::HologramCacheService::MetricsCadence<i64>)
          (:wat::holon::lru::HologramCacheService::MetricsCadence/new
@@ -188,29 +186,27 @@
       (:wat::core::i64::to-string (:wat::time::epoch-seconds now)))
      ((db-path :String)
       (:wat::core::string::concat "runs/proof-004-" epoch-str ".db"))
-     ((rundb-spawn :trading::telemetry::Spawn)
+     ((rundb-spawn :wat::telemetry::Service::Spawn<wat::telemetry::Event>)
       (:trading::telemetry::Sqlite/spawn db-path 1
-        (:wat::std::telemetry::Service/null-metrics-cadence)))
-     ((rundb-pool :wat::std::telemetry::Service::ReqTxPool<trading::log::LogEntry>)
+        (:wat::telemetry::Service/null-metrics-cadence)))
+     ((rundb-pool :wat::telemetry::Service::HandlePool<wat::telemetry::Event>)
       (:wat::core::first rundb-spawn))
      ((rundb-driver :wat::kernel::ProgramHandle<()>)
       (:wat::core::second rundb-spawn))
 
-     ;; Inner — pop rundb client handle, open ack pair, run cache.
+     ;; Inner — pop rundb handle (paired req-tx + ack-rx), run cache.
      ((_inner :())
       (:wat::core::let*
-        (((rundb-req-tx :wat::std::telemetry::Service::ReqTx<trading::log::LogEntry>)
+        (((rundb-handle :wat::telemetry::Service::Handle<wat::telemetry::Event>)
           (:wat::kernel::HandlePool::pop rundb-pool))
          ((_finish-rundb :()) (:wat::kernel::HandlePool::finish rundb-pool))
-         ((ack-channel :wat::std::telemetry::Service::AckChannel)
-          (:wat::kernel::make-bounded-queue :() 1))
-         ((ack-tx :wat::std::telemetry::Service::AckTx)
-          (:wat::core::first ack-channel))
-         ((ack-rx :wat::std::telemetry::Service::AckRx)
-          (:wat::core::second ack-channel))
+         ((rundb-req-tx :wat::telemetry::Service::ReqTx<wat::telemetry::Event>)
+          (:wat::core::first rundb-handle))
+         ((ack-rx :wat::telemetry::Service::AckRx)
+          (:wat::core::second rundb-handle))
          ((_run :())
           (:trading::test::proofs::004::run-cache-with-rundb-tx
-            rundb-req-tx ack-tx ack-rx)))
+            rundb-req-tx ack-rx)))
         ()))
 
      ;; Inner exited — rundb senders all dropped (popped one +

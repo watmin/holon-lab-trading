@@ -11,11 +11,12 @@
 //!   `archived/pre-wat-native/src/domain/candle_stream.rs` reader,
 //!   cut down to a 6-field tuple emit (asset metadata is wat-side
 //!   configuration, not a parquet payload).
-//! Sqlite persistence is provided by the `wat-sqlite` substrate crate
-//! (arcs 083 / 084 / 085) — `:wat::sqlite::Db` opens the file and
-//! `:wat::std::telemetry::Sqlite/auto-spawn` derives schemas + INSERTs
-//! from the lab's `:trading::log::LogEntry` enum decl. The lab no
-//! longer needs a typed-row Rust shim of its own.
+//! Sqlite persistence is provided by the `wat-telemetry-sqlite`
+//! substrate crate (arcs 083 / 084 / 085 + arc 091 slice 6) —
+//! `:wat::telemetry::Sqlite/auto-spawn` derives schemas + INSERTs
+//! from the substrate's `:wat::telemetry::Event` enum (Metric +
+//! Log variants). The lab no longer ships its own LogEntry decl
+//! or shim.
 
 use std::path::Path;
 
@@ -229,23 +230,14 @@ pub fn wat_sources() -> &'static [WatSource] {
             path: "io/CandleStream.wat",
             source: include_str!("../wat/io/CandleStream.wat"),
         },
-        WatSource {
-            path: "io/log/LogEntry.wat",
-            source: include_str!("../wat/io/log/LogEntry.wat"),
-        },
-        WatSource {
-            path: "io/log/telemetry.wat",
-            source: include_str!("../wat/io/log/telemetry.wat"),
-        },
     ];
     FILES
 }
 
 /// Wire the dispatch into the runtime. `#[wat_dispatch]` generated the
 /// type-name-prefixed register fn per impl block; we forward only the
-/// in-crate shims (CandleStream). Sqlite persistence is now provided
-/// by `wat-sqlite` (arcs 083/084/085); the `deps: [wat_sqlite]` entry
-/// in `src/main.rs` registers its surface.
+/// in-crate shims (CandleStream). Sqlite + telemetry surfaces come
+/// from the `wat-telemetry-sqlite` dep declared in `src/main.rs`.
 pub fn register(builder: &mut RustDepsBuilder) {
     __wat_dispatch_WatCandleStream::register(builder);
 }

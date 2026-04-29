@@ -31,12 +31,30 @@
 ;; ring; you can't usefully thread a 100k-entry LRU through a
 ;; recursive loop without copying every iteration). Substrate-
 ;; provided thread-owned cells are the right tool for this kind
-;; of intrinsically-mutable storage. The rate gate at
-;; wat/io/log/rate-gate.wat is the foil — its state is one Instant,
-;; small enough to thread values-up cheanly.
+;; of intrinsically-mutable storage.
+;;
+;; ── Slice-6 telemetry shape (arc 091) ──
+;;
+;; The snapshot is an OBSERVATION of cache state at a moment —
+;; cumulative cache aggregates (hits/misses/ops) and current size.
+;; Per the metric-vs-log discipline arc 091 surfaced: snapshots are
+;; Log-shaped, not Metric-shaped. (Metric rows come from per-event
+;; counter bumps and per-call duration samples — the shape that
+;; aggregates SUM/AVG/p99 across time. Cache stats are already
+;; cumulative aggregates the LocalCache maintains; observing them
+;; is recording a state, not adding a new sample.) `encode-cache-
+;; stats` returns ONE Event::Log carrying the 5 stats as Tagged data.
 
-(:wat::load-file! "../io/log/LogEntry.wat")
-(:wat::load-file! "../io/log/telemetry.wat")
+;; ─── Stat-snapshot struct — Log payload shape ───────────────────
+;;
+;; Tagged at write so SQL-side parsers read back the typed fields
+;; (hits/misses/ops/hit-rate/size) without ad-hoc EDN traversal.
+(:wat::core::struct :trading::sim::EncodeCacheSnapshot
+  (hits     :i64)
+  (misses   :i64)
+  (ops      :i64)
+  (hit-rate :f64)
+  (size     :i64))
 
 
 ;; The encode cache itself.
@@ -125,56 +143,48 @@
           v)))))
 
 
-;; Snapshot accessor — pure read of the stats holder. Builds a
-;; Vec<LogEntry::Telemetry> ready for `Service/batch-log`. The
-;; caller picks WHEN to call this (per-window, per-Tick, every
-;; rate-gate fire — whatever their natural batch boundary is).
+;; Snapshot — returns ONE Event::Log carrying the 5 stats fields as
+;; Tagged data. Caller picks WHEN to call (per-window, per-Tick,
+;; whatever their natural cadence is) and ships the result via
+;; `Service/batch-log` as a single-element batch.
 ;;
-;; Per arc 030 DESIGN Q7: the cache imposes no rhythm; the
-;; consumer's natural cadence is the rate gate. For the encoding
-;; cache that means callers thread `tick-gate` state through their
-;; loop and call this snapshot when the gate fires — see
-;; `wat/io/log/rate-gate.wat`.
-;;
-;; Five rows per snapshot:
-;;   hits / misses / ops / hit-rate / size
-;; (capacity is constant per cache; emit once at construction if
-;; useful — not on every snapshot.)
+;; Tags carry run identity (so SQL queries can filter per-run).
+;; namespace = `:trading.encode-cache`; caller = `:predictor` (the
+;; site that owns the cache); level = `:info`.
 (:wat::core::define
   (:trading::sim::encode-cache-stats
-    (cache :trading::sim::EncodeCache)
-    (stats :trading::sim::EncodeStats)
+    (cache    :trading::sim::EncodeCache)
+    (stats    :trading::sim::EncodeStats)
     (run-name :String)
-    (timestamp-ns :i64)
-    -> :Vec<trading::log::LogEntry>)
+    (time-ns  :i64)
+    -> :wat::telemetry::Event)
   (:wat::core::let*
-    (((hits :i64)   (:trading::sim::encode-stats/get stats "hits"))
+    (((hits   :i64) (:trading::sim::encode-stats/get stats "hits"))
      ((misses :i64) (:trading::sim::encode-stats/get stats "misses"))
-     ((ops :i64)    (:trading::sim::encode-stats/get stats "ops"))
-     ((size :i64)   (:wat::lru::LocalCache::len cache))
+     ((ops    :i64) (:trading::sim::encode-stats/get stats "ops"))
+     ((size   :i64) (:wat::lru::LocalCache::len cache))
      ((hit-rate :f64)
       (:wat::core::if (:wat::core::> ops 0) -> :f64
         (:wat::core::/ (:wat::core::i64::to-f64 hits)
                        (:wat::core::i64::to-f64 ops))
         0.0))
-     ;; Build a JSON-encoded dimensions map: {"run":"<run-name>"}
-     ((dims :String)
-      (:wat::core::string::concat
-        "{\"run\":\""
-        (:wat::core::string::concat run-name "\"}"))))
-    (:wat::core::vec :trading::log::LogEntry
-      (:trading::log::emit-metric
-        "encode-cache" "predictor" dims timestamp-ns
-        "hits"     (:wat::core::i64::to-f64 hits)     "Count")
-      (:trading::log::emit-metric
-        "encode-cache" "predictor" dims timestamp-ns
-        "misses"   (:wat::core::i64::to-f64 misses)   "Count")
-      (:trading::log::emit-metric
-        "encode-cache" "predictor" dims timestamp-ns
-        "ops"      (:wat::core::i64::to-f64 ops)      "Count")
-      (:trading::log::emit-metric
-        "encode-cache" "predictor" dims timestamp-ns
-        "hit-rate" hit-rate                            "Percent")
-      (:trading::log::emit-metric
-        "encode-cache" "predictor" dims timestamp-ns
-        "size"     (:wat::core::i64::to-f64 size)     "Count"))))
+     ((snap :trading::sim::EncodeCacheSnapshot)
+      (:trading::sim::EncodeCacheSnapshot/new
+        hits misses ops hit-rate size))
+     ((data-ast :wat::holon::HolonAST) (:wat::holon::Atom snap))
+     ((uuid :String) (:wat::telemetry::uuid::v4))
+     ((ns-ast    :wat::holon::HolonAST) (:wat::holon::Atom :trading.encode-cache))
+     ((cal-ast   :wat::holon::HolonAST) (:wat::holon::Atom :predictor))
+     ((level-ast :wat::holon::HolonAST) (:wat::holon::Atom :info))
+     ((tags :wat::telemetry::Tags)
+      (:wat::core::assoc
+        (:wat::core::HashMap :wat::telemetry::Tag)
+        (:wat::holon::Atom :run) (:wat::holon::Atom run-name))))
+    (:wat::telemetry::Event::Log
+      time-ns
+      (:wat::edn::NoTag/new ns-ast)
+      (:wat::edn::NoTag/new cal-ast)
+      (:wat::edn::NoTag/new level-ast)
+      uuid
+      tags
+      (:wat::edn::Tagged/new data-ast))))

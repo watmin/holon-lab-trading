@@ -12,8 +12,6 @@
 
 (:wat::load-file! "run.wat")
 (:wat::load-file! "../io/CandleStream.wat")
-(:wat::load-file! "../io/log/LogEntry.wat")
-(:wat::load-file! "../io/telemetry/Sqlite.wat")
 
 
 (:wat::core::enum :trading::bare::Tick
@@ -44,14 +42,14 @@
     (((con-handle :wat::std::service::Console::Handle)
       (:wat::kernel::HandlePool::pop con-pool))
      ((_finish-con :()) (:wat::kernel::HandlePool::finish con-pool))
-     ((logger :wat::std::telemetry::ConsoleLogger)
-      (:wat::std::telemetry::ConsoleLogger/new
+     ((logger :wat::telemetry::ConsoleLogger)
+      (:wat::telemetry::ConsoleLogger/new
         con-handle :bare
         (:wat::core::lambda ((_u :()) -> :wat::time::Instant)
           (:wat::time::now))
-        :wat::std::telemetry::Console::Format::Edn))
+        :wat::telemetry::Console::Format::Edn))
      ((_started :())
-      (:wat::std::telemetry::ConsoleLogger/info logger
+      (:wat::telemetry::ConsoleLogger/info logger
         (:trading::bare::Tick::Started run-name planned)))
      ((t-start :wat::time::Instant) (:wat::time::now))
      ((n :i64) (:trading::bare/walk stream 0))
@@ -60,7 +58,7 @@
       (:wat::core::- (:wat::time::epoch-nanos t-end)
                      (:wat::time::epoch-nanos t-start)))
      ((_stopped :())
-      (:wat::std::telemetry::ConsoleLogger/info logger
+      (:wat::telemetry::ConsoleLogger/info logger
         (:trading::bare::Tick::Stopped n))))
     ;; Print wall_ns to stdout via console for visibility.
     (:wat::std::service::Console/out con-handle
