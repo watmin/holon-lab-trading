@@ -17,13 +17,23 @@
 ;;   (let* (((s :trading::candles::Stream)
 ;;           (:trading::candles::open "data/btc_5m_raw.parquet")))
 ;;     (:wat::core::match (:trading::candles::next! s)
-;;                        -> :Option<(i64,f64,f64,f64,f64,f64)>
+;;                        -> :Option<trading::candles::Ohlcv>
 ;;       ((Some row) ...)
 ;;       (:None ...)))
 
 (:wat::core::use! :rust::trading::CandleStream)
 
 (:wat::core::typealias :trading::candles::Stream :rust::trading::CandleStream)
+
+;; OHLCV row shape — what `next!` emits per pull. Aliased so every
+;; consumer signature stops carrying the bare 6-tuple.
+;; (ts-us :i64, open :f64, high :f64, low :f64, close :f64, volume :f64)
+;;
+;; The name `Candle` is taken — `:trading::types::Candle` is the
+;; richer struct used downstream (with computed fields). `Ohlcv` is
+;; the bare-tuple shape the parquet reader emits.
+(:wat::core::typealias :trading::candles::Ohlcv
+  :(i64,f64,f64,f64,f64,f64))
 
 ;; Open a parquet file and return a fresh stream positioned at row 0.
 ;; Unbounded: emits until the parquet's natural end-of-stream.
@@ -52,7 +62,7 @@
 (:wat::core::define
   (:trading::candles::next!
     (s :trading::candles::Stream)
-    -> :Option<(i64,f64,f64,f64,f64,f64)>)
+    -> :Option<trading::candles::Ohlcv>)
   (:rust::trading::CandleStream::next s))
 
 ;; Total row count from the parquet metadata. Constant across the

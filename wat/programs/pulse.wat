@@ -147,7 +147,7 @@
   (:wat::core::let*
     (;; Phase: next! the candle.
      ((t-n0 :wat::time::Instant) (:wat::time::now))
-     ((maybe :Option<(i64,f64,f64,f64,f64,f64)>)
+     ((maybe :Option<trading::candles::Ohlcv>)
       (:trading::candles::next! stream))
      ((t-n1 :wat::time::Instant) (:wat::time::now))
      ((dt-next :i64)
