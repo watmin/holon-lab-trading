@@ -258,44 +258,74 @@ No explicit teardown. The wiring is the shutdown.
 
 ## Logging
 
-Every stage emits exactly ONE `:trading::log::LogEntry::Telemetry`
-row per receipt:
+Slice 6 (arc 091) retired the lab's `:trading::log::LogEntry` enum
+in favor of the substrate's `:wat::telemetry::Event`. Each stage
+opens a `WorkUnit/make-scope` over its `Service<Event,_>` handle
+(per the namespace naming below); inside the scope's body, the
+discipline is:
 
-| Namespace | When | Dimensions | metric_value |
-|---|---|---|---|
-| `circuit.candle` | main per candle | `{}` | `t-now-ns` at fan-out time |
-| `circuit.market` | market[i] per candle | `{stage:"market", idx:i}` | `t-recv-ns` |
-| `circuit.exit` | exit[j] per candle | `{stage:"exit", idx:j}` | `t-recv-ns` |
-| `circuit.broker` | broker[i,j] after both recvs | `{stage:"broker", market:i, exit:j}` | `t-recv-ns` (after the second recv) |
-| `circuit.treasury` | treasury per receipt | `{stage:"treasury", market:i, exit:j}` | `t-recv-ns` |
+| Shape | Primitive | Lands in |
+|---|---|---|
+| Counter (per-event bump) | `WorkUnit/incr! wu :name` | `metric` table at scope-close |
+| Duration (blocking call) | `WorkUnit/timed wu :name body` | `metric` table at scope-close (one row per sample) |
+| State observation (snapshot) | `WorkUnitLog/info wlog wu (struct->form value)` | `log` table at emission time |
 
-For the smoke test (N=M=2, 15 candles):
-
-```
-candle:    15 rows
-market:    30 rows  (2 markets × 15)
-exit:      30 rows  (2 exits × 15)
-broker:    60 rows  (4 brokers × 15)
-treasury:  60 rows  (60 broker→treasury messages)
-─────────────────
-total:    195 rows
-```
-
-Per-stage latency reconstructable post-hoc:
+The substrate auto-derives the schema from `:wat::telemetry::Event`'s
+two variants:
 
 ```sql
--- Mean latency, candle → broker per (market, exit) pair
+metric: (start_time_ns, end_time_ns, namespace, uuid, tags,
+         metric_name, metric_value, metric_unit)
+log:    (time_ns, namespace, caller, level, uuid, tags, data)
+```
+
+Both tables share `uuid` so cross-shape joins per scope are direct:
+
+```sql
+-- All metric + log rows from one scope, joined by uuid:
+SELECT m.metric_name, m.metric_value, l.level, l.data
+FROM metric m JOIN log l ON m.uuid = l.uuid
+WHERE m.namespace = ':trading.pulse';
+```
+
+Per-stage namespaces stay the trading-domain keyword:
+
+| Namespace | Stage | What rides per scope |
+|---|---|---|
+| `:trading.pulse` | candle walker | one `:candle` counter row + one `RunSummary` Log row at close |
+| `:trading.smoke` | smoke producer | three `PaperResolved` Log rows |
+| `:trading.treasury` | treasury per Tick / per request | one `:check-deadlines` (or `:handle-request`) duration row + one `TickSnapshot` Log row |
+| `:trading.cache` | cache reporter | one Log row per `Report::Metrics` cadence fire |
+| `:trading.encode-cache` | encode-cache snapshot | one Log row carrying the 5 stats |
+| `:trading.proofs.002` / `.003` | thinker proof runs | one Log row per `PaperResolved` outcome |
+
+Tags are a HashMap<HolonAST,HolonAST> ridden on every row in the
+scope — substrate auto-spawn binds them as a NoTag-rendered EDN map
+in TEXT (slice 7's HashMap auto-prep arm). Lab convention: `{:run
+"runs/<id>.db"}` as the minimum; per-scope additions like
+`{:thinker :always-up :predictor :cosine}` for proofs.
+
+Per-stage latency recipes (now joined via uuid + tags):
+
+```sql
+-- All durations from a given scope, in order:
+SELECT metric_name, metric_value
+FROM metric
+WHERE uuid = '<scope-uuid>'
+  AND metric_unit = ':seconds'
+ORDER BY start_time_ns;
+```
+
+```sql
+-- Cross-thinker outcome rollup from proof-002:
 SELECT
-  json_extract(dimensions, '$.market') AS market_idx,
-  json_extract(dimensions, '$.exit')   AS exit_idx,
-  AVG(b.metric_value - c.metric_value) / 1e6 AS broker_lag_ms
-FROM telemetry b
-JOIN telemetry c
-  ON c.namespace = 'circuit.candle'
- AND c.timestamp_ns < b.timestamp_ns
- AND c.timestamp_ns > b.timestamp_ns - 1e9
-WHERE b.namespace = 'circuit.broker'
-GROUP BY market_idx, exit_idx;
+  json_extract(data, '$.thinker')                   AS thinker,
+  COUNT(*)                                          AS papers,
+  SUM(json_extract(data, '$.state') = 'Grace')      AS grace,
+  ROUND(SUM(json_extract(data, '$.residue')), 4)    AS total_residue
+FROM log
+WHERE namespace = ':trading.proofs.002'
+GROUP BY thinker;
 ```
 
 ---
