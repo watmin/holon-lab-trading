@@ -45,7 +45,11 @@
                 (:wat::core::HashMap :wat::telemetry::Tag)
                 (:wat::holon::Atom :cache-id) (:wat::holon::Atom cache-id))
               (:wat::holon::Atom :layer) (:wat::holon::Atom layer)))
-           ((data-ast :wat::holon::HolonAST) (:wat::holon::Atom stats))
+           ;; Stats is a struct — lift via struct->form + from-watast
+           ;; (arc 091 slice 8 / arc 093 slice 3 round-trip pattern).
+           ;; :wat::holon::Atom does NOT accept struct values directly.
+           ((stats-form :wat::WatAST) (:wat::core::struct->form stats))
+           ((data-ast :wat::holon::HolonAST) (:wat::holon::from-watast stats-form))
            ((event :wat::telemetry::Event)
             (:wat::telemetry::Event::Log
               time-ns

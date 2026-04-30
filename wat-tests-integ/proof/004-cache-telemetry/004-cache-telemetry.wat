@@ -56,7 +56,7 @@
 
 (:wat::test::make-deftest :deftest
   ((:wat::load-file! "wat/cache/reporter.wat")
-   (:wat::load-file! "wat/io/telemetry/Sqlite.wat")
+   (:wat::load-file! "wat/telemetry/Sqlite.wat")
 
    ;; ─── Helper 1: drive 30 Put/Get requests ───────────────────────
    ;;
@@ -79,7 +79,13 @@
        (:wat::core::range 0 30) ()
        (:wat::core::lambda ((acc :()) (i :i64) -> :())
          (:wat::core::if (:wat::core::< i 20) -> :()
-           ;; Puts 0..19 — unique leaf keys.
+           ;; Puts 0..19 — unique leaf keys. Strict send via
+           ;; `:wat::std::option::expect` (arc 107) — if cache-req-tx
+           ;; has disconnected (cache thread died), panic at the call
+           ;; site naming the contract violation. Pre-arc-107 this site
+           ;; bound `_ :wat::kernel::Sent` and silently swallowed
+           ;; disconnect; the resulting cascade is what hung the proof
+           ;; for hours during the 2026-04-29 diagnosis.
            (:wat::core::let*
              (((k :wat::holon::HolonAST)
                (:wat::holon::leaf
@@ -89,23 +95,33 @@
                (:wat::holon::leaf
                  (:wat::core::string::concat
                    "v-" (:wat::core::i64::to-string i))))
-              ((_ :wat::kernel::Sent)
-               (:wat::kernel::send cache-req-tx
-                 (:wat::holon::lru::HologramCacheService::Request::Put k v))))
+              ((_ :())
+               (:wat::std::option::expect
+                 (:wat::kernel::send cache-req-tx
+                   (:wat::holon::lru::HologramCacheService::Request::Put k v))
+                 "drive-requests Put: cache-req-tx disconnected — cache thread died?")))
              ())
-           ;; Gets 20..29 — re-query keys 0..9.
+           ;; Gets 20..29 — re-query keys 0..9. Strict send AND strict
+           ;; recv: the first surfaces a dead service immediately; the
+           ;; second collapses recv's outer Option (channel-still-open)
+           ;; into a panic, leaving only the inner Option (Get's
+           ;; "key was present" domain answer).
            (:wat::core::let*
              (((k :wat::holon::HolonAST)
                (:wat::holon::leaf
                  (:wat::core::string::concat
                    "k-" (:wat::core::i64::to-string
                          (:wat::core::- i 20)))))
-              ((_ :wat::kernel::Sent)
-               (:wat::kernel::send cache-req-tx
-                 (:wat::holon::lru::HologramCacheService::Request::Get
-                   k reply-tx)))
-              ((_reply :Option<Option<wat::holon::HolonAST>>)
-               (:wat::kernel::recv reply-rx)))
+              ((_ :())
+               (:wat::std::option::expect
+                 (:wat::kernel::send cache-req-tx
+                   (:wat::holon::lru::HologramCacheService::Request::Get
+                     k reply-tx))
+                 "drive-requests Get: cache-req-tx disconnected — cache thread died?"))
+              ((_reply :Option<wat::holon::HolonAST>)
+               (:wat::std::option::expect
+                 (:wat::kernel::recv reply-rx)
+                 "drive-requests Get: reply-rx disconnected — cache thread didn't reply")))
              ())))))
 
    ;; ─── Helper 2: spawn cache + drive + join ──────────────────────
@@ -152,7 +168,7 @@
            (((cache-req-tx :wat::holon::lru::HologramCacheService::ReqTx)
              (:wat::kernel::HandlePool::pop cache-pool))
             ((_finish-cache :()) (:wat::kernel::HandlePool::finish cache-pool))
-            ((reply-pair :wat::kernel::QueuePair<Option<wat::holon::HolonAST>>)
+            ((reply-pair :wat::holon::lru::HologramCacheService::GetReplyPair)
              (:wat::kernel::make-bounded-queue :Option<wat::holon::HolonAST> 1))
             ((reply-tx :wat::holon::lru::HologramCacheService::GetReplyTx)
              (:wat::core::first reply-pair))
