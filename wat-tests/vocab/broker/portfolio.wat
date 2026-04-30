@@ -27,10 +27,10 @@
         (:test::fresh-snapshot 15.0 0.3  0.02  0.6  5.0)
         (:test::fresh-snapshot 18.0 0.35 0.025 0.65 6.0)
         (:test::fresh-snapshot 20.0 0.4  0.03  0.7  7.0)))
-     ((r :Result<Vec<wat::holon::HolonAST>,wat::holon::CapacityExceeded>)
+     ((r :Result<wat::holon::Holons,wat::holon::CapacityExceeded>)
       (:trading::vocab::broker::portfolio::portfolio-rhythm-asts snapshots))
-     ((rhythms :Vec<wat::holon::HolonAST>)
-      (:wat::core::match r -> :Vec<wat::holon::HolonAST>
+     ((rhythms :wat::holon::Holons)
+      (:wat::core::match r -> :wat::holon::Holons
         ((Ok v)  v)
         ((Err _) (:wat::core::vec :wat::holon::HolonAST)))))
     (:wat::test::assert-eq
@@ -48,16 +48,16 @@
         (:test::fresh-snapshot 15.0 0.3  0.02  0.6  5.0)
         (:test::fresh-snapshot 18.0 0.35 0.025 0.65 6.0)
         (:test::fresh-snapshot 20.0 0.4  0.03  0.7  7.0)))
-     ((r1 :Result<Vec<wat::holon::HolonAST>,wat::holon::CapacityExceeded>)
+     ((r1 :Result<wat::holon::Holons,wat::holon::CapacityExceeded>)
       (:trading::vocab::broker::portfolio::portfolio-rhythm-asts snapshots))
-     ((r2 :Result<Vec<wat::holon::HolonAST>,wat::holon::CapacityExceeded>)
+     ((r2 :Result<wat::holon::Holons,wat::holon::CapacityExceeded>)
       (:trading::vocab::broker::portfolio::portfolio-rhythm-asts snapshots))
-     ((rhythms-1 :Vec<wat::holon::HolonAST>)
-      (:wat::core::match r1 -> :Vec<wat::holon::HolonAST>
+     ((rhythms-1 :wat::holon::Holons)
+      (:wat::core::match r1 -> :wat::holon::Holons
         ((Ok v)  v)
         ((Err _) (:wat::core::vec :wat::holon::HolonAST))))
-     ((rhythms-2 :Vec<wat::holon::HolonAST>)
-      (:wat::core::match r2 -> :Vec<wat::holon::HolonAST>
+     ((rhythms-2 :wat::holon::Holons)
+      (:wat::core::match r2 -> :wat::holon::Holons
         ((Ok v)  v)
         ((Err _) (:wat::core::vec :wat::holon::HolonAST))))
      ((h1 :wat::holon::HolonAST)
@@ -93,16 +93,16 @@
         (:test::fresh-snapshot 30.0 0.2 0.01 0.5 3.0)
         (:test::fresh-snapshot 20.0 0.2 0.01 0.5 3.0)
         (:test::fresh-snapshot 10.0 0.2 0.01 0.5 3.0)))
-     ((r-a :Result<Vec<wat::holon::HolonAST>,wat::holon::CapacityExceeded>)
+     ((r-a :Result<wat::holon::Holons,wat::holon::CapacityExceeded>)
       (:trading::vocab::broker::portfolio::portfolio-rhythm-asts snapshots-a))
-     ((r-b :Result<Vec<wat::holon::HolonAST>,wat::holon::CapacityExceeded>)
+     ((r-b :Result<wat::holon::Holons,wat::holon::CapacityExceeded>)
       (:trading::vocab::broker::portfolio::portfolio-rhythm-asts snapshots-b))
-     ((rhythms-a :Vec<wat::holon::HolonAST>)
-      (:wat::core::match r-a -> :Vec<wat::holon::HolonAST>
+     ((rhythms-a :wat::holon::Holons)
+      (:wat::core::match r-a -> :wat::holon::Holons
         ((Ok v)  v)
         ((Err _) (:wat::core::vec :wat::holon::HolonAST))))
-     ((rhythms-b :Vec<wat::holon::HolonAST>)
-      (:wat::core::match r-b -> :Vec<wat::holon::HolonAST>
+     ((rhythms-b :wat::holon::Holons)
+      (:wat::core::match r-b -> :wat::holon::Holons
         ((Ok v)  v)
         ((Err _) (:wat::core::vec :wat::holon::HolonAST))))
      ((h-a :wat::holon::HolonAST)
@@ -130,10 +130,10 @@
       (:wat::core::vec :trading::types::PortfolioSnapshot
         (:test::fresh-snapshot 10.0 0.2 0.01 0.5 3.0)
         (:test::fresh-snapshot 12.0 0.25 0.015 0.55 4.0)))
-     ((r :Result<Vec<wat::holon::HolonAST>,wat::holon::CapacityExceeded>)
+     ((r :Result<wat::holon::Holons,wat::holon::CapacityExceeded>)
       (:trading::vocab::broker::portfolio::portfolio-rhythm-asts snapshots))
-     ((rhythms :Vec<wat::holon::HolonAST>)
-      (:wat::core::match r -> :Vec<wat::holon::HolonAST>
+     ((rhythms :wat::holon::Holons)
+      (:wat::core::match r -> :wat::holon::Holons
         ((Ok v)  v)
         ((Err _) (:wat::core::vec :wat::holon::HolonAST)))))
     (:wat::test::assert-eq

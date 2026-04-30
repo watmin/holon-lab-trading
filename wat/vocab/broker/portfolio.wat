@@ -24,7 +24,7 @@
 (:wat::core::define
   (:trading::vocab::broker::portfolio::portfolio-rhythm-asts
     (snapshots :trading::types::PortfolioSnapshots)
-    -> :Result<Vec<wat::holon::HolonAST>,wat::holon::CapacityExceeded>)
+    -> :Result<wat::holon::Holons,wat::holon::CapacityExceeded>)
   (:wat::core::let*
     ;; Per-field Vec<f64> projections from the snapshot window.
     (((avg-age-vals :Vec<f64>)

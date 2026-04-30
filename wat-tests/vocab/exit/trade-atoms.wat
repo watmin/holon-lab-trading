@@ -50,7 +50,7 @@
   (:wat::core::let*
     (((paper :trading::types::PaperEntry)
       (:test::fresh-paper 100.0 110.0 false 5 0))
-     ((atoms :Vec<wat::holon::HolonAST>)
+     ((atoms :wat::holon::Holons)
       (:trading::vocab::exit::trade-atoms::compute-trade-atoms
         paper 108.0 (:test::empty-phases))))
     (:wat::test::assert-eq
@@ -63,7 +63,7 @@
   (:wat::core::let*
     (((paper :trading::types::PaperEntry)
       (:test::fresh-paper 100.0 110.0 false 5 0))
-     ((atoms :Vec<wat::holon::HolonAST>)
+     ((atoms :wat::holon::Holons)
       (:trading::vocab::exit::trade-atoms::compute-trade-atoms
         paper 108.0 (:test::empty-phases)))
      ((actual :wat::holon::HolonAST)
@@ -86,10 +86,10 @@
   (:wat::core::let*
     (((p :trading::types::PaperEntry)
       (:test::fresh-paper 100.0 110.0 false 5 0))
-     ((a1 :Vec<wat::holon::HolonAST>)
+     ((a1 :wat::holon::Holons)
       (:trading::vocab::exit::trade-atoms::compute-trade-atoms
         p 108.0 (:test::empty-phases)))
-     ((a2 :Vec<wat::holon::HolonAST>)
+     ((a2 :wat::holon::Holons)
       (:trading::vocab::exit::trade-atoms::compute-trade-atoms
         p 108.0 (:test::empty-phases)))
      ((h1 :wat::holon::HolonAST)
@@ -110,10 +110,10 @@
   (:wat::core::let*
     (((p :trading::types::PaperEntry)
       (:test::fresh-paper 100.0 110.0 false 5 0))
-     ((all :Vec<wat::holon::HolonAST>)
+     ((all :wat::holon::Holons)
       (:trading::vocab::exit::trade-atoms::compute-trade-atoms
         p 108.0 (:test::empty-phases)))
-     ((picked :Vec<wat::holon::HolonAST>)
+     ((picked :wat::holon::Holons)
       (:trading::vocab::exit::trade-atoms::select-trade-atoms
         :trading::types::RegimeLens::Core all)))
     (:wat::test::assert-eq
@@ -126,10 +126,10 @@
   (:wat::core::let*
     (((p :trading::types::PaperEntry)
       (:test::fresh-paper 100.0 110.0 false 5 0))
-     ((all :Vec<wat::holon::HolonAST>)
+     ((all :wat::holon::Holons)
       (:trading::vocab::exit::trade-atoms::compute-trade-atoms
         p 108.0 (:test::empty-phases)))
-     ((picked :Vec<wat::holon::HolonAST>)
+     ((picked :wat::holon::Holons)
       (:trading::vocab::exit::trade-atoms::select-trade-atoms
         :trading::types::RegimeLens::Full all)))
     (:wat::test::assert-eq
@@ -147,10 +147,10 @@
       (:test::fresh-paper 100.0 110.0 false 5 0))
      ((p-b :trading::types::PaperEntry)
       (:test::fresh-paper 100.0 200.0 false 5 0))
-     ((atoms-a :Vec<wat::holon::HolonAST>)
+     ((atoms-a :wat::holon::Holons)
       (:trading::vocab::exit::trade-atoms::compute-trade-atoms
         p-a 108.0 (:test::empty-phases)))
-     ((atoms-b :Vec<wat::holon::HolonAST>)
+     ((atoms-b :wat::holon::Holons)
       (:trading::vocab::exit::trade-atoms::compute-trade-atoms
         p-b 108.0 (:test::empty-phases)))
      ((h-a :wat::holon::HolonAST)

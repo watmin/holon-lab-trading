@@ -28,7 +28,7 @@
     (paper :trading::types::PaperEntry)
     (current-price :f64)
     (phase-history :trading::types::PhaseRecords)
-    -> :Vec<wat::holon::HolonAST>)
+    -> :wat::holon::Holons)
   (:wat::core::let*
     ;; ─── Extract paper fields ──────────────────────────────────
     (((entry :f64)
@@ -268,8 +268,8 @@
 (:wat::core::define
   (:trading::vocab::exit::trade-atoms::select-trade-atoms
     (lens :trading::types::RegimeLens)
-    (atoms :Vec<wat::holon::HolonAST>)
-    -> :Vec<wat::holon::HolonAST>)
-  (:wat::core::match lens -> :Vec<wat::holon::HolonAST>
+    (atoms :wat::holon::Holons)
+    -> :wat::holon::Holons)
+  (:wat::core::match lens -> :wat::holon::Holons
     (:trading::types::RegimeLens::Core (:wat::core::take atoms 5))
     (:trading::types::RegimeLens::Full atoms)))

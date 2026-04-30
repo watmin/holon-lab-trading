@@ -554,7 +554,7 @@
       (;; Build all per-record Bundles.
        ((n :i64) (:wat::core::length history))
        ((indices :Vec<i64>) (:wat::core::range 0 n))
-       ((all-records :Vec<wat::holon::HolonAST>)
+       ((all-records :wat::holon::Holons)
         (:wat::core::map indices
           (:wat::core::lambda ((i :i64) -> :wat::holon::HolonAST)
             (:trading::vocab::exit::phase::record-bundle-at-index history i))))
@@ -563,9 +563,9 @@
        ((budget :i64) 100)
        ((max-records :i64) (:wat::core::+ budget 3))
        ((records-len :i64) (:wat::core::length all-records))
-       ((records :Vec<wat::holon::HolonAST>)
+       ((records :wat::holon::Holons)
         (:wat::core::if (:wat::core::> records-len max-records)
-                        -> :Vec<wat::holon::HolonAST>
+                        -> :wat::holon::Holons
           (:wat::core::drop all-records
             (:wat::core::- records-len max-records))
           all-records))
@@ -573,7 +573,7 @@
        ;; window-3 → Sequential trigrams.
        ((win3 :Vec<wat::holon::Holons>)
         (:wat::std::list::window records 3))
-       ((trigrams :Vec<wat::holon::HolonAST>)
+       ((trigrams :wat::holon::Holons)
         (:wat::core::map win3
           (:wat::core::lambda ((w :wat::holon::Holons) -> :wat::holon::HolonAST)
             (:wat::holon::Sequential w))))
@@ -582,7 +582,7 @@
        ;; Permute the second element).
        ((win2 :Vec<wat::holon::Holons>)
         (:wat::std::list::window trigrams 2))
-       ((pairs :Vec<wat::holon::HolonAST>)
+       ((pairs :wat::holon::Holons)
         (:wat::core::map win2
           (:wat::core::lambda ((w :wat::holon::Holons) -> :wat::holon::HolonAST)
             (:wat::core::let*
@@ -600,9 +600,9 @@
 
        ;; Truncate pairs to last `budget` (= 100).
        ((pairs-len :i64) (:wat::core::length pairs))
-       ((trimmed-pairs :Vec<wat::holon::HolonAST>)
+       ((trimmed-pairs :wat::holon::Holons)
         (:wat::core::if (:wat::core::> pairs-len budget)
-                        -> :Vec<wat::holon::HolonAST>
+                        -> :wat::holon::Holons
           (:wat::core::drop pairs (:wat::core::- pairs-len budget))
           pairs))
 
