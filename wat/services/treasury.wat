@@ -74,7 +74,7 @@
   (PaperIssued (receipt :trading::treasury::Receipt))
   (RealIssued  (maybe-receipt :Option<trading::treasury::Receipt>))
   (ExitResolved (maybe-verdict :Option<trading::treasury::Verdict>))
-  (PaperStates (states :Vec<(i64,Option<trading::treasury::PositionState>)>)))
+  (PaperStates (states :trading::treasury::Service::PaperStateEntries)))
 
 
 ;; ─── Channel typealiases ────────────────────────────────────────
@@ -92,6 +92,18 @@
   :rust::crossbeam_channel::Receiver<trading::treasury::Service::Response>)
 (:wat::core::typealias :trading::treasury::Service::RespChannel
   :(trading::treasury::Service::RespTx,trading::treasury::Service::RespRx))
+
+
+;; ─── Response payload aliases (chapter 76) ──────────────────────
+;;
+;; PaperStates response is a Vec of (paper-id, maybe-state) tuples.
+;; The tuple shape recurs at every access site — alias the entry
+;; shape so the Vec spelling reads `Vec<PaperStateEntry>` rather
+;; than the verbose nested form.
+(:wat::core::typealias :trading::treasury::Service::PaperStateEntry
+  :(i64,Option<trading::treasury::PositionState>))
+(:wat::core::typealias :trading::treasury::Service::PaperStateEntries
+  :Vec<trading::treasury::Service::PaperStateEntry>)
 
 
 ;; ─── Per-broker handle — what each broker receives from the pool ──
@@ -225,10 +237,10 @@
                         (:trading::treasury::Service::Response::ExitResolved maybe-verdict))))
                   ((:trading::treasury::Service::Event::BatchGetPaperStates paper-ids)
                     (:wat::core::let*
-                      (((states :Vec<(i64,Option<trading::treasury::PositionState>)>)
+                      (((states :trading::treasury::Service::PaperStateEntries)
                         (:wat::core::map paper-ids
                           (:wat::core::lambda
-                            ((id :i64) -> :(i64,Option<trading::treasury::PositionState>))
+                            ((id :i64) -> :trading::treasury::Service::PaperStateEntry)
                             (:wat::core::tuple id
                               (:wat::core::match
                                 (:wat::core::get
@@ -241,7 +253,7 @@
                   (_
                     (:wat::core::tuple treasury
                       (:trading::treasury::Service::Response::PaperStates
-                        (:wat::core::vec :(i64,Option<trading::treasury::PositionState>)))))))))
+                        (:wat::core::vec :trading::treasury::Service::PaperStateEntry))))))))
            ((t' :trading::treasury::Treasury) (:wat::core::first result))
            ((resp :trading::treasury::Service::Response) (:wat::core::second result))
            ((_send :Option<()>) (:wat::kernel::send resp-tx resp)))
@@ -405,7 +417,7 @@
   (:trading::treasury::Service/batch-get-paper-states
     (handle :trading::treasury::Service::BrokerHandle)
     (paper-ids :Vec<i64>)
-    -> :Vec<(i64,Option<trading::treasury::PositionState>)>)
+    -> :trading::treasury::Service::PaperStateEntries)
   (:wat::core::let*
     (((req-tx :trading::treasury::Service::EventTx) (:wat::core::first handle))
      ((resp-rx :trading::treasury::Service::RespRx) (:wat::core::second handle))
@@ -413,9 +425,9 @@
       (:trading::treasury::Service::Event::BatchGetPaperStates paper-ids))
      ((_send :Option<()>) (:wat::kernel::send req-tx event)))
     (:wat::core::match (:wat::kernel::recv resp-rx)
-      -> :Vec<(i64,Option<trading::treasury::PositionState>)>
+      -> :trading::treasury::Service::PaperStateEntries
       ((Some (:trading::treasury::Service::Response::PaperStates states)) states)
-      (_ (:wat::core::vec :(i64,Option<trading::treasury::PositionState>))))))
+      (_ (:wat::core::vec :trading::treasury::Service::PaperStateEntry)))))
 
 
 ;; ─── Setup — spawns the driver, returns Spawn tuple ─────────────
