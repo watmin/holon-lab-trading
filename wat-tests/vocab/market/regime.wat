@@ -10,7 +10,7 @@
   ((:wat::load-file! "wat/vocab/market/regime.wat")
    (:wat::core::define
      (:test::fresh-regime
-       (kama :f64) (vr :f64)
+       (kama :wat::core::f64) (vr :wat::core::f64)
        -> :trading::types::Candle::Regime)
      ;; 8-arg constructor: kama-er, choppiness, dfa-alpha,
      ;; variance-ratio, entropy-rate, aroon-up, aroon-down,
@@ -49,13 +49,13 @@
         ((Some h) h)
         (:None (:wat::holon::Atom "unreachable"))))
 
-     ((rounded :f64) (:trading::encoding::round-to-2 0.5))
+     ((rounded :wat::core::f64) (:trading::encoding::round-to-2 0.5))
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) rounded))
-     ((scale :f64)
+     ((scale :wat::core::f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::- 0.0 scale))
+     ((neg-scale :wat::core::f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "kama-er")
@@ -84,7 +84,7 @@
 
      ;; Expected: Bind(Atom("variance-ratio"), ReciprocalLog 10.0 rounded).
      ;; Raw 1.5 → floor(1.5, 0.001) = 1.5 → round-to-2 = 1.5.
-     ((rounded :f64) (:trading::encoding::round-to-2 1.5))
+     ((rounded :wat::core::f64) (:trading::encoding::round-to-2 1.5))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "variance-ratio")
@@ -111,7 +111,7 @@
         ((Some h) h)
         (:None (:wat::holon::Atom "unreachable"))))
 
-     ((floored-rounded :f64) (:trading::encoding::round-to-2 0.001))
+     ((floored-rounded :wat::core::f64) (:trading::encoding::round-to-2 0.001))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "variance-ratio")

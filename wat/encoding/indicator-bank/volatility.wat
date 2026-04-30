@@ -18,21 +18,21 @@
 ;; Auto-generated accessors per field. Explicit:
 ;;   :trading::encoding::BollingerState::fresh period -> BollingerState
 ;;   :trading::encoding::BollingerState::update state close -> BollingerState
-;;   :trading::encoding::BollingerState::upper state -> :f64
-;;   :trading::encoding::BollingerState::lower state -> :f64
-;;   :trading::encoding::BollingerState::width state -> :f64
-;;   :trading::encoding::BollingerState::pos   state close -> :f64
-;;   :trading::encoding::BollingerState::ready? state -> :bool
+;;   :trading::encoding::BollingerState::upper state -> :wat::core::f64
+;;   :trading::encoding::BollingerState::lower state -> :wat::core::f64
+;;   :trading::encoding::BollingerState::width state -> :wat::core::f64
+;;   :trading::encoding::BollingerState::pos   state close -> :wat::core::f64
+;;   :trading::encoding::BollingerState::ready? state -> :wat::core::bool
 ;;
 ;;   :trading::encoding::KeltnerState::fresh period -> KeltnerState
 ;;   :trading::encoding::KeltnerState::update state close -> KeltnerState
-;;   :trading::encoding::KeltnerState::upper state atr -> :f64
-;;   :trading::encoding::KeltnerState::lower state atr -> :f64
-;;   :trading::encoding::KeltnerState::pos   state atr close -> :f64
-;;   :trading::encoding::KeltnerState::ready? state -> :bool
+;;   :trading::encoding::KeltnerState::upper state atr -> :wat::core::f64
+;;   :trading::encoding::KeltnerState::lower state atr -> :wat::core::f64
+;;   :trading::encoding::KeltnerState::pos   state atr close -> :wat::core::f64
+;;   :trading::encoding::KeltnerState::ready? state -> :wat::core::bool
 ;;
-;;   :trading::encoding::compute-squeeze   bb-width kelt-width -> :f64
-;;   :trading::encoding::compute-atr-ratio atr close -> :f64
+;;   :trading::encoding::compute-squeeze   bb-width kelt-width -> :wat::core::f64
+;;   :trading::encoding::compute-atr-ratio atr close -> :wat::core::f64
 
 (:wat::load-file! "primitives.wat")
 
@@ -46,7 +46,7 @@
 
 (:wat::core::define
   (:trading::encoding::BollingerState::fresh
-    (period :i64)
+    (period :wat::core::i64)
     -> :trading::encoding::BollingerState)
   (:trading::encoding::BollingerState/new
     (:trading::encoding::SmaState::fresh period)
@@ -56,7 +56,7 @@
 (:wat::core::define
   (:trading::encoding::BollingerState::update
     (state :trading::encoding::BollingerState)
-    (close :f64)
+    (close :wat::core::f64)
     -> :trading::encoding::BollingerState)
   (:trading::encoding::BollingerState/new
     (:trading::encoding::SmaState::update
@@ -71,7 +71,7 @@
 (:wat::core::define
   (:trading::encoding::BollingerState::upper
     (state :trading::encoding::BollingerState)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::+
     (:trading::encoding::SmaState::value
       (:trading::encoding::BollingerState/sma state))
@@ -83,7 +83,7 @@
 (:wat::core::define
   (:trading::encoding::BollingerState::lower
     (state :trading::encoding::BollingerState)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::-
     (:trading::encoding::SmaState::value
       (:trading::encoding::BollingerState/sma state))
@@ -96,14 +96,14 @@
 (:wat::core::define
   (:trading::encoding::BollingerState::width
     (state :trading::encoding::BollingerState)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::let*
-    (((sma :f64)
+    (((sma :wat::core::f64)
       (:trading::encoding::SmaState::value
         (:trading::encoding::BollingerState/sma state)))
-     ((upper :f64) (:trading::encoding::BollingerState::upper state))
-     ((lower :f64) (:trading::encoding::BollingerState::lower state)))
-    (:wat::core::if (:wat::core::= sma 0.0) -> :f64
+     ((upper :wat::core::f64) (:trading::encoding::BollingerState::upper state))
+     ((lower :wat::core::f64) (:trading::encoding::BollingerState::lower state)))
+    (:wat::core::if (:wat::core::= sma 0.0) -> :wat::core::f64
       0.0
       (:wat::core::/ (:wat::core::- upper lower) sma))))
 
@@ -112,13 +112,13 @@
 (:wat::core::define
   (:trading::encoding::BollingerState::pos
     (state :trading::encoding::BollingerState)
-    (close :f64)
-    -> :f64)
+    (close :wat::core::f64)
+    -> :wat::core::f64)
   (:wat::core::let*
-    (((upper :f64) (:trading::encoding::BollingerState::upper state))
-     ((lower :f64) (:trading::encoding::BollingerState::lower state))
-     ((range :f64) (:wat::core::- upper lower)))
-    (:wat::core::if (:wat::core::= range 0.0) -> :f64
+    (((upper :wat::core::f64) (:trading::encoding::BollingerState::upper state))
+     ((lower :wat::core::f64) (:trading::encoding::BollingerState::lower state))
+     ((range :wat::core::f64) (:wat::core::- upper lower)))
+    (:wat::core::if (:wat::core::= range 0.0) -> :wat::core::f64
       0.5
       (:wat::core::/ (:wat::core::- close lower) range))))
 
@@ -126,7 +126,7 @@
 (:wat::core::define
   (:trading::encoding::BollingerState::ready?
     (state :trading::encoding::BollingerState)
-    -> :bool)
+    -> :wat::core::bool)
   (:trading::encoding::SmaState::ready?
     (:trading::encoding::BollingerState/sma state)))
 
@@ -139,7 +139,7 @@
 
 (:wat::core::define
   (:trading::encoding::KeltnerState::fresh
-    (period :i64)
+    (period :wat::core::i64)
     -> :trading::encoding::KeltnerState)
   (:trading::encoding::KeltnerState/new
     (:trading::encoding::EmaState::fresh period)))
@@ -148,7 +148,7 @@
 (:wat::core::define
   (:trading::encoding::KeltnerState::update
     (state :trading::encoding::KeltnerState)
-    (close :f64)
+    (close :wat::core::f64)
     -> :trading::encoding::KeltnerState)
   (:trading::encoding::KeltnerState/new
     (:trading::encoding::EmaState::update
@@ -161,8 +161,8 @@
 (:wat::core::define
   (:trading::encoding::KeltnerState::upper
     (state :trading::encoding::KeltnerState)
-    (atr :f64)
-    -> :f64)
+    (atr :wat::core::f64)
+    -> :wat::core::f64)
   (:wat::core::+
     (:trading::encoding::EmaState/value
       (:trading::encoding::KeltnerState/ema state))
@@ -172,8 +172,8 @@
 (:wat::core::define
   (:trading::encoding::KeltnerState::lower
     (state :trading::encoding::KeltnerState)
-    (atr :f64)
-    -> :f64)
+    (atr :wat::core::f64)
+    -> :wat::core::f64)
   (:wat::core::-
     (:trading::encoding::EmaState/value
       (:trading::encoding::KeltnerState/ema state))
@@ -183,14 +183,14 @@
 (:wat::core::define
   (:trading::encoding::KeltnerState::pos
     (state :trading::encoding::KeltnerState)
-    (atr :f64)
-    (close :f64)
-    -> :f64)
+    (atr :wat::core::f64)
+    (close :wat::core::f64)
+    -> :wat::core::f64)
   (:wat::core::let*
-    (((upper :f64) (:trading::encoding::KeltnerState::upper state atr))
-     ((lower :f64) (:trading::encoding::KeltnerState::lower state atr))
-     ((range :f64) (:wat::core::- upper lower)))
-    (:wat::core::if (:wat::core::= range 0.0) -> :f64
+    (((upper :wat::core::f64) (:trading::encoding::KeltnerState::upper state atr))
+     ((lower :wat::core::f64) (:trading::encoding::KeltnerState::lower state atr))
+     ((range :wat::core::f64) (:wat::core::- upper lower)))
+    (:wat::core::if (:wat::core::= range 0.0) -> :wat::core::f64
       0.5
       (:wat::core::/ (:wat::core::- close lower) range))))
 
@@ -198,7 +198,7 @@
 (:wat::core::define
   (:trading::encoding::KeltnerState::ready?
     (state :trading::encoding::KeltnerState)
-    -> :bool)
+    -> :wat::core::bool)
   (:trading::encoding::EmaState::ready?
     (:trading::encoding::KeltnerState/ema state)))
 
@@ -209,10 +209,10 @@
 ;; volatility compressed; classic squeeze setup.
 (:wat::core::define
   (:trading::encoding::compute-squeeze
-    (bb-width :f64)
-    (kelt-width :f64)
-    -> :f64)
-  (:wat::core::if (:wat::core::= kelt-width 0.0) -> :f64
+    (bb-width :wat::core::f64)
+    (kelt-width :wat::core::f64)
+    -> :wat::core::f64)
+  (:wat::core::if (:wat::core::= kelt-width 0.0) -> :wat::core::f64
     0.0
     (:wat::core::/ bb-width kelt-width)))
 
@@ -220,9 +220,9 @@
 ;; atr-ratio: atr / close — ATR as a fraction of price.
 (:wat::core::define
   (:trading::encoding::compute-atr-ratio
-    (atr :f64)
-    (close :f64)
-    -> :f64)
-  (:wat::core::if (:wat::core::= close 0.0) -> :f64
+    (atr :wat::core::f64)
+    (close :wat::core::f64)
+    -> :wat::core::f64)
+  (:wat::core::if (:wat::core::= close 0.0) -> :wat::core::f64
     0.0
     (:wat::core::/ atr close)))

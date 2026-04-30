@@ -24,7 +24,7 @@
 ;; (the form's HolonAST value).
 ;;
 ;; This proof is v4 — built on the real primitive. The forms are
-;; real wat: (let* ((something :i64) 42) (* something something)).
+;; real wat: (let* ((something :wat::core::i64) 42) (* something something)).
 ;; The evaluator is :wat::eval-step!. The dual-LRU coordinate cache
 ;; (BOOK Chapter 59) is ~30 lines of pure wat on top.
 ;;
@@ -59,7 +59,7 @@
 ;; T1  Single-step arithmetic:  (+ 1 2) → 3
 ;; T2  Multi-step expansion:    (+ (+ 1 2) 3) → 6, both intermediates
 ;;     in next-cache, both terminals backpropagated.
-;; T3  Let*-binding:            (let* ((x :i64 5)) (* x x)) → 25
+;; T3  Let*-binding:            (let* ((x :wat::core::i64 5)) (* x x)) → 25
 ;; T4  TCO recursion:           (sum-to 3 0) → 6, many steps, all
 ;;     intermediate forms recorded in next-cache, terminals
 ;;     backpropagated, walker stack constant via arc 003 + arc 068.
@@ -81,8 +81,8 @@
    ;; stack constant. Arc 068's stepper exposes each β-reduction as
    ;; a discrete step the cache can record.
    (:wat::core::define
-     (:exp::sum-to (n :i64) (acc :i64) -> :i64)
-     (:wat::core::if (:wat::core::i64::= n 0) -> :i64
+     (:exp::sum-to (n :wat::core::i64) (acc :wat::core::i64) -> :wat::core::i64)
+     (:wat::core::if (:wat::core::i64::= n 0) -> :wat::core::i64
        acc
        (:exp::sum-to
          (:wat::core::i64::- n 1)
@@ -230,15 +230,15 @@
 
    ;; ─── Helpers ──────────────────────────────────────────
    (:wat::core::define
-     (:exp::is-some-h (o :Option<wat::holon::HolonAST>) -> :bool)
-     (:wat::core::match o -> :bool ((Some _) true) (:None false)))
+     (:exp::is-some-h (o :Option<wat::holon::HolonAST>) -> :wat::core::bool)
+     (:wat::core::match o -> :wat::core::bool ((Some _) true) (:None false)))
 
    (:wat::core::define
      (:exp::option-h-equals
        (o :Option<wat::holon::HolonAST>)
        (expected :wat::holon::HolonAST)
-       -> :bool)
-     (:wat::core::match o -> :bool
+       -> :wat::core::bool)
+     (:wat::core::match o -> :wat::core::bool
        ((Some t) (:wat::holon::coincident? t expected))
        (:None false)))))
 
@@ -263,13 +263,13 @@
 
      ;; Terminal value should be HolonAST::I64(3).
      ((expected :wat::holon::HolonAST) (:wat::holon::leaf 3))
-     ((value-ok :bool) (:wat::holon::coincident? terminal expected))
+     ((value-ok :wat::core::bool) (:wat::holon::coincident? terminal expected))
 
      ;; Form's terminal is queryable via the cache.
      ((form-key :wat::holon::HolonAST) (:wat::holon::from-watast form))
      ((looked-up :Option<wat::holon::HolonAST>)
       (:exp::cache-lookup-terminal cache-1 form-key))
-     ((cache-ok :bool) (:exp::option-h-equals looked-up expected))
+     ((cache-ok :wat::core::bool) (:exp::option-h-equals looked-up expected))
 
      ((_v :()) (:wat::test::assert-eq value-ok true)))
     (:wat::test::assert-eq cache-ok true)))
@@ -300,16 +300,16 @@
      ((cache-1 :exp::ExpansionCache) (:wat::core::second result))
 
      ((expected-terminal :wat::holon::HolonAST) (:wat::holon::leaf 6))
-     ((value-ok :bool) (:wat::holon::coincident? terminal expected-terminal))
+     ((value-ok :wat::core::bool) (:wat::holon::coincident? terminal expected-terminal))
 
      ;; Outer form's next-pointer must exist (the inner step was
      ;; recorded as the next-form for the outer form).
      ((form-key :wat::holon::HolonAST) (:wat::holon::from-watast form))
-     ((next-known :bool)
+     ((next-known :wat::core::bool)
        (:exp::is-some-h (:exp::cache-lookup-next cache-1 form-key)))
 
      ;; Outer form's terminal also recorded via backprop.
-     ((terminal-known :bool)
+     ((terminal-known :wat::core::bool)
        (:exp::option-h-equals
          (:exp::cache-lookup-terminal cache-1 form-key)
          expected-terminal))
@@ -320,7 +320,7 @@
 
 
 ;; ════════════════════════════════════════════════════════════════
-;;  T3 — Let* binding: (let* ((x :i64 5)) (* x x)) → 25
+;;  T3 — Let* binding: (let* ((x :wat::core::i64 5)) (* x x)) → 25
 ;; ════════════════════════════════════════════════════════════════
 ;;
 ;; arc 068's let* rule: peel one binding per step. With val already
@@ -334,7 +334,7 @@
   (:wat::core::let*
     (((form :wat::WatAST)
       (:wat::core::quote
-        (:wat::core::let* (((x :i64) 5))
+        (:wat::core::let* (((x :wat::core::i64) 5))
           (:wat::core::i64::* x x))))
      ((result :(wat::holon::HolonAST,exp::ExpansionCache))
       (:exp::walk-cached form (:exp::cache-empty)))
@@ -377,13 +377,13 @@
      ((cache :exp::ExpansionCache) (:wat::core::second result))
 
      ((expected :wat::holon::HolonAST) (:wat::holon::leaf 6))
-     ((value-ok :bool) (:wat::holon::coincident? terminal expected))
+     ((value-ok :wat::core::bool) (:wat::holon::coincident? terminal expected))
 
      ;; Outer form has both next-link and terminal recorded.
      ((form-key :wat::holon::HolonAST) (:wat::holon::from-watast form))
-     ((next-known :bool)
+     ((next-known :wat::core::bool)
        (:exp::is-some-h (:exp::cache-lookup-next cache form-key)))
-     ((terminal-known :bool)
+     ((terminal-known :wat::core::bool)
        (:exp::option-h-equals
          (:exp::cache-lookup-terminal cache form-key)
          expected))
@@ -420,8 +420,8 @@
       (:exp::cache-lookup-next cache outer-key))
 
      ((expected :wat::holon::HolonAST) (:wat::holon::leaf 6))
-     ((inner-terminal-correct :bool)
-       (:wat::core::match inner-key-opt -> :bool
+     ((inner-terminal-correct :wat::core::bool)
+       (:wat::core::match inner-key-opt -> :wat::core::bool
          ((Some inner-key)
            (:exp::option-h-equals
              (:exp::cache-lookup-terminal cache inner-key)
@@ -451,9 +451,9 @@
      ((r1 :(wat::holon::HolonAST,exp::ExpansionCache))
       (:exp::walk-cached form (:exp::cache-empty)))
      ((cache-after-first :exp::ExpansionCache) (:wat::core::second r1))
-     ((next-size-1 :i64)
+     ((next-size-1 :wat::core::i64)
        (:wat::core::length (:exp::ExpansionCache/next cache-after-first)))
-     ((term-size-1 :i64)
+     ((term-size-1 :wat::core::i64)
        (:wat::core::length (:exp::ExpansionCache/terminal cache-after-first)))
 
      ;; Second walker on same starting form, same cache.
@@ -461,14 +461,14 @@
       (:exp::walk-cached form cache-after-first))
      ((terminal-2 :wat::holon::HolonAST) (:wat::core::first r2))
      ((cache-after-second :exp::ExpansionCache) (:wat::core::second r2))
-     ((next-size-2 :i64)
+     ((next-size-2 :wat::core::i64)
        (:wat::core::length (:exp::ExpansionCache/next cache-after-second)))
-     ((term-size-2 :i64)
+     ((term-size-2 :wat::core::i64)
        (:wat::core::length (:exp::ExpansionCache/terminal cache-after-second)))
 
      ((expected :wat::holon::HolonAST) (:wat::holon::leaf 6))
-     ((value-ok :bool) (:wat::holon::coincident? terminal-2 expected))
-     ((cache-stable :bool)
+     ((value-ok :wat::core::bool) (:wat::holon::coincident? terminal-2 expected))
+     ((cache-stable :wat::core::bool)
        (:wat::core::and
          (:wat::core::= next-size-1 next-size-2)
          (:wat::core::= term-size-1 term-size-2)))
@@ -523,5 +523,5 @@
 
      ;; B's expected terminal: HolonAST::I64(6).
      ((expected :wat::holon::HolonAST) (:wat::holon::leaf 6))
-     ((B-finds-A-work :bool) (:exp::option-h-equals cached-terminal expected)))
+     ((B-finds-A-work :wat::core::bool) (:exp::option-h-equals cached-terminal expected)))
     (:wat::test::assert-eq B-finds-A-work true)))

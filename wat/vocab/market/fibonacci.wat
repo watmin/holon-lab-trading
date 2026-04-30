@@ -32,30 +32,30 @@
   (:wat::core::let*
     ;; Pull the three window positions. Fib distances derive from
     ;; range-pos-48 only; the 12 and 24 windows emit raw.
-    (((rp-12 :f64)
+    (((rp-12 :wat::core::f64)
       (:trading::encoding::round-to-2
         (:trading::types::Candle::RateOfChange/range-pos-12 r)))
-     ((rp-24 :f64)
+     ((rp-24 :wat::core::f64)
       (:trading::encoding::round-to-2
         (:trading::types::Candle::RateOfChange/range-pos-24 r)))
-     ((rp-48-raw :f64)
+     ((rp-48-raw :wat::core::f64)
       (:trading::types::Candle::RateOfChange/range-pos-48 r))
-     ((rp-48 :f64) (:trading::encoding::round-to-2 rp-48-raw))
+     ((rp-48 :wat::core::f64) (:trading::encoding::round-to-2 rp-48-raw))
 
      ;; Fibonacci retracement distances from the 48-window position.
-     ((fd-236 :f64)
+     ((fd-236 :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::- rp-48-raw 0.236)))
-     ((fd-382 :f64)
+     ((fd-382 :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::- rp-48-raw 0.382)))
-     ((fd-500 :f64)
+     ((fd-500 :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::- rp-48-raw 0.500)))
-     ((fd-618 :f64)
+     ((fd-618 :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::- rp-48-raw 0.618)))
-     ((fd-786 :f64)
+     ((fd-786 :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::- rp-48-raw 0.786)))
 

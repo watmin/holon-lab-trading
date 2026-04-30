@@ -11,7 +11,7 @@
   ((:wat::load-file! "wat/vocab/market/divergence.wat")
    (:wat::core::define
      (:test::fresh-divergence
-       (bull :f64) (bear :f64)
+       (bull :wat::core::f64) (bear :wat::core::f64)
        -> :trading::types::Candle::Divergence)
      (:trading::types::Candle::Divergence/new
        bull bear 0.0 0.0))  ;; tk-cross-delta, stoch-cross-delta
@@ -98,10 +98,10 @@
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) 0.5))
-     ((scale :f64)
+     ((scale :wat::core::f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::- 0.0 scale))
-     ((rounded :f64) (:trading::encoding::round-to-2 0.5))
+     ((neg-scale :wat::core::f64) (:wat::core::- 0.0 scale))
+     ((rounded :wat::core::f64) (:trading::encoding::round-to-2 0.5))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "rsi-divergence-bull")
@@ -122,9 +122,9 @@
      ((updated :trading::encoding::Scales) (:wat::core::second e))
      ;; No emissions fired → no scales updates → none of the atom
      ;; names should be present in the returned Scales.
-     ((has-bull   :bool) (:wat::core::contains? updated "rsi-divergence-bull"))
-     ((has-bear   :bool) (:wat::core::contains? updated "rsi-divergence-bear"))
-     ((has-spread :bool) (:wat::core::contains? updated "divergence-spread")))
+     ((has-bull   :wat::core::bool) (:wat::core::contains? updated "rsi-divergence-bull"))
+     ((has-bear   :wat::core::bool) (:wat::core::contains? updated "rsi-divergence-bear"))
+     ((has-spread :wat::core::bool) (:wat::core::contains? updated "divergence-spread")))
     (:wat::test::assert-eq
       (:wat::core::or has-bull (:wat::core::or has-bear has-spread))
       false)))

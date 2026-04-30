@@ -10,8 +10,8 @@
    (:wat::core::define
      (:test::rsi-feed
        (s :trading::encoding::RsiState)
-       (x :f64)
-       (n :i64)
+       (x :wat::core::f64)
+       (n :wat::core::i64)
        -> :trading::encoding::RsiState)
      (:wat::core::if (:wat::core::<= n 0)
                      -> :trading::encoding::RsiState
@@ -24,8 +24,8 @@
    (:wat::core::define
      (:test::stoch-feed
        (s :trading::encoding::StochState)
-       (h :f64) (l :f64) (c :f64)
-       (n :i64)
+       (h :wat::core::f64) (l :wat::core::f64) (c :wat::core::f64)
+       (n :wat::core::i64)
        -> :trading::encoding::StochState)
      (:wat::core::if (:wat::core::<= n 0)
                      -> :trading::encoding::StochState
@@ -38,8 +38,8 @@
    (:wat::core::define
      (:test::cci-feed
        (s :trading::encoding::CciState)
-       (h :f64) (l :f64) (c :f64)
-       (n :i64)
+       (h :wat::core::f64) (l :wat::core::f64) (c :wat::core::f64)
+       (n :wat::core::i64)
        -> :trading::encoding::CciState)
      (:wat::core::if (:wat::core::<= n 0)
                      -> :trading::encoding::CciState
@@ -93,8 +93,8 @@
      ((s13 :trading::encoding::RsiState) (:trading::encoding::RsiState::update s12 100.0))
      ((s14 :trading::encoding::RsiState) (:trading::encoding::RsiState::update s13 110.0))
      ((s15 :trading::encoding::RsiState) (:trading::encoding::RsiState::update s14 100.0))
-     ((v :f64) (:trading::encoding::RsiState::value s15))
-     ((in-range? :bool)
+     ((v :wat::core::f64) (:trading::encoding::RsiState::value s15))
+     ((in-range? :wat::core::bool)
       (:wat::core::and (:wat::core::>= v 0.0) (:wat::core::<= v 100.0))))
     (:wat::test::assert-eq in-range? true)))
 
@@ -107,10 +107,10 @@
      ;; So we need 14 increments AFTER the first → 15 updates total.
      ((s14 :trading::encoding::RsiState)
       (:test::rsi-feed s0 100.0 14))
-     ((not-yet? :bool) (:trading::encoding::RsiState::ready? s14))
+     ((not-yet? :wat::core::bool) (:trading::encoding::RsiState::ready? s14))
      ((s15 :trading::encoding::RsiState)
       (:trading::encoding::RsiState::update s14 100.0))
-     ((ready? :bool) (:trading::encoding::RsiState::ready? s15)))
+     ((ready? :wat::core::bool) (:trading::encoding::RsiState::ready? s15)))
     (:wat::core::let*
       (((u1 :()) (:wat::test::assert-eq not-yet? false)))
       (:wat::test::assert-eq ready? true))))
@@ -138,7 +138,7 @@
      ((s3 :trading::encoding::StochState) (:trading::encoding::StochState::update s2 110.0 100.0 105.0))
      ((s4 :trading::encoding::StochState) (:trading::encoding::StochState::update s3 110.0 100.0 105.0))
      ((s5 :trading::encoding::StochState) (:trading::encoding::StochState::update s4 110.0 100.0 110.0))
-     ((k :f64) (:trading::encoding::StochState::k s5)))
+     ((k :wat::core::f64) (:trading::encoding::StochState::k s5)))
     ;; close=110, lowest=100, range=10 → k=100·(10/10)=100.0
     (:wat::test::assert-eq k 100.0)))
 
@@ -149,7 +149,7 @@
       (:trading::encoding::StochState::fresh 5 3))
      ((s5 :trading::encoding::StochState)
       (:test::stoch-feed s0 110.0 100.0 100.0 5))
-     ((k :f64) (:trading::encoding::StochState::k s5)))
+     ((k :wat::core::f64) (:trading::encoding::StochState::k s5)))
     ;; close=100, lowest=100, range=10 → k=0.0
     (:wat::test::assert-eq k 0.0)))
 
@@ -162,10 +162,10 @@
       (:trading::encoding::StochState::fresh 5 3))
      ((s6 :trading::encoding::StochState)
       (:test::stoch-feed s0 110.0 100.0 105.0 6))
-     ((not-yet? :bool) (:trading::encoding::StochState::ready? s6))
+     ((not-yet? :wat::core::bool) (:trading::encoding::StochState::ready? s6))
      ((s7 :trading::encoding::StochState)
       (:trading::encoding::StochState::update s6 110.0 100.0 105.0))
-     ((ready? :bool) (:trading::encoding::StochState::ready? s7)))
+     ((ready? :wat::core::bool) (:trading::encoding::StochState::ready? s7)))
     (:wat::core::let*
       (((u1 :()) (:wat::test::assert-eq not-yet? false)))
       (:wat::test::assert-eq ready? true))))
@@ -190,10 +190,10 @@
      ((s5 :trading::encoding::StochState)
       (:test::stoch-feed s0 110.0 100.0 105.0 5))
      ;; close=110 (=highest) → -100·(110-110)/10 = 0
-     ((wr-high :f64)
+     ((wr-high :wat::core::f64)
       (:trading::encoding::compute-williams-r s5 110.0))
      ;; close=100 (=lowest) → -100·(110-100)/10 = -100
-     ((wr-low :f64)
+     ((wr-low :wat::core::f64)
       (:trading::encoding::compute-williams-r s5 100.0)))
     (:wat::core::let*
       (((u1 :()) (:wat::test::assert-eq wr-high 0.0)))
@@ -230,10 +230,10 @@
       (:trading::encoding::CciState::fresh 5))
      ((s4 :trading::encoding::CciState)
       (:test::cci-feed s0 110.0 100.0 105.0 4))
-     ((not-yet? :bool) (:trading::encoding::CciState::ready? s4))
+     ((not-yet? :wat::core::bool) (:trading::encoding::CciState::ready? s4))
      ((s5 :trading::encoding::CciState)
       (:trading::encoding::CciState::update s4 110.0 100.0 105.0))
-     ((ready? :bool) (:trading::encoding::CciState::ready? s5)))
+     ((ready? :wat::core::bool) (:trading::encoding::CciState::ready? s5)))
     (:wat::core::let*
       (((u1 :()) (:wat::test::assert-eq not-yet? false)))
       (:wat::test::assert-eq ready? true))))

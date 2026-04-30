@@ -43,13 +43,13 @@
    (:wat::core::struct :exp::Receipt
      (bytes :wat::core::Bytes)
      (form :wat::holon::HolonAST)
-     (seed-hint :i64))
+     (seed-hint :wat::core::i64))
 
    ;; Issue — encode `form` under the ambient universe; capture
    ;; (bytes, form, seed-hint) as a portable Receipt.
    (:wat::core::define
      (:exp::issue (form :wat::holon::HolonAST)
-                  (seed-hint :i64)
+                  (seed-hint :wat::core::i64)
                   -> :exp::Receipt)
      (:wat::core::let*
        (((v :wat::holon::Vector) (:wat::holon::encode form))
@@ -63,10 +63,10 @@
    (:wat::core::define
      (:exp::verify (r :exp::Receipt)
                    (candidate :wat::holon::HolonAST)
-                   -> :bool)
+                   -> :wat::core::bool)
      (:wat::core::match
        (:wat::holon::bytes-vector (:exp::Receipt/bytes r))
-       -> :bool
+       -> :wat::core::bool
        ((Some v) (:wat::holon::coincident? candidate v))
        (:None false)))
 
@@ -96,17 +96,17 @@
    ;; "false on every failure mode" convention).
    (:wat::core::define
      (:exp::verify-at (j :exp::Journal)
-                      (idx :i64)
+                      (idx :wat::core::i64)
                       (candidate :wat::holon::HolonAST)
-                      -> :bool)
+                      -> :wat::core::bool)
      (:wat::core::match
        (:wat::core::get (:exp::Journal/entries j) idx)
-       -> :bool
+       -> :wat::core::bool
        ((Some r) (:exp::verify r candidate))
        (:None false)))
 
    (:wat::core::define
-     (:exp::journal-len (j :exp::Journal) -> :i64)
+     (:exp::journal-len (j :exp::Journal) -> :wat::core::i64)
      (:wat::core::length (:exp::Journal/entries j)))
 
 
@@ -155,7 +155,7 @@
     (((form :wat::holon::HolonAST)
       (:wat::holon::from-watast (:wat::core::quote (:wat::core::+ 2 2))))
      ((r :exp::Receipt) (:exp::issue form 42))
-     ((ok :bool) (:exp::verify r form)))
+     ((ok :wat::core::bool) (:exp::verify r form)))
     (:wat::test::assert-eq ok true)))
 
 
@@ -168,7 +168,7 @@
      ((form-b :wat::holon::HolonAST)
       (:wat::holon::from-watast (:wat::core::quote (:wat::core::* 7 11))))
      ((r :exp::Receipt) (:exp::issue form-a 42))
-     ((wrong :bool) (:exp::verify r form-b)))
+     ((wrong :wat::core::bool) (:exp::verify r form-b)))
     (:wat::test::assert-eq wrong false)))
 
 
@@ -178,9 +178,9 @@
   (:wat::core::let*
     (((form :wat::holon::HolonAST)
       (:wat::holon::from-watast (:wat::core::quote (:wat::core::+ 2 2))))
-     ((empty-bytes :wat::core::Bytes) (:wat::core::vec :u8))
+     ((empty-bytes :wat::core::Bytes) (:wat::core::vec :wat::core::u8))
      ((tampered :exp::Receipt) (:exp::Receipt/new empty-bytes form 42))
-     ((rejected :bool) (:exp::verify tampered form)))
+     ((rejected :wat::core::bool) (:exp::verify tampered form)))
     (:wat::test::assert-eq rejected false)))
 
 
@@ -193,9 +193,9 @@
      ((r :exp::Receipt) (:exp::issue form 42))
 
      ((stored-form :wat::holon::HolonAST) (:exp::Receipt/form r))
-     ((stored-seed :i64) (:exp::Receipt/seed-hint r))
+     ((stored-seed :wat::core::i64) (:exp::Receipt/seed-hint r))
 
-     ((form-preserved :bool) (:wat::holon::coincident? stored-form form))
+     ((form-preserved :wat::core::bool) (:wat::holon::coincident? stored-form form))
      ((_f :()) (:wat::test::assert-eq form-preserved true)))
     (:wat::test::assert-eq stored-seed 42)))
 
@@ -208,9 +208,9 @@
       (:wat::holon::from-watast (:wat::core::quote (:wat::core::+ 1 (:wat::core::* 2 3)))))
      ((r :exp::Receipt) (:exp::issue form 42))
      ((r2 :exp::Receipt) (:exp::issue form 42))
-     ((ok1 :bool) (:exp::verify r form))
-     ((ok2 :bool) (:exp::verify r2 form))
-     ((cross :bool) (:exp::verify r2 (:exp::Receipt/form r)))
+     ((ok1 :wat::core::bool) (:exp::verify r form))
+     ((ok2 :wat::core::bool) (:exp::verify r2 form))
+     ((cross :wat::core::bool) (:exp::verify r2 (:exp::Receipt/form r)))
      ((_o1 :()) (:wat::test::assert-eq ok1 true))
      ((_o2 :()) (:wat::test::assert-eq ok2 true)))
     (:wat::test::assert-eq cross true)))
@@ -232,7 +232,7 @@
      ((j0 :exp::Journal) (:exp::journal-empty))
      ((j1 :exp::Journal) (:exp::append j0 r))
 
-     ((ok :bool) (:exp::verify-at j1 0 form))
+     ((ok :wat::core::bool) (:exp::verify-at j1 0 form))
      ((_l :()) (:wat::test::assert-eq (:exp::journal-len j1) 1)))
     (:wat::test::assert-eq ok true)))
 
@@ -254,9 +254,9 @@
                                   (:exp::issue form-b 42))
                     (:exp::issue form-c 42)))
 
-     ((ok-a :bool) (:exp::verify-at j 0 form-a))
-     ((ok-b :bool) (:exp::verify-at j 1 form-b))
-     ((ok-c :bool) (:exp::verify-at j 2 form-c))
+     ((ok-a :wat::core::bool) (:exp::verify-at j 0 form-a))
+     ((ok-b :wat::core::bool) (:exp::verify-at j 1 form-b))
+     ((ok-c :wat::core::bool) (:exp::verify-at j 2 form-c))
      ((_a :()) (:wat::test::assert-eq ok-a true))
      ((_b :()) (:wat::test::assert-eq ok-b true))
      ((_l :()) (:wat::test::assert-eq (:exp::journal-len j) 3)))
@@ -281,8 +281,8 @@
                       (:exp::issue form-b 42))
         (:exp::issue form-c 42)))
 
-     ((swap-01 :bool) (:exp::verify-at j 0 form-b))
-     ((swap-20 :bool) (:exp::verify-at j 2 form-a))
+     ((swap-01 :wat::core::bool) (:exp::verify-at j 0 form-b))
+     ((swap-20 :wat::core::bool) (:exp::verify-at j 2 form-a))
      ((_01 :()) (:wat::test::assert-eq swap-01 false)))
     (:wat::test::assert-eq swap-20 false)))
 
@@ -296,8 +296,8 @@
      ((j :exp::Journal)
       (:exp::append (:exp::journal-empty) (:exp::issue form 42)))
 
-     ((past-tail :bool) (:exp::verify-at j 5 form))
-     ((empty-q :bool) (:exp::verify-at (:exp::journal-empty) 0 form))
+     ((past-tail :wat::core::bool) (:exp::verify-at j 5 form))
+     ((empty-q :wat::core::bool) (:exp::verify-at (:exp::journal-empty) 0 form))
      ((_p :()) (:wat::test::assert-eq past-tail false)))
     (:wat::test::assert-eq empty-q false)))
 
@@ -339,8 +339,8 @@
 
      ((reg :exp::Registry) (:exp::register (:exp::registry-empty) r))
      ((found :Option<exp::Receipt>) (:exp::lookup reg other-bytes))
-     ((is-none :bool)
-       (:wat::core::match found -> :bool
+     ((is-none :wat::core::bool)
+       (:wat::core::match found -> :wat::core::bool
          ((Some _) false)
          (:None true))))
     (:wat::test::assert-eq is-none true)))
@@ -369,12 +369,12 @@
      ((found-a :Option<exp::Receipt>) (:exp::lookup reg (:exp::Receipt/bytes r-a)))
      ((found-c :Option<exp::Receipt>) (:exp::lookup reg (:exp::Receipt/bytes r-c)))
 
-     ((ok-a :bool)
-       (:wat::core::match found-a -> :bool
+     ((ok-a :wat::core::bool)
+       (:wat::core::match found-a -> :wat::core::bool
          ((Some r) (:exp::verify r form-a))
          (:None false)))
-     ((ok-c :bool)
-       (:wat::core::match found-c -> :bool
+     ((ok-c :wat::core::bool)
+       (:wat::core::match found-c -> :wat::core::bool
          ((Some r) (:exp::verify r form-c))
          (:None false)))
      ((_a :()) (:wat::test::assert-eq ok-a true)))
@@ -400,8 +400,8 @@
      ;; They use V to look up the registered receipt; then use F
      ;; to verify it.
      ((looked-up :Option<exp::Receipt>) (:exp::lookup reg (:exp::Receipt/bytes r-original)))
-     ((verified :bool)
-       (:wat::core::match looked-up -> :bool
+     ((verified :wat::core::bool)
+       (:wat::core::match looked-up -> :wat::core::bool
          ((Some r) (:exp::verify r form))
          (:None false))))
     (:wat::test::assert-eq verified true)))
@@ -436,8 +436,8 @@
      ;; First request: cache miss → compute → register.
      ((cache-empty :exp::Registry) (:exp::registry-empty))
      ((miss :Option<exp::Receipt>) (:exp::lookup cache-empty build-bytes))
-     ((is-miss :bool)
-       (:wat::core::match miss -> :bool ((Some _) false) (:None true)))
+     ((is-miss :wat::core::bool)
+       (:wat::core::match miss -> :wat::core::bool ((Some _) false) (:None true)))
      ((_miss :()) (:wat::test::assert-eq is-miss true))
 
      ;; Compute and register.
@@ -446,8 +446,8 @@
 
      ;; Second request for the SAME build → cache hit; verifiable.
      ((hit :Option<exp::Receipt>) (:exp::lookup cache build-bytes))
-     ((cache-hit-verifies :bool)
-       (:wat::core::match hit -> :bool
+     ((cache-hit-verifies :wat::core::bool)
+       (:wat::core::match hit -> :wat::core::bool
          ((Some r) (:exp::verify r build-form))
          (:None false))))
     (:wat::test::assert-eq cache-hit-verifies true)))
@@ -481,10 +481,10 @@
 
      ;; Audit: each decision verifies at its position; out-of-order
      ;; verification rejects (proves order is part of the record).
-     ((audit-1 :bool) (:exp::verify-at log 0 d1))
-     ((audit-2 :bool) (:exp::verify-at log 1 d2))
-     ((audit-3 :bool) (:exp::verify-at log 2 d3))
-     ((wrong-order :bool) (:exp::verify-at log 0 d3))
+     ((audit-1 :wat::core::bool) (:exp::verify-at log 0 d1))
+     ((audit-2 :wat::core::bool) (:exp::verify-at log 1 d2))
+     ((audit-3 :wat::core::bool) (:exp::verify-at log 2 d3))
+     ((wrong-order :wat::core::bool) (:exp::verify-at log 0 d3))
 
      ((_a1 :()) (:wat::test::assert-eq audit-1 true))
      ((_a2 :()) (:wat::test::assert-eq audit-2 true))
@@ -515,11 +515,11 @@
      ((reg :exp::Registry) (:exp::register (:exp::registry-empty) r))
 
      ;; Audit via journal (by position).
-     ((via-journal :bool) (:exp::verify-at j 0 form))
+     ((via-journal :wat::core::bool) (:exp::verify-at j 0 form))
 
      ;; Audit via registry (by content key).
-     ((via-registry :bool)
-       (:wat::core::match (:exp::lookup reg (:exp::Receipt/bytes r)) -> :bool
+     ((via-registry :wat::core::bool)
+       (:wat::core::match (:exp::lookup reg (:exp::Receipt/bytes r)) -> :wat::core::bool
          ((Some r-found) (:exp::verify r-found form))
          (:None false)))
 

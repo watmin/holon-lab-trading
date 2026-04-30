@@ -5,7 +5,7 @@
 (:wat::test::make-deftest :deftest
   ((:wat::core::define
      (:my::test::count-visit
-       (acc :i64)
+       (acc :wat::core::i64)
        (form :wat::WatAST)
        (step :wat::eval::StepResult)
        -> :wat::eval::WalkStep<i64>)
@@ -16,7 +16,7 @@
 (:deftest :probe::a-tuple-destructure-baseline
   (:wat::core::let*
     (((pair :(i64,i64)) (:wat::core::tuple 7 11))
-     ((y :i64) (:wat::core::second pair)))
+     ((y :wat::core::i64) (:wat::core::second pair)))
     (:wat::test::assert-eq y 11)))
 
 
@@ -27,8 +27,8 @@
   (:wat::core::let*
     (((wrapped :Result<(i64,i64),i64>)
       (Ok (:wat::core::tuple 7 11)))
-     ((extracted :i64)
-      (:wat::core::match wrapped -> :i64
+     ((extracted :wat::core::i64)
+      (:wat::core::match wrapped -> :wat::core::i64
         ((Ok pair) (:wat::core::second pair))
         ((Err _) -1))))
     (:wat::test::assert-eq extracted 11)))
@@ -40,8 +40,8 @@
   (:wat::core::let*
     (((wrapped :Result<(i64,i64),i64>)
       (Ok (:wat::core::tuple 7 11)))
-     ((extracted :i64)
-      (:wat::core::match wrapped -> :i64
+     ((extracted :wat::core::i64)
+      (:wat::core::match wrapped -> :wat::core::i64
         ((Ok (pair :(i64,i64))) (:wat::core::second pair))
         ((Err _) -1))))
     (:wat::test::assert-eq extracted 11)))
@@ -53,8 +53,8 @@
   (:wat::core::let*
     (((wrapped :Result<(i64,i64),i64>)
       (Ok (:wat::core::tuple 7 11)))
-     ((extracted :i64)
-      (:wat::core::match wrapped -> :i64
+     ((extracted :wat::core::i64)
+      (:wat::core::match wrapped -> :wat::core::i64
         ((Ok (a b)) b)
         ((Err _) -1))))
     (:wat::test::assert-eq extracted 11)))
@@ -69,10 +69,10 @@
         (:wat::holon::Bind
           (:wat::holon::Atom "k")
           (:wat::holon::Atom "v"))))
-     ((tag :i64)
+     ((tag :wat::core::i64)
       (:wat::core::match
         (:wat::eval::walk form 0 :my::test::count-visit)
-        -> :i64
+        -> :wat::core::i64
         ((Ok _) 1)
         ((Err _) -1))))
     (:wat::test::assert-eq tag 1)))
@@ -86,10 +86,10 @@
         (:wat::holon::Bind
           (:wat::holon::Atom "k")
           (:wat::holon::Atom "v"))))
-     ((count :i64)
+     ((count :wat::core::i64)
       (:wat::core::match
         (:wat::eval::walk form 0 :my::test::count-visit)
-        -> :i64
+        -> :wat::core::i64
         ((Ok pair) (:wat::core::second pair))
         ((Err _e) -1))))
     (:wat::test::assert-eq count 1)))

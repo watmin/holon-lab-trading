@@ -38,8 +38,8 @@
      (:exp::verify
        (v-bytes :wat::core::Bytes)
        (form :wat::holon::HolonAST)
-       -> :bool)
-     (:wat::core::match (:wat::holon::bytes-vector v-bytes) -> :bool
+       -> :wat::core::bool)
+     (:wat::core::match (:wat::holon::bytes-vector v-bytes) -> :wat::core::bool
        ((Some v) (:wat::holon::coincident? form v))
        (:None false)))
 
@@ -58,10 +58,10 @@
    ;; The chain: HolonAST → to-watast → eval-ast! → Ok(i64) → i64.
    ;; Each step honest about its inputs and outputs.
    (:wat::core::define
-     (:exp::form->i64 (form :wat::holon::HolonAST) -> :i64)
+     (:exp::form->i64 (form :wat::holon::HolonAST) -> :wat::core::i64)
      (:wat::core::match
        (:wat::eval-ast! (:wat::holon::to-watast form))
-       -> :i64
+       -> :wat::core::i64
        ((Ok v) v)
        ((Err _) -1)))))
 
@@ -91,14 +91,14 @@
 
      ;; The directed-graph claim, structural side: forms differ.
      ;; coincident? wraps the slack-lemma floor predicate (Ch 23, Ch 28).
-     ((cross :bool) (:wat::holon::coincident? form-a form-b))
+     ((cross :wat::core::bool) (:wat::holon::coincident? form-a form-b))
      ((_diff :()) (:wat::test::assert-eq cross false))
 
      ;; The directed-graph claim, terminal side: round-trip each
      ;; atom-stored form through unquote-and-eval. Same forms,
      ;; defined once above; values come from running them.
-     ((value-a :i64) (:exp::form->i64 form-a))
-     ((value-b :i64) (:exp::form->i64 form-b)))
+     ((value-a :wat::core::i64) (:exp::form->i64 form-a))
+     ((value-b :wat::core::i64) (:exp::form->i64 form-b)))
     (:wat::test::assert-eq value-a value-b)))
 
 
@@ -130,9 +130,9 @@
      ((_struct :()) (:wat::test::assert-coincident form-a form-a-again))
 
      ;; Pairwise distinctness — three pairs, all expected to differ.
-     ((ab :bool) (:wat::holon::coincident? form-a form-b))
-     ((bc :bool) (:wat::holon::coincident? form-b form-c))
-     ((ac :bool) (:wat::holon::coincident? form-a form-c))
+     ((ab :wat::core::bool) (:wat::holon::coincident? form-a form-b))
+     ((bc :wat::core::bool) (:wat::holon::coincident? form-b form-c))
+     ((ac :wat::core::bool) (:wat::holon::coincident? form-a form-c))
      ((_d-ab :()) (:wat::test::assert-eq ab false))
      ((_d-bc :()) (:wat::test::assert-eq bc false))
      ((_d-ac :()) (:wat::test::assert-eq ac false))
@@ -140,9 +140,9 @@
      ;; Terminal coincidence — all three forms unquote-and-eval
      ;; to the same value 4. Same atoms defined above; no parallel
      ;; re-write of the source forms.
-     ((value-a :i64) (:exp::form->i64 form-a))
-     ((value-b :i64) (:exp::form->i64 form-b))
-     ((value-c :i64) (:exp::form->i64 form-c))
+     ((value-a :wat::core::i64) (:exp::form->i64 form-a))
+     ((value-b :wat::core::i64) (:exp::form->i64 form-b))
+     ((value-c :wat::core::i64) (:exp::form->i64 form-c))
      ((_eq-ab :()) (:wat::test::assert-eq value-a value-b))
      ((_eq-bc :()) (:wat::test::assert-eq value-b value-c)))
     (:wat::test::assert-eq value-a value-c)))
@@ -181,10 +181,10 @@
                 (:wat::holon::from-watast (:wat::core::quote (:wat::core::+ 2 2))))
                ((form-b :wat::holon::HolonAST)
                 (:wat::holon::from-watast (:wat::core::quote (:wat::core::+ 3 3))))
-               ((cos-ab :f64) (:wat::holon::cosine form-a form-b)))
+               ((cos-ab :wat::core::f64) (:wat::holon::cosine form-a form-b)))
               (:wat::io::IOWriter/print stdout
                 (:wat::core::f64::to-string cos-ab)))))
-        (:wat::core::vec :String)))
+        (:wat::core::vec :wat::core::String)))
 
      ;; Child running under seed 99 — same forms, different universe.
      ((r-99 :wat::kernel::RunResult)
@@ -201,18 +201,18 @@
                 (:wat::holon::from-watast (:wat::core::quote (:wat::core::+ 2 2))))
                ((form-b :wat::holon::HolonAST)
                 (:wat::holon::from-watast (:wat::core::quote (:wat::core::+ 3 3))))
-               ((cos-ab :f64) (:wat::holon::cosine form-a form-b)))
+               ((cos-ab :wat::core::f64) (:wat::holon::cosine form-a form-b)))
               (:wat::io::IOWriter/print stdout
                 (:wat::core::f64::to-string cos-ab)))))
-        (:wat::core::vec :String)))
+        (:wat::core::vec :wat::core::String)))
 
      ;; Extract first printed line from each child.
-     ((cos-42 :String)
-      (:wat::core::match (:wat::core::first (:wat::kernel::RunResult/stdout r-42)) -> :String
+     ((cos-42 :wat::core::String)
+      (:wat::core::match (:wat::core::first (:wat::kernel::RunResult/stdout r-42)) -> :wat::core::String
         ((Some s) s)
         (:None "<missing-42>")))
-     ((cos-99 :String)
-      (:wat::core::match (:wat::core::first (:wat::kernel::RunResult/stdout r-99)) -> :String
+     ((cos-99 :wat::core::String)
+      (:wat::core::match (:wat::core::first (:wat::kernel::RunResult/stdout r-99)) -> :wat::core::String
         ((Some s) s)
         (:None "<missing-99>")))
 
@@ -220,7 +220,7 @@
      ;; seeds are not the same value. (If they were, the two universes
      ;; would happen to agree on this specific encoding — astronomically
      ;; unlikely at d=10000.)
-     ((differ :bool) (:wat::core::not= cos-42 cos-99)))
+     ((differ :wat::core::bool) (:wat::core::not= cos-42 cos-99)))
     (:wat::test::assert-eq differ true)))
 
 
@@ -257,10 +257,10 @@
                 (:wat::holon::from-watast (:wat::core::quote (:wat::core::+ 2 2))))
                ((form-b :wat::holon::HolonAST)
                 (:wat::holon::from-watast (:wat::core::quote (:wat::core::+ 3 3))))
-               ((cos-ab :f64) (:wat::holon::cosine form-a form-b)))
+               ((cos-ab :wat::core::f64) (:wat::holon::cosine form-a form-b)))
               (:wat::io::IOWriter/print stdout
                 (:wat::core::f64::to-string cos-ab)))))
-        (:wat::core::vec :String)))
+        (:wat::core::vec :wat::core::String)))
 
      ;; Child B — same seed, same forms, separate process.
      ((r-b :wat::kernel::RunResult)
@@ -277,23 +277,23 @@
                 (:wat::holon::from-watast (:wat::core::quote (:wat::core::+ 2 2))))
                ((form-b :wat::holon::HolonAST)
                 (:wat::holon::from-watast (:wat::core::quote (:wat::core::+ 3 3))))
-               ((cos-ab :f64) (:wat::holon::cosine form-a form-b)))
+               ((cos-ab :wat::core::f64) (:wat::holon::cosine form-a form-b)))
               (:wat::io::IOWriter/print stdout
                 (:wat::core::f64::to-string cos-ab)))))
-        (:wat::core::vec :String)))
+        (:wat::core::vec :wat::core::String)))
 
-     ((cos-a :String)
-      (:wat::core::match (:wat::core::first (:wat::kernel::RunResult/stdout r-a)) -> :String
+     ((cos-a :wat::core::String)
+      (:wat::core::match (:wat::core::first (:wat::kernel::RunResult/stdout r-a)) -> :wat::core::String
         ((Some s) s)
         (:None "<missing-a>")))
-     ((cos-b :String)
-      (:wat::core::match (:wat::core::first (:wat::kernel::RunResult/stdout r-b)) -> :String
+     ((cos-b :wat::core::String)
+      (:wat::core::match (:wat::core::first (:wat::kernel::RunResult/stdout r-b)) -> :wat::core::String
         ((Some s) s)
         (:None "<missing-b>")))
 
      ;; Replay determinism claim: same seed + same form across two
      ;; processes produces the SAME cosine value, character-for-character.
-     ((same :bool) (:wat::core::= cos-a cos-b)))
+     ((same :wat::core::bool) (:wat::core::= cos-a cos-b)))
     (:wat::test::assert-eq same true)))
 
 
@@ -332,10 +332,10 @@
                 (:wat::holon::from-watast (:wat::core::quote (:wat::core::+ 2 2))))
                ((anchor :wat::holon::HolonAST)
                 (:wat::holon::from-watast (:wat::core::quote (:wat::core::+ 3 3))))
-               ((cos :f64) (:wat::holon::cosine form-correct anchor)))
+               ((cos :wat::core::f64) (:wat::holon::cosine form-correct anchor)))
               (:wat::io::IOWriter/print stdout
                 (:wat::core::f64::to-string cos)))))
-        (:wat::core::vec :String)))
+        (:wat::core::vec :wat::core::String)))
 
      ;; Child 2 — wrong seed: seed 99, correct form, same anchor.
      ((r-wrong-seed :wat::kernel::RunResult)
@@ -352,10 +352,10 @@
                 (:wat::holon::from-watast (:wat::core::quote (:wat::core::+ 2 2))))
                ((anchor :wat::holon::HolonAST)
                 (:wat::holon::from-watast (:wat::core::quote (:wat::core::+ 3 3))))
-               ((cos :f64) (:wat::holon::cosine form-correct anchor)))
+               ((cos :wat::core::f64) (:wat::holon::cosine form-correct anchor)))
               (:wat::io::IOWriter/print stdout
                 (:wat::core::f64::to-string cos)))))
-        (:wat::core::vec :String)))
+        (:wat::core::vec :wat::core::String)))
 
      ;; Child 3 — wrong form: seed 42, but a structurally different form.
      ((r-wrong-form :wat::kernel::RunResult)
@@ -374,27 +374,27 @@
                 (:wat::holon::from-watast (:wat::core::quote (:wat::core::- 100 1))))
                ((anchor :wat::holon::HolonAST)
                 (:wat::holon::from-watast (:wat::core::quote (:wat::core::+ 3 3))))
-               ((cos :f64) (:wat::holon::cosine form-wrong anchor)))
+               ((cos :wat::core::f64) (:wat::holon::cosine form-wrong anchor)))
               (:wat::io::IOWriter/print stdout
                 (:wat::core::f64::to-string cos)))))
-        (:wat::core::vec :String)))
+        (:wat::core::vec :wat::core::String)))
 
-     ((cos-ref :String)
-      (:wat::core::match (:wat::core::first (:wat::kernel::RunResult/stdout r-ref)) -> :String
+     ((cos-ref :wat::core::String)
+      (:wat::core::match (:wat::core::first (:wat::kernel::RunResult/stdout r-ref)) -> :wat::core::String
         ((Some s) s)
         (:None "<missing-ref>")))
-     ((cos-wrong-seed :String)
-      (:wat::core::match (:wat::core::first (:wat::kernel::RunResult/stdout r-wrong-seed)) -> :String
+     ((cos-wrong-seed :wat::core::String)
+      (:wat::core::match (:wat::core::first (:wat::kernel::RunResult/stdout r-wrong-seed)) -> :wat::core::String
         ((Some s) s)
         (:None "<missing-wrong-seed>")))
-     ((cos-wrong-form :String)
-      (:wat::core::match (:wat::core::first (:wat::kernel::RunResult/stdout r-wrong-form)) -> :String
+     ((cos-wrong-form :wat::core::String)
+      (:wat::core::match (:wat::core::first (:wat::kernel::RunResult/stdout r-wrong-form)) -> :wat::core::String
         ((Some s) s)
         (:None "<missing-wrong-form>")))
 
      ;; Two-factor claim: reference does NOT match either failure mode.
-     ((seed-attack-fails :bool) (:wat::core::not= cos-ref cos-wrong-seed))
-     ((form-attack-fails :bool) (:wat::core::not= cos-ref cos-wrong-form))
+     ((seed-attack-fails :wat::core::bool) (:wat::core::not= cos-ref cos-wrong-seed))
+     ((form-attack-fails :wat::core::bool) (:wat::core::not= cos-ref cos-wrong-form))
      ((_seed-check :()) (:wat::test::assert-eq seed-attack-fails true)))
     (:wat::test::assert-eq form-attack-fails true)))
 
@@ -437,10 +437,10 @@
                 (:wat::holon::from-watast (:wat::core::quote (:wat::core::+ 2 2))))
                ((anchor :wat::holon::HolonAST)
                 (:wat::holon::from-watast (:wat::core::quote (:wat::core::+ 3 3))))
-               ((cos :f64) (:wat::holon::cosine form-correct anchor)))
+               ((cos :wat::core::f64) (:wat::holon::cosine form-correct anchor)))
               (:wat::io::IOWriter/print stdout
                 (:wat::core::f64::to-string cos)))))
-        (:wat::core::vec :String)))
+        (:wat::core::vec :wat::core::String)))
 
      ;; Child 2 — verifier with CORRECT credentials. Must match.
      ((r-correct :wat::kernel::RunResult)
@@ -457,10 +457,10 @@
                 (:wat::holon::from-watast (:wat::core::quote (:wat::core::+ 2 2))))
                ((anchor :wat::holon::HolonAST)
                 (:wat::holon::from-watast (:wat::core::quote (:wat::core::+ 3 3))))
-               ((cos :f64) (:wat::holon::cosine form-correct anchor)))
+               ((cos :wat::core::f64) (:wat::holon::cosine form-correct anchor)))
               (:wat::io::IOWriter/print stdout
                 (:wat::core::f64::to-string cos)))))
-        (:wat::core::vec :String)))
+        (:wat::core::vec :wat::core::String)))
 
      ;; Child 3 — attacker with WRONG SEED. Must not match.
      ((r-wrong-seed :wat::kernel::RunResult)
@@ -477,10 +477,10 @@
                 (:wat::holon::from-watast (:wat::core::quote (:wat::core::+ 2 2))))
                ((anchor :wat::holon::HolonAST)
                 (:wat::holon::from-watast (:wat::core::quote (:wat::core::+ 3 3))))
-               ((cos :f64) (:wat::holon::cosine form-correct anchor)))
+               ((cos :wat::core::f64) (:wat::holon::cosine form-correct anchor)))
               (:wat::io::IOWriter/print stdout
                 (:wat::core::f64::to-string cos)))))
-        (:wat::core::vec :String)))
+        (:wat::core::vec :wat::core::String)))
 
      ;; Child 4 — attacker with WRONG FORM. Must not match.
      ((r-wrong-form :wat::kernel::RunResult)
@@ -497,36 +497,36 @@
                 (:wat::holon::from-watast (:wat::core::quote (:wat::core::- 100 1))))
                ((anchor :wat::holon::HolonAST)
                 (:wat::holon::from-watast (:wat::core::quote (:wat::core::+ 3 3))))
-               ((cos :f64) (:wat::holon::cosine form-wrong anchor)))
+               ((cos :wat::core::f64) (:wat::holon::cosine form-wrong anchor)))
               (:wat::io::IOWriter/print stdout
                 (:wat::core::f64::to-string cos)))))
-        (:wat::core::vec :String)))
+        (:wat::core::vec :wat::core::String)))
 
      ;; Extract the four printed cosines.
-     ((v-ref :String)
-      (:wat::core::match (:wat::core::first (:wat::kernel::RunResult/stdout r-ref)) -> :String
+     ((v-ref :wat::core::String)
+      (:wat::core::match (:wat::core::first (:wat::kernel::RunResult/stdout r-ref)) -> :wat::core::String
         ((Some s) s)
         (:None "<missing-ref>")))
-     ((v-correct :String)
-      (:wat::core::match (:wat::core::first (:wat::kernel::RunResult/stdout r-correct)) -> :String
+     ((v-correct :wat::core::String)
+      (:wat::core::match (:wat::core::first (:wat::kernel::RunResult/stdout r-correct)) -> :wat::core::String
         ((Some s) s)
         (:None "<missing-correct>")))
-     ((v-wrong-seed :String)
-      (:wat::core::match (:wat::core::first (:wat::kernel::RunResult/stdout r-wrong-seed)) -> :String
+     ((v-wrong-seed :wat::core::String)
+      (:wat::core::match (:wat::core::first (:wat::kernel::RunResult/stdout r-wrong-seed)) -> :wat::core::String
         ((Some s) s)
         (:None "<missing-wrong-seed>")))
-     ((v-wrong-form :String)
-      (:wat::core::match (:wat::core::first (:wat::kernel::RunResult/stdout r-wrong-form)) -> :String
+     ((v-wrong-form :wat::core::String)
+      (:wat::core::match (:wat::core::first (:wat::kernel::RunResult/stdout r-wrong-form)) -> :wat::core::String
         ((Some s) s)
         (:None "<missing-wrong-form>")))
 
      ;; The three protocol claims:
      ;;   correct credentials VERIFY
-     ((verified :bool) (:wat::core::= v-ref v-correct))
+     ((verified :wat::core::bool) (:wat::core::= v-ref v-correct))
      ;;   wrong seed REJECTED
-     ((seed-rejected :bool) (:wat::core::not= v-ref v-wrong-seed))
+     ((seed-rejected :wat::core::bool) (:wat::core::not= v-ref v-wrong-seed))
      ;;   wrong form REJECTED
-     ((form-rejected :bool) (:wat::core::not= v-ref v-wrong-form))
+     ((form-rejected :wat::core::bool) (:wat::core::not= v-ref v-wrong-form))
 
      ((_v :()) (:wat::test::assert-eq verified true))
      ((_s :()) (:wat::test::assert-eq seed-rejected true)))
@@ -564,12 +564,12 @@
       ((Some v-imported)
         (:wat::core::let*
           (;; Round-trip: imported V coincides with original V.
-           ((round-trip :bool) (:wat::holon::coincident? v-alice v-imported))
+           ((round-trip :wat::core::bool) (:wat::holon::coincident? v-alice v-imported))
            ((_rt :()) (:wat::test::assert-eq round-trip true))
            ;; Mixed-cosine verification: HolonAST × Vector polymorphism.
            ;; This IS the verification primitive — one coincident?
            ;; call confirms F → V_imported under the current universe.
-           ((verified :bool) (:wat::holon::coincident? form-correct v-imported)))
+           ((verified :wat::core::bool) (:wat::holon::coincident? form-correct v-imported)))
           (:wat::test::assert-eq verified true)))
       (:None (:wat::test::assert-eq "bytes-vector returned :None — round-trip broken" "ok")))))
 
@@ -612,9 +612,9 @@
                 (:wat::holon::from-watast (:wat::core::quote (:wat::core::+ 2 2))))
                ((v :wat::holon::Vector) (:wat::holon::encode form))
                ((bytes :wat::core::Bytes) (:wat::holon::vector-bytes v))
-               ((hex :String) (:wat::core::Bytes::to-hex bytes)))
+               ((hex :wat::core::String) (:wat::core::Bytes::to-hex bytes)))
               (:wat::io::IOWriter/print stdout hex))))
-        (:wat::core::vec :String)))
+        (:wat::core::vec :wat::core::String)))
 
      ;; Child B — seed 99, same form, hex to stdout.
      ((r-b :wat::kernel::RunResult)
@@ -631,17 +631,17 @@
                 (:wat::holon::from-watast (:wat::core::quote (:wat::core::+ 2 2))))
                ((v :wat::holon::Vector) (:wat::holon::encode form))
                ((bytes :wat::core::Bytes) (:wat::holon::vector-bytes v))
-               ((hex :String) (:wat::core::Bytes::to-hex bytes)))
+               ((hex :wat::core::String) (:wat::core::Bytes::to-hex bytes)))
               (:wat::io::IOWriter/print stdout hex))))
-        (:wat::core::vec :String)))
+        (:wat::core::vec :wat::core::String)))
 
      ;; Extract hex strings from each child's first stdout line.
-     ((hex-a :String)
-      (:wat::core::match (:wat::core::first (:wat::kernel::RunResult/stdout r-a)) -> :String
+     ((hex-a :wat::core::String)
+      (:wat::core::match (:wat::core::first (:wat::kernel::RunResult/stdout r-a)) -> :wat::core::String
         ((Some s) s)
         (:None "<missing-a>")))
-     ((hex-b :String)
-      (:wat::core::match (:wat::core::first (:wat::kernel::RunResult/stdout r-b)) -> :String
+     ((hex-b :wat::core::String)
+      (:wat::core::match (:wat::core::first (:wat::kernel::RunResult/stdout r-b)) -> :wat::core::String
         ((Some s) s)
         (:None "<missing-b>"))))
     ;; Decode hex → bytes → vector. Nested match for the Option chains.
@@ -660,10 +660,10 @@
                        ((v-local :wat::holon::Vector) (:wat::holon::encode form-local))
                        ;; Same-universe match — child-A's bytes encode under
                        ;; seed 42; parent's local V also under seed 42; coincide.
-                       ((same-uni :bool) (:wat::holon::coincident? v-a-imported v-local))
+                       ((same-uni :wat::core::bool) (:wat::holon::coincident? v-a-imported v-local))
                        ;; Different-universe — child-B's bytes encode under
                        ;; seed 99; parent's local V under seed 42; do not coincide.
-                       ((diff-uni :bool) (:wat::holon::coincident? v-b-imported v-local))
+                       ((diff-uni :wat::core::bool) (:wat::holon::coincident? v-b-imported v-local))
                        ((_su :()) (:wat::test::assert-eq same-uni true)))
                       (:wat::test::assert-eq diff-uni false)))
                   (:None (:wat::test::assert-eq "bytes-vector b → :None" "ok"))))
@@ -698,11 +698,11 @@
      ((v-wrong   :wat::holon::Vector) (:wat::holon::encode form-wrong))
 
      ;; Right form against right V → verified.
-     ((right-right :bool) (:wat::holon::coincident? form-correct v-correct))
+     ((right-right :wat::core::bool) (:wat::holon::coincident? form-correct v-correct))
      ;; Wrong form against right V → rejected.
-     ((wrong-right :bool) (:wat::holon::coincident? form-wrong v-correct))
+     ((wrong-right :wat::core::bool) (:wat::holon::coincident? form-wrong v-correct))
      ;; Right form against wrong V (tampered/swapped) → rejected.
-     ((right-wrong :bool) (:wat::holon::coincident? form-correct v-wrong))
+     ((right-wrong :wat::core::bool) (:wat::holon::coincident? form-correct v-wrong))
 
      ((_rr :()) (:wat::test::assert-eq right-right true))
      ((_wr :()) (:wat::test::assert-eq wrong-right false)))
@@ -713,7 +713,7 @@
 ;;
 ;; The verification protocol lifted into a callable predicate:
 ;;
-;;   exp::verify (v-bytes :Bytes) (form :HolonAST) → :bool
+;;   exp::verify (v-bytes :Bytes) (form :HolonAST) → :wat::core::bool
 ;;
 ;; Given V's bytes (transmittable artifact) and a candidate form
 ;; (under the caller's current universe — K is config-time), returns
@@ -740,16 +740,16 @@
 
      ;; Empty bytes — no dim header, bytes-vector → :None, verify → false.
      ;; A "tampered to nothing" scenario.
-     ((bytes-empty :wat::core::Bytes) (:wat::core::vec :u8))
+     ((bytes-empty :wat::core::Bytes) (:wat::core::vec :wat::core::u8))
 
      ;; Right form + right V → verified.
-     ((right :bool) (:exp::verify bytes-correct form-correct))
+     ((right :wat::core::bool) (:exp::verify bytes-correct form-correct))
      ;; Wrong form + right V → rejected (form mismatch).
-     ((wrong-form :bool) (:exp::verify bytes-correct form-wrong))
+     ((wrong-form :wat::core::bool) (:exp::verify bytes-correct form-wrong))
      ;; Right form + swapped V (different form's bytes) → rejected.
-     ((wrong-v :bool) (:exp::verify bytes-wrong form-correct))
+     ((wrong-v :wat::core::bool) (:exp::verify bytes-wrong form-correct))
      ;; Right form + corrupted V (empty bytes) → rejected (decode fails).
-     ((corrupted :bool) (:exp::verify bytes-empty form-correct))
+     ((corrupted :wat::core::bool) (:exp::verify bytes-empty form-correct))
 
      ((_r :()) (:wat::test::assert-eq right true))
      ((_wf :()) (:wat::test::assert-eq wrong-form false))
@@ -792,7 +792,7 @@
 
      ;; Verifier with the SAME form: cheap re-encode, cheap compare.
      ((v-verifier :wat::holon::Vector) (:wat::holon::encode work-form))
-     ((verified :bool) (:wat::holon::coincident? v-worker v-verifier))
+     ((verified :wat::core::bool) (:wat::holon::coincident? v-worker v-verifier))
 
      ;; Forgery attempt: a near-miss form (same structural shape,
      ;; one operand changed: 17 → 19). Without the original work-form,
@@ -802,7 +802,7 @@
       (:wat::holon::from-watast (:wat::core::quote
         (:wat::core::+ (:wat::core::* 7 13) (:wat::core::* 11 19)))))
      ((v-forgery :wat::holon::Vector) (:wat::holon::encode forgery-form))
-     ((forgery-rejected :bool)
+     ((forgery-rejected :wat::core::bool)
       (:wat::core::not (:wat::holon::coincident? v-worker v-forgery)))
 
      ;; The form's TERMINAL VALUE is also computable — separately
@@ -811,7 +811,7 @@
      ;; (the computational result). They are two distinct artifacts
      ;; from the same form. Round-trip via to-watast → eval-ast! → atom-value
      ;; works honestly post-arcs-065/066.
-     ((work-result :i64) (:exp::form->i64 work-form))
+     ((work-result :wat::core::i64) (:exp::form->i64 work-form))
 
      ((_v :()) (:wat::test::assert-eq verified true))
      ((_f :()) (:wat::test::assert-eq forgery-rejected true)))

@@ -10,7 +10,7 @@
   ((:wat::load-file! "wat/vocab/market/flow.wat")
    (:wat::core::define
      (:test::fresh-ohlcv
-       (o :f64) (h :f64) (l :f64) (c :f64)
+       (o :wat::core::f64) (h :wat::core::f64) (l :wat::core::f64) (c :wat::core::f64)
        -> :trading::types::Ohlcv)
      (:wat::core::let*
        (((btc :trading::types::Asset)
@@ -21,7 +21,7 @@
          btc btc "" o h l c 0.0)))
    (:wat::core::define
      (:test::fresh-momentum
-       (obv-slope-12 :f64) (volume-accel :f64)
+       (obv-slope-12 :wat::core::f64) (volume-accel :wat::core::f64)
        -> :trading::types::Candle::Momentum)
      ;; 12-arg: rsi, macd-hist, plus-di, minus-di, adx, stoch-k,
      ;; stoch-d, williams-r, cci, mfi, obv-slope-12, volume-accel.
@@ -29,7 +29,7 @@
        0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 obv-slope-12 volume-accel))
    (:wat::core::define
      (:test::fresh-persistence
-       (vwap-distance :f64)
+       (vwap-distance :wat::core::f64)
        -> :trading::types::Candle::Persistence)
      ;; 3-arg: hurst, autocorrelation, vwap-distance.
      (:trading::types::Candle::Persistence/new
@@ -104,13 +104,13 @@
         ((Some h) h)
         (:None (:wat::holon::Atom "unreachable"))))
 
-     ((rounded :f64) (:trading::encoding::round-to-4 0.0237))
+     ((rounded :wat::core::f64) (:trading::encoding::round-to-4 0.0237))
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) rounded))
-     ((scale :f64)
+     ((scale :wat::core::f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::- 0.0 scale))
+     ((neg-scale :wat::core::f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "vwap-distance")
@@ -139,7 +139,7 @@
         ((Some h) h)
         (:None (:wat::holon::Atom "unreachable"))))
 
-     ((expected-value :f64)
+     ((expected-value :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::/
           (:wat::core::- 102.0 95.0)
@@ -147,9 +147,9 @@
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) expected-value))
-     ((scale :f64)
+     ((scale :wat::core::f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::- 0.0 scale))
+     ((neg-scale :wat::core::f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "buying-pressure")
@@ -181,9 +181,9 @@
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) 0.5))
-     ((scale :f64)
+     ((scale :wat::core::f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::- 0.0 scale))
+     ((neg-scale :wat::core::f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "buying-pressure")

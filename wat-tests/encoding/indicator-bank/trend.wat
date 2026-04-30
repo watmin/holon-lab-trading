@@ -9,8 +9,8 @@
    (:wat::core::define
      (:test::macd-feed
        (s :trading::encoding::MacdState)
-       (x :f64)
-       (n :i64)
+       (x :wat::core::f64)
+       (n :wat::core::i64)
        -> :trading::encoding::MacdState)
      (:wat::core::if (:wat::core::<= n 0)
                      -> :trading::encoding::MacdState
@@ -23,8 +23,8 @@
    (:wat::core::define
      (:test::dmi-feed
        (s :trading::encoding::DmiState)
-       (h :f64) (l :f64) (c :f64)
-       (n :i64)
+       (h :wat::core::f64) (l :wat::core::f64) (c :wat::core::f64)
+       (n :wat::core::i64)
        -> :trading::encoding::DmiState)
      (:wat::core::if (:wat::core::<= n 0)
                      -> :trading::encoding::DmiState
@@ -89,7 +89,7 @@
      ;; Rising sequence — fast EMA tracks closer to recent high than slow.
      ((s1 :trading::encoding::MacdState) (:test::macd-feed s0 100.0 30))
      ((s2 :trading::encoding::MacdState) (:test::macd-feed s1 110.0 20))
-     ((macd :f64) (:trading::encoding::MacdState::macd-value s2)))
+     ((macd :wat::core::f64) (:trading::encoding::MacdState::macd-value s2)))
     (:wat::test::assert-eq (:wat::core::> macd 0.0) true)))
 
 ;; Test 6 — hist = macd - signal.
@@ -98,9 +98,9 @@
     (((s0 :trading::encoding::MacdState)
       (:trading::encoding::MacdState::fresh 12 26 9))
      ((s :trading::encoding::MacdState) (:test::macd-feed s0 105.0 50))
-     ((macd :f64) (:trading::encoding::MacdState::macd-value s))
-     ((signal :f64) (:trading::encoding::MacdState::signal-value s))
-     ((hist :f64) (:trading::encoding::MacdState::hist-value s)))
+     ((macd :wat::core::f64) (:trading::encoding::MacdState::macd-value s))
+     ((signal :wat::core::f64) (:trading::encoding::MacdState::signal-value s))
+     ((hist :wat::core::f64) (:trading::encoding::MacdState::hist-value s)))
     (:wat::test::assert-eq hist (:wat::core::- macd signal))))
 
 
@@ -122,7 +122,7 @@
       (:trading::encoding::DmiState::fresh 14))
      ((s50 :trading::encoding::DmiState)
       (:test::dmi-feed s0 110.0 100.0 105.0 50))
-     ((adx :f64) (:trading::encoding::DmiState::adx s50)))
+     ((adx :wat::core::f64) (:trading::encoding::DmiState::adx s50)))
     (:wat::test::assert-eq adx 0.0)))
 
 ;; Test 9 — sustained uptrend → plus-di > minus-di.
@@ -147,8 +147,8 @@
      ((s14 :trading::encoding::DmiState) (:trading::encoding::DmiState::update s13 136.0 126.0 131.0))
      ((s15 :trading::encoding::DmiState) (:trading::encoding::DmiState::update s14 138.0 128.0 133.0))
      ((s16 :trading::encoding::DmiState) (:trading::encoding::DmiState::update s15 140.0 130.0 135.0))
-     ((plus :f64) (:trading::encoding::DmiState::plus-di s16))
-     ((minus :f64) (:trading::encoding::DmiState::minus-di s16)))
+     ((plus :wat::core::f64) (:trading::encoding::DmiState::plus-di s16))
+     ((minus :wat::core::f64) (:trading::encoding::DmiState::minus-di s16)))
     (:wat::test::assert-eq (:wat::core::> plus minus) true)))
 
 ;; Test 10 — sustained downtrend → minus-di > plus-di.
@@ -172,8 +172,8 @@
      ((s14 :trading::encoding::DmiState) (:trading::encoding::DmiState::update s13 104.0 94.0 99.0))
      ((s15 :trading::encoding::DmiState) (:trading::encoding::DmiState::update s14 102.0 92.0 97.0))
      ((s16 :trading::encoding::DmiState) (:trading::encoding::DmiState::update s15 100.0 90.0 95.0))
-     ((plus :f64) (:trading::encoding::DmiState::plus-di s16))
-     ((minus :f64) (:trading::encoding::DmiState::minus-di s16)))
+     ((plus :wat::core::f64) (:trading::encoding::DmiState::plus-di s16))
+     ((minus :wat::core::f64) (:trading::encoding::DmiState::minus-di s16)))
     (:wat::test::assert-eq (:wat::core::> minus plus) true)))
 
 ;; Test 11 — DMI ready? after sufficient candles for adx-smoother.
@@ -186,7 +186,7 @@
      ((s40 :trading::encoding::DmiState)
       ;; Use a trending sequence so DX values are non-zero.
       (:test::dmi-feed s0 130.0 100.0 115.0 40))
-     ((ready? :bool) (:trading::encoding::DmiState::ready? s40)))
+     ((ready? :wat::core::bool) (:trading::encoding::DmiState::ready? s40)))
     ;; Constant high/low won't produce DX. Use real-trend test
     ;; in test 9/10 for ready?-with-data; this test asserts the
     ;; gate machinery (40 candles is enough for the warmup IF
@@ -206,8 +206,8 @@
      ((s1 :trading::encoding::DmiState) (:trading::encoding::DmiState::update s0 100.0 90.0 95.0))
      ((s50 :trading::encoding::DmiState)
       (:test::dmi-feed s1 130.0 110.0 120.0 50))
-     ((adx :f64) (:trading::encoding::DmiState::adx s50))
-     ((bounded? :bool)
+     ((adx :wat::core::f64) (:trading::encoding::DmiState::adx s50))
+     ((bounded? :wat::core::bool)
       (:wat::core::and
         (:wat::core::>= adx 0.0)
         (:wat::core::<= adx 100.0))))

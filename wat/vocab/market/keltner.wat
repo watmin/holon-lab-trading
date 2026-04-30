@@ -38,30 +38,30 @@
     -> :trading::encoding::VocabEmission)
   (:wat::core::let*
     ;; Pull raw values once.
-    (((close :f64) (:trading::types::Ohlcv/close o))
-     ((bb-pos-raw :f64) (:trading::types::Candle::Volatility/bb-pos v))
-     ((bb-width-raw :f64) (:trading::types::Candle::Volatility/bb-width v))
-     ((kelt-pos-raw :f64) (:trading::types::Candle::Volatility/kelt-pos v))
-     ((kelt-upper :f64) (:trading::types::Candle::Volatility/kelt-upper v))
-     ((kelt-lower :f64) (:trading::types::Candle::Volatility/kelt-lower v))
-     ((squeeze-raw :f64) (:trading::types::Candle::Volatility/squeeze v))
+    (((close :wat::core::f64) (:trading::types::Ohlcv/close o))
+     ((bb-pos-raw :wat::core::f64) (:trading::types::Candle::Volatility/bb-pos v))
+     ((bb-width-raw :wat::core::f64) (:trading::types::Candle::Volatility/bb-width v))
+     ((kelt-pos-raw :wat::core::f64) (:trading::types::Candle::Volatility/kelt-pos v))
+     ((kelt-upper :wat::core::f64) (:trading::types::Candle::Volatility/kelt-upper v))
+     ((kelt-lower :wat::core::f64) (:trading::types::Candle::Volatility/kelt-lower v))
+     ((squeeze-raw :wat::core::f64) (:trading::types::Candle::Volatility/squeeze v))
 
      ;; Pure-Volatility atoms — round-to-2 → scaled-linear.
-     ((bb-pos :f64) (:trading::encoding::round-to-2 bb-pos-raw))
-     ((kelt-pos :f64) (:trading::encoding::round-to-2 kelt-pos-raw))
-     ((squeeze :f64) (:trading::encoding::round-to-2 squeeze-raw))
+     ((bb-pos :wat::core::f64) (:trading::encoding::round-to-2 bb-pos-raw))
+     ((kelt-pos :wat::core::f64) (:trading::encoding::round-to-2 kelt-pos-raw))
+     ((squeeze :wat::core::f64) (:trading::encoding::round-to-2 squeeze-raw))
 
      ;; bb-width — floor 0.001, round-to-4, plain Log.
-     ((bb-width :f64)
+     ((bb-width :wat::core::f64)
       (:trading::encoding::round-to-4
         (:wat::core::f64::max bb-width-raw 0.001)))
 
      ;; Cross-sub-struct compute atoms — (close - kelt-band) / close.
-     ((kelt-upper-dist :f64)
+     ((kelt-upper-dist :wat::core::f64)
       (:trading::encoding::round-to-4
         (:wat::core::/
           (:wat::core::- close kelt-upper) close)))
-     ((kelt-lower-dist :f64)
+     ((kelt-lower-dist :wat::core::f64)
       (:trading::encoding::round-to-4
         (:wat::core::/
           (:wat::core::- close kelt-lower) close)))

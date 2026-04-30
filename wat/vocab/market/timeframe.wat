@@ -38,40 +38,40 @@
     -> :trading::encoding::VocabEmission)
   (:wat::core::let*
     ;; Pull Timeframe-side raw values.
-    (((tf-1h-body-raw :f64)
+    (((tf-1h-body-raw :wat::core::f64)
       (:trading::types::Candle::Timeframe/tf-1h-body t))
-     ((tf-1h-ret-raw :f64)
+     ((tf-1h-ret-raw :wat::core::f64)
       (:trading::types::Candle::Timeframe/tf-1h-ret t))
-     ((tf-4h-body-raw :f64)
+     ((tf-4h-body-raw :wat::core::f64)
       (:trading::types::Candle::Timeframe/tf-4h-body t))
-     ((tf-4h-ret-raw :f64)
+     ((tf-4h-ret-raw :wat::core::f64)
       (:trading::types::Candle::Timeframe/tf-4h-ret t))
-     ((tf-agreement-raw :f64)
+     ((tf-agreement-raw :wat::core::f64)
       (:trading::types::Candle::Timeframe/tf-agreement t))
 
      ;; Pull Ohlcv-side raw values (for tf-5m-1h-align compute).
-     ((close :f64) (:trading::types::Ohlcv/close o))
-     ((open :f64)  (:trading::types::Ohlcv/open o))
+     ((close :wat::core::f64) (:trading::types::Ohlcv/close o))
+     ((open :wat::core::f64)  (:trading::types::Ohlcv/open o))
 
      ;; Round to the archive's digit widths.
-     ((tf-1h-trend :f64) (:trading::encoding::round-to-2 tf-1h-body-raw))
-     ((tf-1h-ret   :f64) (:trading::encoding::round-to-4 tf-1h-ret-raw))
-     ((tf-4h-trend :f64) (:trading::encoding::round-to-2 tf-4h-body-raw))
-     ((tf-4h-ret   :f64) (:trading::encoding::round-to-4 tf-4h-ret-raw))
-     ((tf-agreement :f64) (:trading::encoding::round-to-2 tf-agreement-raw))
+     ((tf-1h-trend :wat::core::f64) (:trading::encoding::round-to-2 tf-1h-body-raw))
+     ((tf-1h-ret   :wat::core::f64) (:trading::encoding::round-to-4 tf-1h-ret-raw))
+     ((tf-4h-trend :wat::core::f64) (:trading::encoding::round-to-2 tf-4h-body-raw))
+     ((tf-4h-ret   :wat::core::f64) (:trading::encoding::round-to-4 tf-4h-ret-raw))
+     ((tf-agreement :wat::core::f64) (:trading::encoding::round-to-2 tf-agreement-raw))
 
      ;; Cross-sub-struct compute: signum(tf-1h-body) × 5m return,
      ;; rounded to 4 decimals. signum inline (single use).
-     ((signum-1h :f64)
-      (:wat::core::if (:wat::core::> tf-1h-body-raw 0.0) -> :f64
+     ((signum-1h :wat::core::f64)
+      (:wat::core::if (:wat::core::> tf-1h-body-raw 0.0) -> :wat::core::f64
         1.0
-        (:wat::core::if (:wat::core::< tf-1h-body-raw 0.0) -> :f64
+        (:wat::core::if (:wat::core::< tf-1h-body-raw 0.0) -> :wat::core::f64
           (:wat::core::- 0.0 1.0)
           0.0)))
-     ((five-m-ret :f64)
+     ((five-m-ret :wat::core::f64)
       (:wat::core::/
         (:wat::core::- close open) close))
-     ((tf-5m-1h-align :f64)
+     ((tf-5m-1h-align :wat::core::f64)
       (:trading::encoding::round-to-4
         (:wat::core::* signum-1h five-m-ret)))
 

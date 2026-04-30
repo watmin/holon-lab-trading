@@ -17,11 +17,11 @@
    ;; entry-candle.
    (:wat::core::define
      (:test::fresh-paper
-       (entry :f64)
-       (extreme :f64)
-       (signaled :bool)
-       (age :i64)
-       (entry-candle :i64)
+       (entry :wat::core::f64)
+       (extreme :wat::core::f64)
+       (signaled :wat::core::bool)
+       (age :wat::core::i64)
+       (entry-candle :wat::core::i64)
        -> :trading::types::PaperEntry)
      (:trading::types::PaperEntry/new
        0
@@ -39,7 +39,7 @@
        false
        age
        entry-candle
-       (:wat::core::vec :f64 entry extreme)))
+       (:wat::core::vec :wat::core::f64 entry extreme)))
    (:wat::core::define
      (:test::empty-phases -> :trading::types::PhaseRecords)
      (:wat::core::vec :trading::types::PhaseRecord))))

@@ -64,18 +64,18 @@
       (:wat::core::let*
         (((last-candle :Option<trading::types::Candle>)
           (:wat::core::last window))
-         ((sma20 :f64)
-          (:wat::core::match last-candle -> :f64
+         ((sma20 :wat::core::f64)
+          (:wat::core::match last-candle -> :wat::core::f64
             ((Some c) (:trading::types::Candle::Trend/sma20
                         (:trading::types::Candle/trend c)))
             (:None 0.0)))
-         ((sma50 :f64)
-          (:wat::core::match last-candle -> :f64
+         ((sma50 :wat::core::f64)
+          (:wat::core::match last-candle -> :wat::core::f64
             ((Some c) (:trading::types::Candle::Trend/sma50
                         (:trading::types::Candle/trend c)))
             (:None 0.0)))
-         ((up-band :f64) (:wat::core::* sma50 1.001))
-         ((dn-band :f64) (:wat::core::* sma50 0.999)))
+         ((up-band :wat::core::f64) (:wat::core::* sma50 1.001))
+         ((dn-band :wat::core::f64) (:wat::core::* sma50 0.999)))
         (:wat::core::if (:wat::core::> sma20 up-band)
                         -> :wat::holon::HolonAST
           (:trading::sim::paper-label 0.03 0.04)
@@ -110,23 +110,23 @@
     (:wat::core::lambda
       ((surface :wat::holon::HolonAST) -> :trading::sim::Action)
       (:wat::core::let*
-        (((c-gu :f64)
+        (((c-gu :wat::core::f64)
           (:wat::holon::cosine surface (:trading::sim::corner-grace-up)))
-         ((c-gd :f64)
+         ((c-gd :wat::core::f64)
           (:wat::holon::cosine surface (:trading::sim::corner-grace-dn)))
-         ((c-vu :f64)
+         ((c-vu :wat::core::f64)
           (:wat::holon::cosine surface (:trading::sim::corner-violence-up)))
-         ((c-vd :f64)
+         ((c-vd :wat::core::f64)
           (:wat::holon::cosine surface (:trading::sim::corner-violence-dn)))
          ;; Argmax via nested comparisons — cleaner than building a
          ;; vec and sorting for four values.
-         ((gu-wins? :bool)
+         ((gu-wins? :wat::core::bool)
           (:wat::core::and
             (:wat::core::>= c-gu c-gd)
             (:wat::core::and
               (:wat::core::>= c-gu c-vu)
               (:wat::core::>= c-gu c-vd))))
-         ((gd-wins? :bool)
+         ((gd-wins? :wat::core::bool)
           (:wat::core::and
             (:wat::core::>= c-gd c-vu)
             (:wat::core::>= c-gd c-vd))))

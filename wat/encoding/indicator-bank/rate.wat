@@ -15,8 +15,8 @@
 ;; with 0.5 fallback for degenerate (zero-range) windows.
 ;;
 ;; Explicit:
-;;   :trading::encoding::compute-roc       buf n -> :f64
-;;   :trading::encoding::compute-range-pos high-buf low-buf close -> :f64
+;;   :trading::encoding::compute-roc       buf n -> :wat::core::f64
+;;   :trading::encoding::compute-range-pos high-buf low-buf close -> :wat::core::f64
 
 (:wat::load-file! "primitives.wat")
 
@@ -25,24 +25,24 @@
 (:wat::core::define
   (:trading::encoding::compute-roc
     (buf :trading::encoding::RingBuffer)
-    (n :i64)
-    -> :f64)
+    (n :wat::core::i64)
+    -> :wat::core::f64)
   (:wat::core::let*
-    (((len :i64) (:trading::encoding::RingBuffer::len buf)))
-    (:wat::core::if (:wat::core::< len (:wat::core::+ n 1)) -> :f64
+    (((len :wat::core::i64) (:trading::encoding::RingBuffer::len buf)))
+    (:wat::core::if (:wat::core::< len (:wat::core::+ n 1)) -> :wat::core::f64
       0.0
       (:wat::core::let*
-        (((current :f64)
+        (((current :wat::core::f64)
           (:wat::core::match
-            (:trading::encoding::RingBuffer::get buf 0) -> :f64
+            (:trading::encoding::RingBuffer::get buf 0) -> :wat::core::f64
             ((Some v) v)
             (:None 0.0)))
-         ((past :f64)
+         ((past :wat::core::f64)
           (:wat::core::match
-            (:trading::encoding::RingBuffer::get buf n) -> :f64
+            (:trading::encoding::RingBuffer::get buf n) -> :wat::core::f64
             ((Some v) v)
             (:None 0.0))))
-        (:wat::core::if (:wat::core::= past 0.0) -> :f64
+        (:wat::core::if (:wat::core::= past 0.0) -> :wat::core::f64
           0.0
           (:wat::core::/ (:wat::core::- current past) past))))))
 
@@ -55,20 +55,20 @@
   (:trading::encoding::compute-range-pos
     (high-buf :trading::encoding::RingBuffer)
     (low-buf :trading::encoding::RingBuffer)
-    (close :f64)
-    -> :f64)
+    (close :wat::core::f64)
+    -> :wat::core::f64)
   (:wat::core::let*
-    (((highest :f64)
+    (((highest :wat::core::f64)
       (:wat::core::match
-        (:trading::encoding::RingBuffer::max high-buf) -> :f64
+        (:trading::encoding::RingBuffer::max high-buf) -> :wat::core::f64
         ((Some v) v)
         (:None 0.0)))
-     ((lowest :f64)
+     ((lowest :wat::core::f64)
       (:wat::core::match
-        (:trading::encoding::RingBuffer::min low-buf) -> :f64
+        (:trading::encoding::RingBuffer::min low-buf) -> :wat::core::f64
         ((Some v) v)
         (:None 0.0)))
-     ((range :f64) (:wat::core::- highest lowest)))
-    (:wat::core::if (:wat::core::= range 0.0) -> :f64
+     ((range :wat::core::f64) (:wat::core::- highest lowest)))
+    (:wat::core::if (:wat::core::= range 0.0) -> :wat::core::f64
       0.5
       (:wat::core::/ (:wat::core::- close lowest) range))))

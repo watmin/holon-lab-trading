@@ -59,10 +59,10 @@
    (:wat::core::define
      (:exp::verify (r :exp::Receipt)
                    (candidate :wat::holon::HolonAST)
-                   -> :bool)
+                   -> :wat::core::bool)
      (:wat::core::match
        (:wat::holon::bytes-vector (:exp::Receipt/bytes r))
-       -> :bool
+       -> :wat::core::bool
        ((Some v) (:wat::holon::coincident? candidate v))
        (:None false)))
 
@@ -72,32 +72,32 @@
    ;; gen-form: distinct form per index (same as proof 011).
    ;; gen-atoms-vec: produce N distinct atoms (for capacity tests).
    (:wat::core::define
-     (:exp::gen-form (n :i64) -> :wat::holon::HolonAST)
+     (:exp::gen-form (n :wat::core::i64) -> :wat::holon::HolonAST)
      (:wat::holon::Bind
        (:wat::holon::Atom "scaling-test")
        (:wat::holon::leaf n)))
 
    (:wat::core::define
-     (:exp::gen-atoms-vec (count :i64) -> :wat::holon::Holons)
+     (:exp::gen-atoms-vec (count :wat::core::i64) -> :wat::holon::Holons)
      (:wat::core::map (:wat::core::range 1 (:wat::core::+ count 1))
-       (:wat::core::lambda ((i :i64) -> :wat::holon::HolonAST)
+       (:wat::core::lambda ((i :wat::core::i64) -> :wat::holon::HolonAST)
          (:exp::gen-form i))))
 
 
    ;; ─── Property iterators (from proof 011) ────────────────
    (:wat::core::define
      (:exp::all-iterations-pass
-       (start :i64) (end :i64)
+       (start :wat::core::i64) (end :wat::core::i64)
        (prop :fn(i64)->bool)
-       -> :bool)
+       -> :wat::core::bool)
      (:wat::core::foldl (:wat::core::range start end) true
-       (:wat::core::lambda ((acc :bool) (n :i64) -> :bool)
+       (:wat::core::lambda ((acc :wat::core::bool) (n :wat::core::i64) -> :wat::core::bool)
          (:wat::core::and acc (prop n)))))
 
 
    ;; ─── Property: receipt round-trip (used in T4) ──────────
    (:wat::core::define
-     (:exp::prop-roundtrip (n :i64) -> :bool)
+     (:exp::prop-roundtrip (n :wat::core::i64) -> :wat::core::bool)
      (:wat::core::let*
        (((form :wat::holon::HolonAST) (:exp::gen-form n))
         ((r :exp::Receipt) (:exp::issue form)))
@@ -106,7 +106,7 @@
 
    ;; ─── Property: distinct-form rejection (used in T5) ─────
    (:wat::core::define
-     (:exp::prop-distinct-rejects (n :i64) -> :bool)
+     (:exp::prop-distinct-rejects (n :wat::core::i64) -> :wat::core::bool)
      (:wat::core::let*
        (((form-a :wat::holon::HolonAST) (:exp::gen-form n))
         ((form-b :wat::holon::HolonAST) (:exp::gen-form (:wat::core::+ n 1)))
@@ -119,10 +119,10 @@
    ;; Returns true iff Bundle of N items returns Ok (under
    ;; current capacity-mode, default :error).
    (:wat::core::define
-     (:exp::bundle-fits (n :i64) -> :bool)
+     (:exp::bundle-fits (n :wat::core::i64) -> :wat::core::bool)
      (:wat::core::let*
        (((atoms :wat::holon::Holons) (:exp::gen-atoms-vec n)))
-       (:wat::core::match (:wat::holon::Bundle atoms) -> :bool
+       (:wat::core::match (:wat::holon::Bundle atoms) -> :wat::core::bool
          ((Ok _) true)
          ((Err _) false))))))
 
@@ -137,7 +137,7 @@
 
 (:deftest :exp::t1-bundle-below-capacity
   (:wat::core::let*
-    (((fits :bool) (:exp::bundle-fits 10)))
+    (((fits :wat::core::bool) (:exp::bundle-fits 10)))
     (:wat::test::assert-eq fits true)))
 
 
@@ -151,7 +151,7 @@
 
 (:deftest :exp::t2-bundle-at-capacity
   (:wat::core::let*
-    (((fits :bool) (:exp::bundle-fits 100)))
+    (((fits :wat::core::bool) (:exp::bundle-fits 100)))
     (:wat::test::assert-eq fits true)))
 
 
@@ -165,7 +165,7 @@
 
 (:deftest :exp::t3-bundle-over-capacity
   (:wat::core::let*
-    (((fits :bool) (:exp::bundle-fits 101)))
+    (((fits :wat::core::bool) (:exp::bundle-fits 101)))
     (:wat::test::assert-eq fits false)))
 
 
@@ -183,7 +183,7 @@
 
 (:deftest :exp::t4-cardinality-roundtrip-500
   (:wat::core::let*
-    (((all-pass :bool)
+    (((all-pass :wat::core::bool)
       (:exp::all-iterations-pass 1 501 :exp::prop-roundtrip)))
     (:wat::test::assert-eq all-pass true)))
 
@@ -198,7 +198,7 @@
 
 (:deftest :exp::t5-cardinality-rejection-500
   (:wat::core::let*
-    (((all-pass :bool)
+    (((all-pass :wat::core::bool)
       (:exp::all-iterations-pass 1 501 :exp::prop-distinct-rejects)))
     (:wat::test::assert-eq all-pass true)))
 
@@ -245,13 +245,13 @@
      ((r-1 :exp::Receipt) (:exp::issue form-1))
 
      ;; Each receipt at each level verifies against its own form.
-     ((v1 :bool) (:exp::verify r-1 form-1))
-     ((v2 :bool) (:exp::verify r-2 form-2))
-     ((v3 :bool) (:exp::verify r-3 form-3))
-     ((v4 :bool) (:exp::verify r-4 form-4))
-     ((v5 :bool) (:exp::verify r-5 form-5))
+     ((v1 :wat::core::bool) (:exp::verify r-1 form-1))
+     ((v2 :wat::core::bool) (:exp::verify r-2 form-2))
+     ((v3 :wat::core::bool) (:exp::verify r-3 form-3))
+     ((v4 :wat::core::bool) (:exp::verify r-4 form-4))
+     ((v5 :wat::core::bool) (:exp::verify r-5 form-5))
 
-     ((all-verify :bool)
+     ((all-verify :wat::core::bool)
       (:wat::core::and (:wat::core::and (:wat::core::and v1 v2)
                                           (:wat::core::and v3 v4))
                        v5))

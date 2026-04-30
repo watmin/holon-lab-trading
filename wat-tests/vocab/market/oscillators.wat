@@ -22,7 +22,7 @@
   ((:wat::load-file! "wat/vocab/market/oscillators.wat")
    (:wat::core::define
      (:test::fresh-momentum
-       (rsi :f64) (williams-r :f64) (cci :f64) (mfi :f64)
+       (rsi :wat::core::f64) (williams-r :wat::core::f64) (cci :wat::core::f64) (mfi :wat::core::f64)
        -> :trading::types::Candle::Momentum)
      (:trading::types::Candle::Momentum/new
        rsi          ;; rsi
@@ -39,7 +39,7 @@
        0.0))        ;; volume-accel
    (:wat::core::define
      (:test::fresh-roc
-       (r1 :f64) (r3 :f64) (r6 :f64) (r12 :f64)
+       (r1 :wat::core::f64) (r3 :wat::core::f64) (r6 :wat::core::f64) (r12 :wat::core::f64)
        -> :trading::types::Candle::RateOfChange)
      (:trading::types::Candle::RateOfChange/new
        r1 r3 r6 r12
@@ -91,10 +91,10 @@
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) 55.0))
-     ((scale :f64)
+     ((scale :wat::core::f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::- 0.0 scale))
-     ((rounded-rsi :f64) (:trading::encoding::round-to-2 55.0))
+     ((neg-scale :wat::core::f64) (:wat::core::- 0.0 scale))
+     ((rounded-rsi :wat::core::f64) (:trading::encoding::round-to-2 55.0))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "rsi")
@@ -122,7 +122,7 @@
         ((Some h) h)
         (:None (:wat::holon::Atom "unreachable"))))
      ;; Expected: 1.0 + 0.05 = 1.05, round-to-2 → 1.05
-     ((rounded-roc :f64) (:trading::encoding::round-to-2 1.05))
+     ((rounded-roc :wat::core::f64) (:trading::encoding::round-to-2 1.05))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "roc-1")
@@ -143,10 +143,10 @@
       (:trading::vocab::market::oscillators::encode-oscillators-holons
         m r (:test::empty-scales)))
      ((updated :trading::encoding::Scales) (:wat::core::second emission))
-     ((has-rsi   :bool) (:wat::core::contains? updated "rsi"))
-     ((has-cci   :bool) (:wat::core::contains? updated "cci"))
-     ((has-mfi   :bool) (:wat::core::contains? updated "mfi"))
-     ((has-will  :bool) (:wat::core::contains? updated "williams-r")))
+     ((has-rsi   :wat::core::bool) (:wat::core::contains? updated "rsi"))
+     ((has-cci   :wat::core::bool) (:wat::core::contains? updated "cci"))
+     ((has-mfi   :wat::core::bool) (:wat::core::contains? updated "mfi"))
+     ((has-will  :wat::core::bool) (:wat::core::contains? updated "williams-r")))
     (:wat::test::assert-eq
       (:wat::core::and
         (:wat::core::and has-rsi   has-cci)

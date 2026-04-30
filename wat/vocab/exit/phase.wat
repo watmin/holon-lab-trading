@@ -32,12 +32,12 @@
   (:trading::vocab::exit::phase::phase-label-name
     (label :trading::types::PhaseLabel)
     (direction :trading::types::PhaseDirection)
-    -> :String)
-  (:wat::core::match label -> :String
+    -> :wat::core::String)
+  (:wat::core::match label -> :wat::core::String
     (:trading::types::PhaseLabel::Valley "valley")
     (:trading::types::PhaseLabel::Peak   "peak")
     (:trading::types::PhaseLabel::Transition
-      (:wat::core::match direction -> :String
+      (:wat::core::match direction -> :wat::core::String
         (:trading::types::PhaseDirection::Up   "transition-up")
         (:trading::types::PhaseDirection::Down "transition-down")
         (:trading::types::PhaseDirection::None "transition")))))
@@ -59,11 +59,11 @@
       (:trading::types::Candle::Phase/label p))
      ((direction :trading::types::PhaseDirection)
       (:trading::types::Candle::Phase/direction p))
-     ((duration-i64 :i64) (:trading::types::Candle::Phase/duration p))
-     ((duration :f64) (:wat::core::i64::to-f64 duration-i64))
+     ((duration-i64 :wat::core::i64) (:trading::types::Candle::Phase/duration p))
+     ((duration :wat::core::f64) (:wat::core::i64::to-f64 duration-i64))
 
      ;; Fact 0 — label binding.
-     ((name :String)
+     ((name :wat::core::String)
       (:trading::vocab::exit::phase::phase-label-name label direction))
      ((h1 :wat::holon::HolonAST)
       (:wat::holon::Bind
@@ -106,7 +106,7 @@
     (:wat::core::let*
       (;; Fetch last + second-to-last records once — used by range +
        ;; spacing trends directly, and by the helper for valley/peak.
-       ((n :i64) (:wat::core::length history))
+       ((n :wat::core::i64) (:wat::core::length history))
        ((last-rec :trading::types::PhaseRecord)
         (:wat::core::match (:wat::core::last history)
                            -> :trading::types::PhaseRecord
@@ -121,11 +121,11 @@
        ;; Filter valleys / peaks from history.
        ((valleys :trading::types::PhaseRecords)
         (:wat::core::filter history
-          (:wat::core::lambda ((r :trading::types::PhaseRecord) -> :bool)
+          (:wat::core::lambda ((r :trading::types::PhaseRecord) -> :wat::core::bool)
             (:trading::vocab::exit::phase::is-valley? r))))
        ((peaks :trading::types::PhaseRecords)
         (:wat::core::filter history
-          (:wat::core::lambda ((r :trading::types::PhaseRecord) -> :bool)
+          (:wat::core::lambda ((r :trading::types::PhaseRecord) -> :wat::core::bool)
             (:trading::vocab::exit::phase::is-peak? r))))
 
        ;; ─── Thread a (holons, scales) accumulator through four
@@ -152,11 +152,11 @@
           acc1))
 
        ;; Step 3: range trend.
-       ((last-range :f64)
+       ((last-range :wat::core::f64)
         (:wat::core::-
           (:trading::types::PhaseRecord/close-max last-rec)
           (:trading::types::PhaseRecord/close-min last-rec)))
-       ((prev-range :f64)
+       ((prev-range :wat::core::f64)
         (:wat::core::-
           (:trading::types::PhaseRecord/close-max prev-rec)
           (:trading::types::PhaseRecord/close-min prev-rec)))
@@ -169,10 +169,10 @@
           acc2))
 
        ;; Step 4: spacing trend.
-       ((last-duration :f64)
+       ((last-duration :wat::core::f64)
         (:wat::core::i64::to-f64
           (:trading::types::PhaseRecord/duration last-rec)))
-       ((prev-duration :f64)
+       ((prev-duration :wat::core::f64)
         (:wat::core::i64::to-f64
           (:trading::types::PhaseRecord/duration prev-rec)))
        ((acc4 :trading::encoding::VocabEmission)
@@ -191,8 +191,8 @@
 (:wat::core::define
   (:trading::vocab::exit::phase::is-valley?
     (r :trading::types::PhaseRecord)
-    -> :bool)
-  (:wat::core::match (:trading::types::PhaseRecord/label r) -> :bool
+    -> :wat::core::bool)
+  (:wat::core::match (:trading::types::PhaseRecord/label r) -> :wat::core::bool
     (:trading::types::PhaseLabel::Valley     true)
     (:trading::types::PhaseLabel::Peak       false)
     (:trading::types::PhaseLabel::Transition false)))
@@ -200,8 +200,8 @@
 (:wat::core::define
   (:trading::vocab::exit::phase::is-peak?
     (r :trading::types::PhaseRecord)
-    -> :bool)
-  (:wat::core::match (:trading::types::PhaseRecord/label r) -> :bool
+    -> :wat::core::bool)
+  (:wat::core::match (:trading::types::PhaseRecord/label r) -> :wat::core::bool
     (:trading::types::PhaseLabel::Peak       true)
     (:trading::types::PhaseLabel::Valley     false)
     (:trading::types::PhaseLabel::Transition false)))
@@ -215,10 +215,10 @@
   (:trading::vocab::exit::phase::append-close-avg-trend
     (acc :trading::encoding::VocabEmission)
     (records :trading::types::PhaseRecords)
-    (name :String)
+    (name :wat::core::String)
     -> :trading::encoding::VocabEmission)
   (:wat::core::let*
-    (((n :i64) (:wat::core::length records))
+    (((n :wat::core::i64) (:wat::core::length records))
      ((last-rec :trading::types::PhaseRecord)
       (:wat::core::match (:wat::core::last records)
                          -> :trading::types::PhaseRecord
@@ -229,12 +229,12 @@
                          -> :trading::types::PhaseRecord
         ((Some r) r)
         (:None (:trading::vocab::exit::phase::default-record))))
-     ((prev-avg :f64) (:trading::types::PhaseRecord/close-avg prev-rec)))
+     ((prev-avg :wat::core::f64) (:trading::types::PhaseRecord/close-avg prev-rec)))
     (:wat::core::if (:wat::core::> prev-avg 0.0)
                     -> :trading::encoding::VocabEmission
       (:wat::core::let*
-        (((last-avg :f64) (:trading::types::PhaseRecord/close-avg last-rec))
-         ((trend :f64)
+        (((last-avg :wat::core::f64) (:trading::types::PhaseRecord/close-avg last-rec))
+         ((trend :wat::core::f64)
           (:trading::encoding::round-to-4
             (:wat::core::/
               (:wat::core::- last-avg prev-avg) prev-avg))))
@@ -245,8 +245,8 @@
 (:wat::core::define
   (:trading::vocab::exit::phase::append-ratio-round-2
     (acc :trading::encoding::VocabEmission)
-    (name :String)
-    (raw :f64)
+    (name :wat::core::String)
+    (raw :wat::core::f64)
     -> :trading::encoding::VocabEmission)
   (:trading::vocab::exit::phase::append-scaled-linear
     acc name (:trading::encoding::round-to-2 raw)))
@@ -256,8 +256,8 @@
 (:wat::core::define
   (:trading::vocab::exit::phase::append-scaled-linear
     (acc :trading::encoding::VocabEmission)
-    (name :String)
-    (value :f64)
+    (name :wat::core::String)
+    (value :wat::core::f64)
     -> :trading::encoding::VocabEmission)
   (:wat::core::let*
     (((holons :wat::holon::Holons) (:wat::core::first acc))
@@ -296,16 +296,16 @@
 (:wat::core::define
   (:trading::vocab::exit::phase::rec-duration
     (r :trading::types::PhaseRecord)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::i64::to-f64 (:trading::types::PhaseRecord/duration r)))
 
 (:wat::core::define
   (:trading::vocab::exit::phase::rec-range
     (r :trading::types::PhaseRecord)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::let*
-    (((avg :f64) (:trading::types::PhaseRecord/close-avg r)))
-    (:wat::core::if (:wat::core::> avg 0.0) -> :f64
+    (((avg :wat::core::f64) (:trading::types::PhaseRecord/close-avg r)))
+    (:wat::core::if (:wat::core::> avg 0.0) -> :wat::core::f64
       (:wat::core::/
         (:wat::core::-
           (:trading::types::PhaseRecord/close-max r)
@@ -316,10 +316,10 @@
 (:wat::core::define
   (:trading::vocab::exit::phase::rec-move
     (r :trading::types::PhaseRecord)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::let*
-    (((open :f64) (:trading::types::PhaseRecord/close-open r)))
-    (:wat::core::if (:wat::core::> open 0.0) -> :f64
+    (((open :wat::core::f64) (:trading::types::PhaseRecord/close-open r)))
+    (:wat::core::if (:wat::core::> open 0.0) -> :wat::core::f64
       (:wat::core::/
         (:wat::core::-
           (:trading::types::PhaseRecord/close-final r) open)
@@ -329,18 +329,18 @@
 (:wat::core::define
   (:trading::vocab::exit::phase::rec-volume
     (r :trading::types::PhaseRecord)
-    -> :f64)
+    -> :wat::core::f64)
   (:trading::types::PhaseRecord/volume-avg r))
 
 ;; rel — relative-delta with epsilon guard. (a - b) / |b| if |b|
 ;; > 0.0001 else 0.
 (:wat::core::define
   (:trading::vocab::exit::phase::rel
-    (a :f64) (b :f64)
-    -> :f64)
+    (a :wat::core::f64) (b :wat::core::f64)
+    -> :wat::core::f64)
   (:wat::core::let*
-    (((b-abs :f64) (:wat::core::f64::abs b)))
-    (:wat::core::if (:wat::core::> b-abs 0.0001) -> :f64
+    (((b-abs :wat::core::f64) (:wat::core::f64::abs b)))
+    (:wat::core::if (:wat::core::> b-abs 0.0001) -> :wat::core::f64
       (:wat::core::/ (:wat::core::- a b) b-abs)
       0.0)))
 
@@ -354,20 +354,20 @@
   (:trading::vocab::exit::phase::direction=
     (a :trading::types::PhaseDirection)
     (b :trading::types::PhaseDirection)
-    -> :bool)
-  (:wat::core::match a -> :bool
+    -> :wat::core::bool)
+  (:wat::core::match a -> :wat::core::bool
     (:trading::types::PhaseDirection::Up
-      (:wat::core::match b -> :bool
+      (:wat::core::match b -> :wat::core::bool
         (:trading::types::PhaseDirection::Up   true)
         (:trading::types::PhaseDirection::Down false)
         (:trading::types::PhaseDirection::None false)))
     (:trading::types::PhaseDirection::Down
-      (:wat::core::match b -> :bool
+      (:wat::core::match b -> :wat::core::bool
         (:trading::types::PhaseDirection::Up   false)
         (:trading::types::PhaseDirection::Down true)
         (:trading::types::PhaseDirection::None false)))
     (:trading::types::PhaseDirection::None
-      (:wat::core::match b -> :bool
+      (:wat::core::match b -> :wat::core::bool
         (:trading::types::PhaseDirection::Up   false)
         (:trading::types::PhaseDirection::Down false)
         (:trading::types::PhaseDirection::None true)))))
@@ -376,23 +376,23 @@
   (:trading::vocab::exit::phase::same-label-and-direction?
     (a :trading::types::PhaseRecord)
     (b :trading::types::PhaseRecord)
-    -> :bool)
+    -> :wat::core::bool)
   (:wat::core::let*
     (((al :trading::types::PhaseLabel) (:trading::types::PhaseRecord/label a))
      ((bl :trading::types::PhaseLabel) (:trading::types::PhaseRecord/label b)))
-    (:wat::core::match al -> :bool
+    (:wat::core::match al -> :wat::core::bool
       (:trading::types::PhaseLabel::Valley
-        (:wat::core::match bl -> :bool
+        (:wat::core::match bl -> :wat::core::bool
           (:trading::types::PhaseLabel::Valley     true)
           (:trading::types::PhaseLabel::Peak       false)
           (:trading::types::PhaseLabel::Transition false)))
       (:trading::types::PhaseLabel::Peak
-        (:wat::core::match bl -> :bool
+        (:wat::core::match bl -> :wat::core::bool
           (:trading::types::PhaseLabel::Valley     false)
           (:trading::types::PhaseLabel::Peak       true)
           (:trading::types::PhaseLabel::Transition false)))
       (:trading::types::PhaseLabel::Transition
-        (:wat::core::match bl -> :bool
+        (:wat::core::match bl -> :wat::core::bool
           (:trading::types::PhaseLabel::Valley     false)
           (:trading::types::PhaseLabel::Peak       false)
           (:trading::types::PhaseLabel::Transition
@@ -405,7 +405,7 @@
 ;; build-fact — common shape `(Bind (Atom name) (Thermometer v min max))`.
 (:wat::core::define
   (:trading::vocab::exit::phase::thermometer-fact
-    (name :String) (value :f64) (lo :f64) (hi :f64)
+    (name :wat::core::String) (value :wat::core::f64) (lo :wat::core::f64) (hi :wat::core::f64)
     -> :wat::holon::HolonAST)
   (:wat::holon::Bind
     (:wat::holon::Atom name)
@@ -419,7 +419,7 @@
 (:wat::core::define
   (:trading::vocab::exit::phase::record-bundle-at-index
     (history :trading::types::PhaseRecords)
-    (i :i64)
+    (i :wat::core::i64)
     -> :wat::holon::HolonAST)
   (:wat::core::let*
     (((current :trading::types::PhaseRecord)
@@ -433,16 +433,16 @@
       (:trading::types::PhaseRecord/label current))
      ((direction :trading::types::PhaseDirection)
       (:trading::types::PhaseRecord/direction current))
-     ((label-name :String)
+     ((label-name :wat::core::String)
       (:trading::vocab::exit::phase::phase-label-name label direction))
      ((label-fact :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "phase")
         (:wat::holon::Atom label-name)))
-     ((dur :f64) (:trading::vocab::exit::phase::rec-duration current))
-     ((mv  :f64) (:trading::vocab::exit::phase::rec-move current))
-     ((rng :f64) (:trading::vocab::exit::phase::rec-range current))
-     ((vol :f64) (:trading::vocab::exit::phase::rec-volume current))
+     ((dur :wat::core::f64) (:trading::vocab::exit::phase::rec-duration current))
+     ((mv  :wat::core::f64) (:trading::vocab::exit::phase::rec-move current))
+     ((rng :wat::core::f64) (:trading::vocab::exit::phase::rec-range current))
+     ((vol :wat::core::f64) (:trading::vocab::exit::phase::rec-volume current))
      ((dur-fact :wat::holon::HolonAST)
       (:trading::vocab::exit::phase::thermometer-fact "rec-duration" dur 0.0 200.0))
      ((mv-fact :wat::holon::HolonAST)
@@ -464,9 +464,9 @@
                                -> :trading::types::PhaseRecord
               ((Some r) r)
               (:None (:trading::vocab::exit::phase::default-record))))
-           ((p-dur :f64) (:trading::vocab::exit::phase::rec-duration prev))
-           ((p-mv  :f64) (:trading::vocab::exit::phase::rec-move prev))
-           ((p-vol :f64) (:trading::vocab::exit::phase::rec-volume prev))
+           ((p-dur :wat::core::f64) (:trading::vocab::exit::phase::rec-duration prev))
+           ((p-mv  :wat::core::f64) (:trading::vocab::exit::phase::rec-move prev))
+           ((p-vol :wat::core::f64) (:trading::vocab::exit::phase::rec-volume prev))
            ((pd-fact :wat::holon::HolonAST)
             (:trading::vocab::exit::phase::thermometer-fact "prior-duration-delta"
               (:trading::vocab::exit::phase::rel dur p-dur) -2.0 2.0))
@@ -487,7 +487,7 @@
       (:wat::core::take history i))
      ((same-idx :Option<i64>)
       (:wat::core::find-last-index earlier
-        (:wat::core::lambda ((r :trading::types::PhaseRecord) -> :bool)
+        (:wat::core::lambda ((r :trading::types::PhaseRecord) -> :wat::core::bool)
           (:trading::vocab::exit::phase::same-label-and-direction? r current))))
 
      ((with-same :wat::holon::Holons)
@@ -499,9 +499,9 @@
                                  -> :trading::types::PhaseRecord
                 ((Some r) r)
                 (:None (:trading::vocab::exit::phase::default-record))))
-             ((s-dur :f64) (:trading::vocab::exit::phase::rec-duration same-rec))
-             ((s-mv  :f64) (:trading::vocab::exit::phase::rec-move same-rec))
-             ((s-vol :f64) (:trading::vocab::exit::phase::rec-volume same-rec))
+             ((s-dur :wat::core::f64) (:trading::vocab::exit::phase::rec-duration same-rec))
+             ((s-mv  :wat::core::f64) (:trading::vocab::exit::phase::rec-move same-rec))
+             ((s-vol :wat::core::f64) (:trading::vocab::exit::phase::rec-volume same-rec))
              ((sm-fact :wat::holon::HolonAST)
               (:trading::vocab::exit::phase::thermometer-fact "same-move-delta"
                 (:wat::core::- mv s-mv) -0.1 0.1))
@@ -552,17 +552,17 @@
       (:trading::vocab::exit::phase::empty-rhythm-bundle))
     (:wat::core::let*
       (;; Build all per-record Bundles.
-       ((n :i64) (:wat::core::length history))
+       ((n :wat::core::i64) (:wat::core::length history))
        ((indices :Vec<i64>) (:wat::core::range 0 n))
        ((all-records :wat::holon::Holons)
         (:wat::core::map indices
-          (:wat::core::lambda ((i :i64) -> :wat::holon::HolonAST)
+          (:wat::core::lambda ((i :wat::core::i64) -> :wat::holon::HolonAST)
             (:trading::vocab::exit::phase::record-bundle-at-index history i))))
 
        ;; Truncate to last (budget + 3) = 103 records.
-       ((budget :i64) 100)
-       ((max-records :i64) (:wat::core::+ budget 3))
-       ((records-len :i64) (:wat::core::length all-records))
+       ((budget :wat::core::i64) 100)
+       ((max-records :wat::core::i64) (:wat::core::+ budget 3))
+       ((records-len :wat::core::i64) (:wat::core::length all-records))
        ((records :wat::holon::Holons)
         (:wat::core::if (:wat::core::> records-len max-records)
                         -> :wat::holon::Holons
@@ -599,7 +599,7 @@
               (:wat::holon::Bind a b)))))
 
        ;; Truncate pairs to last `budget` (= 100).
-       ((pairs-len :i64) (:wat::core::length pairs))
+       ((pairs-len :wat::core::i64) (:wat::core::length pairs))
        ((trimmed-pairs :wat::holon::Holons)
         (:wat::core::if (:wat::core::> pairs-len budget)
                         -> :wat::holon::Holons

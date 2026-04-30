@@ -10,8 +10,8 @@
   ((:wat::load-file! "wat/vocab/broker/portfolio.wat")
    (:wat::core::define
      (:test::fresh-snapshot
-       (avg-age :f64) (avg-tp :f64) (avg-unrealized :f64)
-       (grace-rate :f64) (active-count :f64)
+       (avg-age :wat::core::f64) (avg-tp :wat::core::f64) (avg-unrealized :wat::core::f64)
+       (grace-rate :wat::core::f64) (active-count :wat::core::f64)
        -> :trading::types::PortfolioSnapshot)
      (:trading::types::PortfolioSnapshot/new
        avg-age avg-tp avg-unrealized grace-rate active-count))))

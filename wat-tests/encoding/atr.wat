@@ -8,8 +8,8 @@
    (:wat::core::define
      (:test::repeat-update
        (s :trading::encoding::AtrState)
-       (h :f64) (l :f64) (c :f64)
-       (n :i64)
+       (h :wat::core::f64) (l :wat::core::f64) (c :wat::core::f64)
+       (n :wat::core::i64)
        -> :trading::encoding::AtrState)
      (:wat::core::if (:wat::core::<= n 0)
                      -> :trading::encoding::AtrState
@@ -79,11 +79,11 @@
      ;; Push 13 updates → not ready. Push 14th → ready.
      ((s13 :trading::encoding::AtrState)
       (:test::repeat-update s0 110.0 100.0 105.0 13))
-     ((not-ready :bool)
+     ((not-ready :wat::core::bool)
       (:trading::encoding::AtrState::ready? s13))
      ((s14 :trading::encoding::AtrState)
       (:trading::encoding::AtrState::update s13 110.0 100.0 105.0))
-     ((ready :bool)
+     ((ready :wat::core::bool)
       (:trading::encoding::AtrState::ready? s14)))
     (:wat::core::let*
       (((u1 :())

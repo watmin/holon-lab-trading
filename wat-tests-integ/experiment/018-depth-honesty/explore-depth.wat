@@ -63,20 +63,20 @@
    ;; Each atom is a Bind(label, leaf(n)) — distinct n produces
    ;; distinct atoms with quasi-orthogonal vectors at d=10000.
    (:wat::core::define
-     (:exp::sibling-atom (level :i64) (idx :i64) -> :wat::holon::HolonAST)
+     (:exp::sibling-atom (level :wat::core::i64) (idx :wat::core::i64) -> :wat::holon::HolonAST)
      (:wat::holon::Bind
        (:wat::holon::Atom "sibling")
        (:wat::holon::leaf
          (:wat::core::+ (:wat::core::* level 10000) idx))))
 
    (:wat::core::define
-     (:exp::path-key (level :i64) -> :wat::holon::HolonAST)
+     (:exp::path-key (level :wat::core::i64) -> :wat::holon::HolonAST)
      (:wat::holon::Bind
        (:wat::holon::Atom "key")
        (:wat::holon::leaf level)))
 
    (:wat::core::define
-     (:exp::leaf-atom (id :i64) -> :wat::holon::HolonAST)
+     (:exp::leaf-atom (id :wat::core::i64) -> :wat::holon::HolonAST)
      (:wat::holon::Bind
        (:wat::holon::Atom "planted-leaf")
        (:wat::holon::leaf id)))
@@ -94,8 +94,8 @@
    ;; but won't panic. Tests at width ≤ 100 won't hit this.
    (:wat::core::define
      (:exp::build-level
-       (level :i64)
-       (width :i64)
+       (level :wat::core::i64)
+       (width :wat::core::i64)
        (path-child :wat::holon::HolonAST)
        -> :wat::holon::HolonAST)
      (:wat::core::let*
@@ -103,7 +103,7 @@
           (:wat::holon::Bind (:exp::path-key level) path-child))
         ((sibling-bindings :wat::holon::Holons)
           (:wat::core::map (:wat::core::range 1 width)
-            (:wat::core::lambda ((i :i64) -> :wat::holon::HolonAST)
+            (:wat::core::lambda ((i :wat::core::i64) -> :wat::holon::HolonAST)
               (:wat::holon::Bind
                 (:exp::sibling-atom level i)
                 (:exp::sibling-atom level (:wat::core::+ i 100000))))))
@@ -130,9 +130,9 @@
    ;;   ROOT = level-1-result
    (:wat::core::define
      (:exp::build-tree-step
-       (current-level :i64)
-       (max-depth :i64)
-       (width :i64)
+       (current-level :wat::core::i64)
+       (max-depth :wat::core::i64)
+       (width :wat::core::i64)
        (acc :wat::holon::HolonAST)
        -> :wat::holon::HolonAST)
      (:wat::core::if (:wat::core::> current-level max-depth)
@@ -146,9 +146,9 @@
 
    (:wat::core::define
      (:exp::build-tree
-       (depth :i64)
-       (width :i64)
-       (leaf-id :i64)
+       (depth :wat::core::i64)
+       (width :wat::core::i64)
+       (leaf-id :wat::core::i64)
        -> :wat::holon::HolonAST)
      (:exp::build-tree-step 1 depth width (:exp::leaf-atom leaf-id)))
 
@@ -165,8 +165,8 @@
    ;; was built LAST and wraps everything).
    (:wat::core::define
      (:exp::walk-step
-       (level :i64)
-       (max-depth :i64)
+       (level :wat::core::i64)
+       (max-depth :wat::core::i64)
        (acc :wat::holon::HolonAST)
        -> :wat::holon::HolonAST)
      (:wat::core::if (:wat::core::> level max-depth)
@@ -180,7 +180,7 @@
    (:wat::core::define
      (:exp::walk-path
        (root :wat::holon::HolonAST)
-       (depth :i64)
+       (depth :wat::core::i64)
        -> :wat::holon::HolonAST)
      (:exp::walk-step 1 depth root))
 
@@ -195,17 +195,17 @@
    ;; the wrong leaf. That's argmax-classification.
    (:wat::core::define
      (:exp::walk-finds-leaf?
-       (depth :i64)
-       (width :i64)
-       (leaf-id :i64)
-       -> :bool)
+       (depth :wat::core::i64)
+       (width :wat::core::i64)
+       (leaf-id :wat::core::i64)
+       -> :wat::core::bool)
      (:wat::core::let*
        (((root :wat::holon::HolonAST) (:exp::build-tree depth width leaf-id))
         ((result :wat::holon::HolonAST) (:exp::walk-path root depth))
         ((correct :wat::holon::HolonAST) (:exp::leaf-atom leaf-id))
         ((wrong :wat::holon::HolonAST) (:exp::leaf-atom (:wat::core::+ leaf-id 9999)))
-        ((cos-correct :f64) (:wat::holon::cosine result correct))
-        ((cos-wrong :f64) (:wat::holon::cosine result wrong)))
+        ((cos-correct :wat::core::f64) (:wat::holon::cosine result correct))
+        ((cos-wrong :wat::core::f64) (:wat::holon::cosine result wrong)))
        (:wat::core::f64::> cos-correct cos-wrong)))))
 
 
@@ -218,7 +218,7 @@
 
 (:deftest :exp::t1-depth4-width10
   (:wat::core::let*
-    (((found :bool) (:exp::walk-finds-leaf? 4 10 42)))
+    (((found :wat::core::bool) (:exp::walk-finds-leaf? 4 10 42)))
     (:wat::test::assert-eq found true)))
 
 
@@ -231,7 +231,7 @@
 
 (:deftest :exp::t2-depth8-width10
   (:wat::core::let*
-    (((found :bool) (:exp::walk-finds-leaf? 8 10 100)))
+    (((found :wat::core::bool) (:exp::walk-finds-leaf? 8 10 100)))
     (:wat::test::assert-eq found true)))
 
 
@@ -245,7 +245,7 @@
 
 (:deftest :exp::t3-depth8-width50
   (:wat::core::let*
-    (((found :bool) (:exp::walk-finds-leaf? 8 50 200)))
+    (((found :wat::core::bool) (:exp::walk-finds-leaf? 8 50 200)))
     (:wat::test::assert-eq found true)))
 
 
@@ -263,7 +263,7 @@
 
 (:deftest :exp::t4-depth8-width99-at-capacity
   (:wat::core::let*
-    (((found :bool) (:exp::walk-finds-leaf? 8 99 300)))
+    (((found :wat::core::bool) (:exp::walk-finds-leaf? 8 99 300)))
     (:wat::test::assert-eq found true)))
 
 
@@ -285,17 +285,17 @@
      ((result-a :wat::holon::HolonAST) (:exp::walk-path root-a 6))
      ((leaf-a :wat::holon::HolonAST) (:exp::leaf-atom 500))
      ((leaf-b :wat::holon::HolonAST) (:exp::leaf-atom 600))
-     ((cos-a-correct :f64) (:wat::holon::cosine result-a leaf-a))
-     ((cos-a-wrong :f64) (:wat::holon::cosine result-a leaf-b))
+     ((cos-a-correct :wat::core::f64) (:wat::holon::cosine result-a leaf-a))
+     ((cos-a-wrong :wat::core::f64) (:wat::holon::cosine result-a leaf-b))
 
      ;; Tree B: planted leaf id 600.
      ((root-b :wat::holon::HolonAST) (:exp::build-tree 6 30 600))
      ((result-b :wat::holon::HolonAST) (:exp::walk-path root-b 6))
-     ((cos-b-correct :f64) (:wat::holon::cosine result-b leaf-b))
-     ((cos-b-wrong :f64) (:wat::holon::cosine result-b leaf-a))
+     ((cos-b-correct :wat::core::f64) (:wat::holon::cosine result-b leaf-b))
+     ((cos-b-wrong :wat::core::f64) (:wat::holon::cosine result-b leaf-a))
 
-     ((a-found-correctly :bool) (:wat::core::f64::> cos-a-correct cos-a-wrong))
-     ((b-found-correctly :bool) (:wat::core::f64::> cos-b-correct cos-b-wrong))
+     ((a-found-correctly :wat::core::bool) (:wat::core::f64::> cos-a-correct cos-a-wrong))
+     ((b-found-correctly :wat::core::bool) (:wat::core::f64::> cos-b-correct cos-b-wrong))
 
      ((_a :()) (:wat::test::assert-eq a-found-correctly true)))
     (:wat::test::assert-eq b-found-correctly true)))
@@ -330,8 +330,8 @@
 
      ((correct :wat::holon::HolonAST) (:exp::leaf-atom 700))
      ((wrong :wat::holon::HolonAST) (:exp::leaf-atom 800))
-     ((cos-correct :f64) (:wat::holon::cosine wrong-result correct))
-     ((cos-wrong :f64) (:wat::holon::cosine wrong-result wrong))
+     ((cos-correct :wat::core::f64) (:wat::holon::cosine wrong-result correct))
+     ((cos-wrong :wat::core::f64) (:wat::holon::cosine wrong-result wrong))
 
      ;; Property: wrong-path walk should NOT cleanly identify the
      ;; planted leaf. The wrong-result is essentially noise; both
@@ -341,8 +341,8 @@
      ;; "Meaningfully larger" — at d=10000 the noise floor is 0.01;
      ;; if both cosines are within 5x noise floor (0.05), neither
      ;; is the clear winner.
-     ((diff :f64) (:wat::core::f64::- cos-correct cos-wrong))
-     ((no-clear-winner :bool)
+     ((diff :wat::core::f64) (:wat::core::f64::- cos-correct cos-wrong))
+     ((no-clear-winner :wat::core::bool)
        (:wat::core::or
          (:wat::core::f64::< diff 0.05)
          (:wat::core::f64::< (:wat::core::- 0.0 diff) 0.05))))

@@ -9,7 +9,7 @@
 (:wat::test::make-deftest :deftest
   ((:wat::load-file! "wat/vocab/market/keltner.wat")
    (:wat::core::define
-     (:test::fresh-ohlcv (c :f64) -> :trading::types::Ohlcv)
+     (:test::fresh-ohlcv (c :wat::core::f64) -> :trading::types::Ohlcv)
      (:wat::core::let*
        (((btc :trading::types::Asset)
          (:trading::types::Asset/new "BTC")))
@@ -19,9 +19,9 @@
          btc btc "" 0.0 0.0 0.0 c 0.0)))
    (:wat::core::define
      (:test::fresh-volatility
-       (bb-pos :f64) (bb-width :f64)
-       (kelt-upper :f64) (kelt-lower :f64) (kelt-pos :f64)
-       (squeeze :f64)
+       (bb-pos :wat::core::f64) (bb-width :wat::core::f64)
+       (kelt-upper :wat::core::f64) (kelt-lower :wat::core::f64) (kelt-pos :wat::core::f64)
+       (squeeze :wat::core::f64)
        -> :trading::types::Candle::Volatility)
      ;; 7-arg: bb-width, bb-pos, kelt-upper, kelt-lower, kelt-pos,
      ;; squeeze, atr-ratio.
@@ -64,13 +64,13 @@
         ((Some h) h)
         (:None (:wat::holon::Atom "unreachable"))))
 
-     ((rounded :f64) (:trading::encoding::round-to-2 0.5))
+     ((rounded :wat::core::f64) (:trading::encoding::round-to-2 0.5))
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) rounded))
-     ((scale :f64)
+     ((scale :wat::core::f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::- 0.0 scale))
+     ((neg-scale :wat::core::f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "bb-pos")
@@ -98,7 +98,7 @@
         ((Some h) h)
         (:None (:wat::holon::Atom "unreachable"))))
 
-     ((rounded :f64) (:trading::encoding::round-to-4 0.04))
+     ((rounded :wat::core::f64) (:trading::encoding::round-to-4 0.04))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "bb-width")
@@ -151,16 +151,16 @@
         ((Some h) h)
         (:None (:wat::holon::Atom "unreachable"))))
 
-     ((expected-value :f64)
+     ((expected-value :wat::core::f64)
       (:trading::encoding::round-to-4
         (:wat::core::/
           (:wat::core::- 100.0 105.0) 100.0)))
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) expected-value))
-     ((scale :f64)
+     ((scale :wat::core::f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::- 0.0 scale))
+     ((neg-scale :wat::core::f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "kelt-upper-dist")

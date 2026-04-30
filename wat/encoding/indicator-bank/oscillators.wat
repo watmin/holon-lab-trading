@@ -18,26 +18,26 @@
 ;; Explicit:
 ;;   :trading::encoding::RsiState::fresh period -> RsiState
 ;;   :trading::encoding::RsiState::update state close -> RsiState
-;;   :trading::encoding::RsiState::value state -> :f64
-;;   :trading::encoding::RsiState::ready? state -> :bool
+;;   :trading::encoding::RsiState::value state -> :wat::core::f64
+;;   :trading::encoding::RsiState::ready? state -> :wat::core::bool
 ;;
 ;;   :trading::encoding::StochState::fresh k-period d-period -> StochState
 ;;   :trading::encoding::StochState::update state high low close -> StochState
-;;   :trading::encoding::StochState::k state -> :f64
-;;   :trading::encoding::StochState::d state -> :f64
-;;   :trading::encoding::StochState::ready? state -> :bool
+;;   :trading::encoding::StochState::k state -> :wat::core::f64
+;;   :trading::encoding::StochState::d state -> :wat::core::f64
+;;   :trading::encoding::StochState::ready? state -> :wat::core::bool
 ;;
 ;;   :trading::encoding::CciState::fresh period -> CciState
 ;;   :trading::encoding::CciState::update state high low close -> CciState
-;;   :trading::encoding::CciState::value state -> :f64
-;;   :trading::encoding::CciState::ready? state -> :bool
+;;   :trading::encoding::CciState::value state -> :wat::core::f64
+;;   :trading::encoding::CciState::ready? state -> :wat::core::bool
 ;;
 ;;   :trading::encoding::MfiState::fresh period -> MfiState
 ;;   :trading::encoding::MfiState::update state high low close volume -> MfiState
-;;   :trading::encoding::MfiState::value state -> :f64
-;;   :trading::encoding::MfiState::ready? state -> :bool
+;;   :trading::encoding::MfiState::value state -> :wat::core::f64
+;;   :trading::encoding::MfiState::ready? state -> :wat::core::bool
 ;;
-;;   :trading::encoding::compute-williams-r stoch close -> :f64
+;;   :trading::encoding::compute-williams-r stoch close -> :wat::core::f64
 
 ;; Self-load deps.
 (:wat::load-file! "primitives.wat")
@@ -48,13 +48,13 @@
 (:wat::core::struct :trading::encoding::RsiState
   (gain-smoother :trading::encoding::WilderState)
   (loss-smoother :trading::encoding::WilderState)
-  (prev-close    :f64)
-  (started       :bool))
+  (prev-close    :wat::core::f64)
+  (started       :wat::core::bool))
 
 
 (:wat::core::define
   (:trading::encoding::RsiState::fresh
-    (period :i64)
+    (period :wat::core::i64)
     -> :trading::encoding::RsiState)
   (:trading::encoding::RsiState/new
     (:trading::encoding::WilderState::fresh period)
@@ -66,27 +66,27 @@
 (:wat::core::define
   (:trading::encoding::RsiState::update
     (state :trading::encoding::RsiState)
-    (close :f64)
+    (close :wat::core::f64)
     -> :trading::encoding::RsiState)
   (:wat::core::let*
-    (((started :bool) (:trading::encoding::RsiState/started state))
-     ((prev-close :f64) (:trading::encoding::RsiState/prev-close state))
+    (((started :wat::core::bool) (:trading::encoding::RsiState/started state))
+     ((prev-close :wat::core::f64) (:trading::encoding::RsiState/prev-close state))
      ((gain-sm :trading::encoding::WilderState)
       (:trading::encoding::RsiState/gain-smoother state))
      ((loss-sm :trading::encoding::WilderState)
       (:trading::encoding::RsiState/loss-smoother state))
      ;; First call (started=false) skips the gain/loss update, only
      ;; sets prev-close; matches archive.
-     ((change :f64)
-      (:wat::core::if started -> :f64
+     ((change :wat::core::f64)
+      (:wat::core::if started -> :wat::core::f64
         (:wat::core::- close prev-close)
         0.0))
-     ((gain :f64)
-      (:wat::core::if started -> :f64
+     ((gain :wat::core::f64)
+      (:wat::core::if started -> :wat::core::f64
         (:wat::core::f64::max change 0.0)
         0.0))
-     ((loss :f64)
-      (:wat::core::if started -> :f64
+     ((loss :wat::core::f64)
+      (:wat::core::if started -> :wat::core::f64
         (:wat::core::f64::max (:wat::core::- 0.0 change) 0.0)
         0.0))
      ((new-gain-sm :trading::encoding::WilderState)
@@ -104,18 +104,18 @@
 (:wat::core::define
   (:trading::encoding::RsiState::value
     (state :trading::encoding::RsiState)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::let*
-    (((avg-gain :f64)
+    (((avg-gain :wat::core::f64)
       (:trading::encoding::WilderState/value
         (:trading::encoding::RsiState/gain-smoother state)))
-     ((avg-loss :f64)
+     ((avg-loss :wat::core::f64)
       (:trading::encoding::WilderState/value
         (:trading::encoding::RsiState/loss-smoother state))))
-    (:wat::core::if (:wat::core::= avg-loss 0.0) -> :f64
+    (:wat::core::if (:wat::core::= avg-loss 0.0) -> :wat::core::f64
       100.0
       (:wat::core::let*
-        (((rs :f64) (:wat::core::/ avg-gain avg-loss)))
+        (((rs :wat::core::f64) (:wat::core::/ avg-gain avg-loss)))
         (:wat::core::- 100.0
           (:wat::core::/ 100.0 (:wat::core::+ 1.0 rs)))))))
 
@@ -123,7 +123,7 @@
 (:wat::core::define
   (:trading::encoding::RsiState::ready?
     (state :trading::encoding::RsiState)
-    -> :bool)
+    -> :wat::core::bool)
   (:wat::core::and
     (:trading::encoding::RsiState/started state)
     (:trading::encoding::WilderState::ready?
@@ -140,8 +140,8 @@
 
 (:wat::core::define
   (:trading::encoding::StochState::fresh
-    (k-period :i64)
-    (d-period :i64)
+    (k-period :wat::core::i64)
+    (d-period :wat::core::i64)
     -> :trading::encoding::StochState)
   (:trading::encoding::StochState/new
     (:trading::encoding::RingBuffer::fresh k-period)
@@ -152,9 +152,9 @@
 (:wat::core::define
   (:trading::encoding::StochState::update
     (state :trading::encoding::StochState)
-    (high :f64)
-    (low :f64)
-    (close :f64)
+    (high :wat::core::f64)
+    (low :wat::core::f64)
+    (close :wat::core::f64)
     -> :trading::encoding::StochState)
   (:wat::core::let*
     (((new-high-buf :trading::encoding::RingBuffer)
@@ -167,25 +167,25 @@
         low))
      ((k-buf :trading::encoding::RingBuffer)
       (:trading::encoding::StochState/k-buf state))
-     ((full? :bool)
+     ((full? :wat::core::bool)
       (:trading::encoding::RingBuffer::full? new-high-buf))
      ;; If high buffer is full, push %K value into k-buf.
      ((new-k-buf :trading::encoding::RingBuffer)
       (:wat::core::if full? -> :trading::encoding::RingBuffer
         (:wat::core::let*
-          (((highest :f64)
+          (((highest :wat::core::f64)
             (:wat::core::match
-              (:trading::encoding::RingBuffer::max new-high-buf) -> :f64
+              (:trading::encoding::RingBuffer::max new-high-buf) -> :wat::core::f64
               ((Some v) v)
               (:None 0.0)))
-           ((lowest :f64)
+           ((lowest :wat::core::f64)
             (:wat::core::match
-              (:trading::encoding::RingBuffer::min new-low-buf) -> :f64
+              (:trading::encoding::RingBuffer::min new-low-buf) -> :wat::core::f64
               ((Some v) v)
               (:None 0.0)))
-           ((range :f64) (:wat::core::- highest lowest))
-           ((k :f64)
-            (:wat::core::if (:wat::core::= range 0.0) -> :f64
+           ((range :wat::core::f64) (:wat::core::- highest lowest))
+           ((k :wat::core::f64)
+            (:wat::core::if (:wat::core::= range 0.0) -> :wat::core::f64
               50.0
               (:wat::core::/
                 (:wat::core::* 100.0 (:wat::core::- close lowest))
@@ -198,16 +198,16 @@
 (:wat::core::define
   (:trading::encoding::StochState::k
     (state :trading::encoding::StochState)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::let*
     (((k-buf :trading::encoding::RingBuffer)
       (:trading::encoding::StochState/k-buf state))
-     ((n :i64) (:trading::encoding::RingBuffer::len k-buf)))
-    (:wat::core::if (:wat::core::= n 0) -> :f64
+     ((n :wat::core::i64) (:trading::encoding::RingBuffer::len k-buf)))
+    (:wat::core::if (:wat::core::= n 0) -> :wat::core::f64
       50.0
       ;; Newest = get(0) under our 0=most-recent convention.
       (:wat::core::match
-        (:trading::encoding::RingBuffer::get k-buf 0) -> :f64
+        (:trading::encoding::RingBuffer::get k-buf 0) -> :wat::core::f64
         ((Some v) v)
         (:None 50.0)))))
 
@@ -215,12 +215,12 @@
 (:wat::core::define
   (:trading::encoding::StochState::d
     (state :trading::encoding::StochState)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::let*
     (((k-buf :trading::encoding::RingBuffer)
       (:trading::encoding::StochState/k-buf state))
-     ((n :i64) (:trading::encoding::RingBuffer::len k-buf)))
-    (:wat::core::if (:wat::core::= n 0) -> :f64
+     ((n :wat::core::i64) (:trading::encoding::RingBuffer::len k-buf)))
+    (:wat::core::if (:wat::core::= n 0) -> :wat::core::f64
       50.0
       (:trading::encoding::RingBuffer::mean k-buf))))
 
@@ -228,7 +228,7 @@
 (:wat::core::define
   (:trading::encoding::StochState::ready?
     (state :trading::encoding::StochState)
-    -> :bool)
+    -> :wat::core::bool)
   (:wat::core::and
     (:trading::encoding::RingBuffer::full?
       (:trading::encoding::StochState/high-buf state))
@@ -241,27 +241,27 @@
 (:wat::core::define
   (:trading::encoding::compute-williams-r
     (stoch :trading::encoding::StochState)
-    (close :f64)
-    -> :f64)
+    (close :wat::core::f64)
+    -> :wat::core::f64)
   (:wat::core::let*
     (((high-buf :trading::encoding::RingBuffer)
       (:trading::encoding::StochState/high-buf stoch))
      ((low-buf :trading::encoding::RingBuffer)
       (:trading::encoding::StochState/low-buf stoch))
-     ((full? :bool) (:trading::encoding::RingBuffer::full? high-buf)))
-    (:wat::core::if (:wat::core::not full?) -> :f64
+     ((full? :wat::core::bool) (:trading::encoding::RingBuffer::full? high-buf)))
+    (:wat::core::if (:wat::core::not full?) -> :wat::core::f64
       -50.0
       (:wat::core::let*
-        (((highest :f64)
+        (((highest :wat::core::f64)
           (:wat::core::match
-            (:trading::encoding::RingBuffer::max high-buf) -> :f64
+            (:trading::encoding::RingBuffer::max high-buf) -> :wat::core::f64
             ((Some v) v) (:None 0.0)))
-         ((lowest :f64)
+         ((lowest :wat::core::f64)
           (:wat::core::match
-            (:trading::encoding::RingBuffer::min low-buf) -> :f64
+            (:trading::encoding::RingBuffer::min low-buf) -> :wat::core::f64
             ((Some v) v) (:None 0.0)))
-         ((range :f64) (:wat::core::- highest lowest)))
-        (:wat::core::if (:wat::core::= range 0.0) -> :f64
+         ((range :wat::core::f64) (:wat::core::- highest lowest)))
+        (:wat::core::if (:wat::core::= range 0.0) -> :wat::core::f64
           -50.0
           (:wat::core::/
             (:wat::core::* -100.0 (:wat::core::- highest close))
@@ -277,7 +277,7 @@
 
 (:wat::core::define
   (:trading::encoding::CciState::fresh
-    (period :i64)
+    (period :wat::core::i64)
     -> :trading::encoding::CciState)
   (:trading::encoding::CciState/new
     (:trading::encoding::RingBuffer::fresh period)
@@ -287,12 +287,12 @@
 (:wat::core::define
   (:trading::encoding::CciState::update
     (state :trading::encoding::CciState)
-    (high :f64)
-    (low :f64)
-    (close :f64)
+    (high :wat::core::f64)
+    (low :wat::core::f64)
+    (close :wat::core::f64)
     -> :trading::encoding::CciState)
   (:wat::core::let*
-    (((tp :f64)
+    (((tp :wat::core::f64)
       (:wat::core::/ (:wat::core::+ high (:wat::core::+ low close)) 3.0))
      ((new-tp-buf :trading::encoding::RingBuffer)
       (:trading::encoding::RingBuffer::push
@@ -308,32 +308,32 @@
 (:wat::core::define
   (:trading::encoding::CciState::value
     (state :trading::encoding::CciState)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::let*
     (((tp-sma :trading::encoding::SmaState)
       (:trading::encoding::CciState/tp-sma state)))
-    (:wat::core::if (:wat::core::not (:trading::encoding::SmaState::ready? tp-sma)) -> :f64
+    (:wat::core::if (:wat::core::not (:trading::encoding::SmaState::ready? tp-sma)) -> :wat::core::f64
       0.0
       (:wat::core::let*
         (((tp-buf :trading::encoding::RingBuffer)
           (:trading::encoding::CciState/tp-buf state))
-         ((tp-mean :f64) (:trading::encoding::SmaState::value tp-sma))
-         ((n :i64) (:trading::encoding::RingBuffer::len tp-buf))
-         ((tp-latest :f64)
+         ((tp-mean :wat::core::f64) (:trading::encoding::SmaState::value tp-sma))
+         ((n :wat::core::i64) (:trading::encoding::RingBuffer::len tp-buf))
+         ((tp-latest :wat::core::f64)
           (:wat::core::match
-            (:trading::encoding::RingBuffer::get tp-buf 0) -> :f64
+            (:trading::encoding::RingBuffer::get tp-buf 0) -> :wat::core::f64
             ((Some v) v) (:None 0.0)))
          ;; Mean deviation: foldl over the Vec<f64> directly.
-         ((sum-abs-dev :f64)
+         ((sum-abs-dev :wat::core::f64)
           (:wat::core::foldl
             (:trading::encoding::RingBuffer/values tp-buf)
             0.0
-            (:wat::core::lambda ((acc :f64) (x :f64) -> :f64)
+            (:wat::core::lambda ((acc :wat::core::f64) (x :wat::core::f64) -> :wat::core::f64)
               (:wat::core::+ acc
                 (:wat::core::f64::abs (:wat::core::- x tp-mean))))))
-         ((mean-dev :f64)
+         ((mean-dev :wat::core::f64)
           (:wat::core::/ sum-abs-dev (:wat::core::i64::to-f64 n))))
-        (:wat::core::if (:wat::core::= mean-dev 0.0) -> :f64
+        (:wat::core::if (:wat::core::= mean-dev 0.0) -> :wat::core::f64
           0.0
           (:wat::core::/
             (:wat::core::- tp-latest tp-mean)
@@ -343,7 +343,7 @@
 (:wat::core::define
   (:trading::encoding::CciState::ready?
     (state :trading::encoding::CciState)
-    -> :bool)
+    -> :wat::core::bool)
   (:trading::encoding::SmaState::ready?
     (:trading::encoding::CciState/tp-sma state)))
 
@@ -353,13 +353,13 @@
 (:wat::core::struct :trading::encoding::MfiState
   (pos-flow-buf :trading::encoding::RingBuffer)
   (neg-flow-buf :trading::encoding::RingBuffer)
-  (prev-tp      :f64)
-  (started      :bool))
+  (prev-tp      :wat::core::f64)
+  (started      :wat::core::bool))
 
 
 (:wat::core::define
   (:trading::encoding::MfiState::fresh
-    (period :i64)
+    (period :wat::core::i64)
     -> :trading::encoding::MfiState)
   (:trading::encoding::MfiState/new
     (:trading::encoding::RingBuffer::fresh period)
@@ -371,24 +371,24 @@
 (:wat::core::define
   (:trading::encoding::MfiState::update
     (state :trading::encoding::MfiState)
-    (high :f64)
-    (low :f64)
-    (close :f64)
-    (volume :f64)
+    (high :wat::core::f64)
+    (low :wat::core::f64)
+    (close :wat::core::f64)
+    (volume :wat::core::f64)
     -> :trading::encoding::MfiState)
   (:wat::core::let*
-    (((tp :f64)
+    (((tp :wat::core::f64)
       (:wat::core::/ (:wat::core::+ high (:wat::core::+ low close)) 3.0))
-     ((raw-flow :f64) (:wat::core::* tp volume))
-     ((started :bool) (:trading::encoding::MfiState/started state))
-     ((prev-tp :f64) (:trading::encoding::MfiState/prev-tp state))
+     ((raw-flow :wat::core::f64) (:wat::core::* tp volume))
+     ((started :wat::core::bool) (:trading::encoding::MfiState/started state))
+     ((prev-tp :wat::core::f64) (:trading::encoding::MfiState/prev-tp state))
      ((pos-buf :trading::encoding::RingBuffer)
       (:trading::encoding::MfiState/pos-flow-buf state))
      ((neg-buf :trading::encoding::RingBuffer)
       (:trading::encoding::MfiState/neg-flow-buf state))
-     ((rising? :bool)
+     ((rising? :wat::core::bool)
       (:wat::core::and started (:wat::core::> tp prev-tp)))
-     ((falling? :bool)
+     ((falling? :wat::core::bool)
       (:wat::core::and started (:wat::core::not (:wat::core::> tp prev-tp))))
      ((new-pos-buf :trading::encoding::RingBuffer)
       (:wat::core::if rising? -> :trading::encoding::RingBuffer
@@ -408,18 +408,18 @@
 (:wat::core::define
   (:trading::encoding::MfiState::value
     (state :trading::encoding::MfiState)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::let*
-    (((pos-sum :f64)
+    (((pos-sum :wat::core::f64)
       (:trading::encoding::RingBuffer::sum
         (:trading::encoding::MfiState/pos-flow-buf state)))
-     ((neg-sum :f64)
+     ((neg-sum :wat::core::f64)
       (:trading::encoding::RingBuffer::sum
         (:trading::encoding::MfiState/neg-flow-buf state))))
-    (:wat::core::if (:wat::core::= neg-sum 0.0) -> :f64
+    (:wat::core::if (:wat::core::= neg-sum 0.0) -> :wat::core::f64
       100.0
       (:wat::core::let*
-        (((mf-ratio :f64) (:wat::core::/ pos-sum neg-sum)))
+        (((mf-ratio :wat::core::f64) (:wat::core::/ pos-sum neg-sum)))
         (:wat::core::- 100.0
           (:wat::core::/ 100.0 (:wat::core::+ 1.0 mf-ratio)))))))
 
@@ -427,7 +427,7 @@
 (:wat::core::define
   (:trading::encoding::MfiState::ready?
     (state :trading::encoding::MfiState)
-    -> :bool)
+    -> :wat::core::bool)
   (:wat::core::and
     (:trading::encoding::MfiState/started state)
     (:trading::encoding::RingBuffer::full?

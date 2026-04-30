@@ -43,8 +43,8 @@
 ;; pull-only scopes; pass a real cadence to fire stats translators).
 (:wat::core::define
   (:trading::telemetry::Sqlite/spawn<G>
-    (path :String)
-    (count :i64)
+    (path :wat::core::String)
+    (count :wat::core::i64)
     (cadence :wat::telemetry::Service::MetricsCadence<G>)
     -> :wat::telemetry::Service::Spawn<wat::telemetry::Event>)
   (:wat::telemetry::Sqlite/auto-spawn

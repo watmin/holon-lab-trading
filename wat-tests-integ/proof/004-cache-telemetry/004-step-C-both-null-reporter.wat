@@ -14,9 +14,9 @@
 (:deftest :trading::test::proofs::004::step-C-both-null-reporter
   (:wat::core::let*
     (((now :wat::time::Instant) (:wat::time::now))
-     ((epoch-str :String)
+     ((epoch-str :wat::core::String)
       (:wat::core::i64::to-string (:wat::time::epoch-seconds now)))
-     ((db-path :String)
+     ((db-path :wat::core::String)
       (:wat::core::string::concat "runs/proof-004-C-" epoch-str ".db"))
 
      ;; Spawn rundb (count=1).
@@ -61,8 +61,8 @@
             (:wat::holon::lru::HologramCacheService::Request::Put k v)))
 
          ;; Send one batch to rundb (independent — not from a closure).
-         ((time-ns :i64) (:wat::time::epoch-nanos (:wat::time::now)))
-         ((uuid :String) (:wat::telemetry::uuid::v4))
+         ((time-ns :wat::core::i64) (:wat::time::epoch-nanos (:wat::time::now)))
+         ((uuid :wat::core::String) (:wat::telemetry::uuid::v4))
          ((tags :wat::telemetry::Tags)
           (:wat::core::HashMap :wat::telemetry::Tag))
          ((event :wat::telemetry::Event)

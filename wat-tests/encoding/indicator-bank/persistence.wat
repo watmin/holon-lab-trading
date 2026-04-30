@@ -14,7 +14,7 @@
 (:deftest :trading::test::encoding::indicator-bank::test-hurst-short-is-half
   (:wat::core::let*
     (((closes :Vec<f64>)
-      (:wat::core::vec :f64 100.0 101.0 102.0 103.0)))
+      (:wat::core::vec :wat::core::f64 100.0 101.0 102.0 103.0)))
     (:wat::test::assert-eq
       (:trading::encoding::compute-hurst closes)
       0.5)))
@@ -23,7 +23,7 @@
 (:deftest :trading::test::encoding::indicator-bank::test-hurst-flat-is-half
   (:wat::core::let*
     (((closes :Vec<f64>)
-      (:wat::core::vec :f64 100.0 100.0 100.0 100.0 100.0 100.0 100.0 100.0 100.0 100.0)))
+      (:wat::core::vec :wat::core::f64 100.0 100.0 100.0 100.0 100.0 100.0 100.0 100.0 100.0 100.0)))
     (:wat::test::assert-eq
       (:trading::encoding::compute-hurst closes)
       0.5)))
@@ -32,8 +32,8 @@
 (:deftest :trading::test::encoding::indicator-bank::test-hurst-trending-above-half
   (:wat::core::let*
     (((closes :Vec<f64>)
-      (:wat::core::vec :f64 100.0 102.0 104.0 106.0 108.0 110.0 112.0 114.0 116.0 118.0 120.0 122.0))
-     ((h :f64) (:trading::encoding::compute-hurst closes)))
+      (:wat::core::vec :wat::core::f64 100.0 102.0 104.0 106.0 108.0 110.0 112.0 114.0 116.0 118.0 120.0 122.0))
+     ((h :wat::core::f64) (:trading::encoding::compute-hurst closes)))
     (:wat::test::assert-eq (:wat::core::> h 0.5) true)))
 
 
@@ -43,7 +43,7 @@
 (:deftest :trading::test::encoding::indicator-bank::test-autocorr-short-zero
   (:wat::core::let*
     (((xs :Vec<f64>)
-      (:wat::core::vec :f64 1.0 2.0)))
+      (:wat::core::vec :wat::core::f64 1.0 2.0)))
     (:wat::test::assert-eq
       (:trading::encoding::compute-autocorrelation-lag1 xs)
       0.0)))
@@ -52,7 +52,7 @@
 (:deftest :trading::test::encoding::indicator-bank::test-autocorr-flat-zero
   (:wat::core::let*
     (((xs :Vec<f64>)
-      (:wat::core::vec :f64 5.0 5.0 5.0 5.0 5.0)))
+      (:wat::core::vec :wat::core::f64 5.0 5.0 5.0 5.0 5.0)))
     (:wat::test::assert-eq
       (:trading::encoding::compute-autocorrelation-lag1 xs)
       0.0)))
@@ -61,16 +61,16 @@
 (:deftest :trading::test::encoding::indicator-bank::test-autocorr-monotonic-positive
   (:wat::core::let*
     (((xs :Vec<f64>)
-      (:wat::core::vec :f64 1.0 2.0 3.0 4.0 5.0 6.0 7.0 8.0 9.0 10.0))
-     ((ac :f64) (:trading::encoding::compute-autocorrelation-lag1 xs)))
+      (:wat::core::vec :wat::core::f64 1.0 2.0 3.0 4.0 5.0 6.0 7.0 8.0 9.0 10.0))
+     ((ac :wat::core::f64) (:trading::encoding::compute-autocorrelation-lag1 xs)))
     (:wat::test::assert-eq (:wat::core::> ac 0.0) true)))
 
 ;; Test 7 — alternating sequence → strongly negative autocorrelation.
 (:deftest :trading::test::encoding::indicator-bank::test-autocorr-alternating-negative
   (:wat::core::let*
     (((xs :Vec<f64>)
-      (:wat::core::vec :f64 1.0 -1.0 1.0 -1.0 1.0 -1.0 1.0 -1.0))
-     ((ac :f64) (:trading::encoding::compute-autocorrelation-lag1 xs)))
+      (:wat::core::vec :wat::core::f64 1.0 -1.0 1.0 -1.0 1.0 -1.0 1.0 -1.0))
+     ((ac :wat::core::f64) (:trading::encoding::compute-autocorrelation-lag1 xs)))
     (:wat::test::assert-eq (:wat::core::< ac 0.0) true)))
 
 
@@ -107,5 +107,5 @@
       (:trading::encoding::VwapState::update s1 100.0 50.0))
      ;; cum_pv = 100·50 + 100·50 = 10000; cum_vol = 100; vwap = 100.
      ;; close = 110 → (110 - 100) / 110 ≈ 0.0909.
-     ((d :f64) (:trading::encoding::VwapState::distance s2 110.0)))
+     ((d :wat::core::f64) (:trading::encoding::VwapState::distance s2 110.0)))
     (:wat::test::assert-eq (:wat::core::> d 0.0) true)))

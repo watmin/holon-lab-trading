@@ -33,9 +33,9 @@
     (:wat::core::match report -> :()
       ((:wat::holon::lru::HologramCacheService::Report::Metrics stats)
         (:wat::core::let*
-          (((time-ns :i64)
+          (((time-ns :wat::core::i64)
             (:wat::time::epoch-nanos (:wat::time::now)))
-           ((uuid :String) (:wat::telemetry::uuid::v4))
+           ((uuid :wat::core::String) (:wat::telemetry::uuid::v4))
            ((ns-ast    :wat::holon::HolonAST) (:wat::holon::Atom :trading.cache))
            ((cal-ast   :wat::holon::HolonAST) (:wat::holon::Atom :cache.reporter))
            ((level-ast :wat::holon::HolonAST) (:wat::holon::Atom :info))

@@ -11,8 +11,8 @@
    (:wat::core::define
      (:test::stddev-feed
        (s :trading::encoding::RollingStddev)
-       (x :f64)
-       (n :i64)
+       (x :wat::core::f64)
+       (n :wat::core::i64)
        -> :trading::encoding::RollingStddev)
      (:wat::core::if (:wat::core::<= n 0)
                      -> :trading::encoding::RollingStddev
@@ -25,8 +25,8 @@
    (:wat::core::define
      (:test::bb-feed
        (s :trading::encoding::BollingerState)
-       (x :f64)
-       (n :i64)
+       (x :wat::core::f64)
+       (n :wat::core::i64)
        -> :trading::encoding::BollingerState)
      (:wat::core::if (:wat::core::<= n 0)
                      -> :trading::encoding::BollingerState
@@ -39,8 +39,8 @@
    (:wat::core::define
      (:test::kelt-feed
        (s :trading::encoding::KeltnerState)
-       (x :f64)
-       (n :i64)
+       (x :wat::core::f64)
+       (n :wat::core::i64)
        -> :trading::encoding::KeltnerState)
      (:wat::core::if (:wat::core::<= n 0)
                      -> :trading::encoding::KeltnerState
@@ -74,7 +74,7 @@
      ((s3 :trading::encoding::RollingStddev) (:trading::encoding::RollingStddev::update s2 3.0))
      ((s4 :trading::encoding::RollingStddev) (:trading::encoding::RollingStddev::update s3 4.0))
      ((s5 :trading::encoding::RollingStddev) (:trading::encoding::RollingStddev::update s4 5.0))
-     ((sd :f64) (:trading::encoding::RollingStddev::value s5)))
+     ((sd :wat::core::f64) (:trading::encoding::RollingStddev::value s5)))
     (:wat::test::assert-eq sd (:wat::std::math::sqrt 2.0))))
 
 
@@ -121,8 +121,8 @@
      ((s3 :trading::encoding::BollingerState) (:trading::encoding::BollingerState::update s2 95.0))
      ((s4 :trading::encoding::BollingerState) (:trading::encoding::BollingerState::update s3 110.0))
      ((s5 :trading::encoding::BollingerState) (:trading::encoding::BollingerState::update s4 90.0))
-     ((upper :f64) (:trading::encoding::BollingerState::upper s5))
-     ((lower :f64) (:trading::encoding::BollingerState::lower s5)))
+     ((upper :wat::core::f64) (:trading::encoding::BollingerState::upper s5))
+     ((lower :wat::core::f64) (:trading::encoding::BollingerState::lower s5)))
     (:wat::test::assert-eq (:wat::core::> upper lower) true)))
 
 
@@ -146,8 +146,8 @@
       (:trading::encoding::KeltnerState::fresh 5))
      ((s5 :trading::encoding::KeltnerState)
       (:test::kelt-feed s0 100.0 5))
-     ((upper :f64) (:trading::encoding::KeltnerState::upper s5 5.0))
-     ((lower :f64) (:trading::encoding::KeltnerState::lower s5 5.0)))
+     ((upper :wat::core::f64) (:trading::encoding::KeltnerState::upper s5 5.0))
+     ((lower :wat::core::f64) (:trading::encoding::KeltnerState::lower s5 5.0)))
     (:wat::core::let*
       (((u1 :()) (:wat::test::assert-eq upper 110.0)))
       (:wat::test::assert-eq lower 90.0))))
@@ -159,7 +159,7 @@
       (:trading::encoding::KeltnerState::fresh 5))
      ((s5 :trading::encoding::KeltnerState)
       (:test::kelt-feed s0 100.0 5))
-     ((pos :f64) (:trading::encoding::KeltnerState::pos s5 5.0 100.0)))
+     ((pos :wat::core::f64) (:trading::encoding::KeltnerState::pos s5 5.0 100.0)))
     (:wat::test::assert-eq pos 0.5)))
 
 

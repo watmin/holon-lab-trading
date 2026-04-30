@@ -19,7 +19,7 @@
 (:deftest :trading::test::encoding::rhythm::test-deterministic
   (:wat::core::let*
     (((values :Vec<f64>)
-      (:wat::core::vec :f64 0.45 0.48 0.55 0.62 0.68 0.66 0.63))
+      (:wat::core::vec :wat::core::f64 0.45 0.48 0.55 0.62 0.68 0.66 0.63))
      ((r1 :wat::holon::BundleResult)
       (:trading::encoding::rhythm::indicator-rhythm
         "rsi" values 0.0 100.0 10.0))
@@ -46,7 +46,7 @@
 (:deftest :trading::test::encoding::rhythm::test-different-atoms-not-coincident
   (:wat::core::let*
     (((values :Vec<f64>)
-      (:wat::core::vec :f64 0.45 0.48 0.55 0.62 0.68 0.66 0.63))
+      (:wat::core::vec :wat::core::f64 0.45 0.48 0.55 0.62 0.68 0.66 0.63))
      ((r-rsi :wat::holon::BundleResult)
       (:trading::encoding::rhythm::indicator-rhythm
         "rsi" values 0.0 100.0 10.0))
@@ -72,12 +72,12 @@
 
 (:deftest :trading::test::encoding::rhythm::test-few-values-still-succeeds
   (:wat::core::let*
-    (((values :Vec<f64>) (:wat::core::vec :f64 0.5 0.6))
+    (((values :Vec<f64>) (:wat::core::vec :wat::core::f64 0.5 0.6))
      ((r :wat::holon::BundleResult)
       (:trading::encoding::rhythm::indicator-rhythm
         "rsi" values 0.0 100.0 10.0)))
     (:wat::test::assert-eq
-      (:wat::core::match r -> :bool
+      (:wat::core::match r -> :wat::core::bool
         ((Ok _)  true)
         ((Err _) false))
       true)))
@@ -96,9 +96,9 @@
   ;; this distinction at d=1024 within the coincident threshold.
   (:wat::core::let*
     (((rising :Vec<f64>)
-      (:wat::core::vec :f64 0.1 0.2 0.3 0.4 0.5 0.6 0.7))
+      (:wat::core::vec :wat::core::f64 0.1 0.2 0.3 0.4 0.5 0.6 0.7))
      ((falling :Vec<f64>)
-      (:wat::core::vec :f64 0.9 0.8 0.7 0.6 0.5 0.4 0.3))
+      (:wat::core::vec :wat::core::f64 0.9 0.8 0.7 0.6 0.5 0.4 0.3))
      ((r-up :wat::holon::BundleResult)
       (:trading::encoding::rhythm::indicator-rhythm
         "rsi" rising 0.0 1.0 0.5))
@@ -141,11 +141,11 @@
     ;; deftest's body produces the data via two map calls below.)
     (((long :Vec<f64>)
       (:wat::core::map (:wat::core::range 1 201)
-        (:wat::core::lambda ((i :i64) -> :f64)
+        (:wat::core::lambda ((i :wat::core::i64) -> :wat::core::f64)
           (:wat::core::* 0.005 (:wat::core::i64::to-f64 i)))))
      ((tail :Vec<f64>)
       (:wat::core::map (:wat::core::range 51 201)
-        (:wat::core::lambda ((i :i64) -> :f64)
+        (:wat::core::lambda ((i :wat::core::i64) -> :wat::core::f64)
           (:wat::core::* 0.005 (:wat::core::i64::to-f64 i)))))
      ((r-long :wat::holon::BundleResult)
       (:trading::encoding::rhythm::indicator-rhythm
@@ -180,7 +180,7 @@
   ;; Bind. Hand-build the matching shape with the same sentinel
   ;; and confirm geometric coincidence.
   (:wat::core::let*
-    (((values :Vec<f64>) (:wat::core::vec :f64 0.5 0.6))
+    (((values :Vec<f64>) (:wat::core::vec :wat::core::f64 0.5 0.6))
      ((r :wat::holon::BundleResult)
       (:trading::encoding::rhythm::indicator-rhythm
         "rsi" values 0.0 100.0 10.0))

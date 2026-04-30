@@ -10,7 +10,7 @@
 (:wat::test::make-deftest :deftest
   ((:wat::load-file! "wat/vocab/market/ichimoku.wat")
    (:wat::core::define
-     (:test::fresh-ohlcv (c :f64) -> :trading::types::Ohlcv)
+     (:test::fresh-ohlcv (c :wat::core::f64) -> :trading::types::Ohlcv)
      (:wat::core::let*
        (((btc :trading::types::Asset)
          (:trading::types::Asset/new "BTC")))
@@ -20,7 +20,7 @@
          btc btc "" 0.0 0.0 0.0 c 0.0)))
    (:wat::core::define
      (:test::fresh-trend
-       (tenkan :f64) (kijun :f64) (cloud-top :f64) (cloud-bottom :f64)
+       (tenkan :wat::core::f64) (kijun :wat::core::f64) (cloud-top :wat::core::f64) (cloud-bottom :wat::core::f64)
        -> :trading::types::Candle::Trend)
      ;; 7-arg: sma20, sma50, sma200, tenkan-sen, kijun-sen,
      ;; cloud-top, cloud-bottom.
@@ -28,7 +28,7 @@
        0.0 0.0 0.0 tenkan kijun cloud-top cloud-bottom))
    (:wat::core::define
      (:test::fresh-divergence
-       (tk-cross-delta :f64)
+       (tk-cross-delta :wat::core::f64)
        -> :trading::types::Candle::Divergence)
      ;; 4-arg: rsi-divergence-bull, rsi-divergence-bear,
      ;; tk-cross-delta, stoch-cross-delta.
@@ -80,9 +80,9 @@
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) 1.0))
-     ((scale :f64)
+     ((scale :wat::core::f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::- 0.0 scale))
+     ((neg-scale :wat::core::f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "cloud-position")
@@ -116,9 +116,9 @@
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) 1.0))
-     ((scale :f64)
+     ((scale :wat::core::f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::- 0.0 scale))
+     ((neg-scale :wat::core::f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "cloud-position")
@@ -148,7 +148,7 @@
         ((Some h) h)
         (:None (:wat::holon::Atom "unreachable"))))
 
-     ((rounded :f64) (:trading::encoding::round-to-4 0.08))
+     ((rounded :wat::core::f64) (:trading::encoding::round-to-4 0.08))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "cloud-thickness")
@@ -207,7 +207,7 @@
         ((Some h) h)
         (:None (:wat::holon::Atom "unreachable"))))
 
-     ((expected-value :f64)
+     ((expected-value :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::f64::clamp
           (:wat::core::/
@@ -217,9 +217,9 @@
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) expected-value))
-     ((scale :f64)
+     ((scale :wat::core::f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::- 0.0 scale))
+     ((neg-scale :wat::core::f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "tk-spread")

@@ -41,9 +41,9 @@
    ;; Aggregated counters from one run, packaged so the inner
    ;; let* can return both runs' results back to outer scope.
    (:wat::core::struct :trading::test::proofs::002::Counters
-     (papers   :i64)
-     (grace    :i64)
-     (violence :i64))
+     (papers   :wat::core::i64)
+     (grace    :wat::core::i64)
+     (violence :wat::core::i64))
    (:wat::core::struct :trading::test::proofs::002::BothRuns
      (up :trading::test::proofs::002::Counters)
      (sx :trading::test::proofs::002::Counters))
@@ -51,8 +51,8 @@
    (:wat::core::define
      (:trading::test::proofs::002::dir-str
        (d :trading::sim::Direction)
-       -> :String)
-     (:wat::core::match d -> :String
+       -> :wat::core::String)
+     (:wat::core::match d -> :wat::core::String
        (:trading::sim::Direction::Up   "Up")
        (:trading::sim::Direction::Down "Down")))
    ;; Build one PaperResolved value from an Outcome. Pure data —
@@ -63,21 +63,21 @@
    ;; :wat::core::struct->form to a WatAST for WorkUnitLog/info.
    (:wat::core::define
      (:trading::test::proofs::002::outcome->resolved
-       (run-name :String)
-       (thinker-name :String) (predictor-name :String)
+       (run-name :wat::core::String)
+       (thinker-name :wat::core::String) (predictor-name :wat::core::String)
        (out :trading::sim::Outcome)
        -> :Option<trading::PaperResolved>)
      (:wat::core::let*
        (((paper :trading::sim::Paper) (:trading::sim::Outcome/paper out))
-        ((paper-id :i64)              (:trading::sim::Paper/id paper))
+        ((paper-id :wat::core::i64)              (:trading::sim::Paper/id paper))
         ((dir :trading::sim::Direction)
                                       (:trading::sim::Paper/direction paper))
-        ((entry-candle :i64)          (:trading::sim::Paper/entry-candle paper))
-        ((closed-at :i64)             (:trading::sim::Outcome/closed-at out))
+        ((entry-candle :wat::core::i64)          (:trading::sim::Paper/entry-candle paper))
+        ((closed-at :wat::core::i64)             (:trading::sim::Outcome/closed-at out))
         ((state :trading::sim::PositionState)
                                       (:trading::sim::Paper/state paper))
-        ((final-residue :f64)         (:trading::sim::Outcome/final-residue out))
-        ((dir-str :String)            (:trading::test::proofs::002::dir-str dir)))
+        ((final-residue :wat::core::f64)         (:trading::sim::Outcome/final-residue out))
+        ((dir-str :wat::core::String)            (:trading::test::proofs::002::dir-str dir)))
        (:wat::core::match state -> :Option<trading::PaperResolved>
          ((:trading::sim::PositionState::Grace _r)
            (Some
@@ -103,9 +103,9 @@
        (predictor :trading::sim::Predictor)
        (config :trading::sim::Config)
        (sqlite-handle :wat::telemetry::Service::Handle<wat::telemetry::Event>)
-       (run-name :String)
-       (thinker-name :String)
-       (predictor-name :String)
+       (run-name :wat::core::String)
+       (thinker-name :wat::core::String)
+       (predictor-name :wat::core::String)
        -> :trading::sim::Aggregate)
      (:wat::core::let*
        (((wlog :wat::telemetry::WorkUnitLog)
@@ -157,11 +157,11 @@
      ((cfg :trading::sim::Config)
       (:trading::sim::Config/new 288 0.01 35.0 14))
      ((now :wat::time::Instant) (:wat::time::now))
-     ((epoch-str :String)
+     ((epoch-str :wat::core::String)
       (:wat::core::i64::to-string (:wat::time::epoch-seconds now)))
-     ((iso-str :String) (:wat::time::to-iso8601 now 3))
+     ((iso-str :wat::core::String) (:wat::time::to-iso8601 now 3))
 
-     ((db-path :String)
+     ((db-path :wat::core::String)
       (:wat::core::string::concat
         "runs/proof-002-" epoch-str ".db"))
      ((spawn :wat::telemetry::Service::Spawn<wat::telemetry::Event>)
@@ -178,7 +178,7 @@
 
          ((stream-up :trading::candles::Stream)
           (:trading::candles::open-bounded "data/btc_5m_raw.parquet" 10000))
-         ((run-name-up :String)
+         ((run-name-up :wat::core::String)
           (:wat::core::string::concat "always-up-10k-" iso-str))
          ((agg-up :trading::sim::Aggregate)
           (:trading::test::proofs::002::run-with-log
@@ -198,7 +198,7 @@
 
          ((stream-sx :trading::candles::Stream)
           (:trading::candles::open-bounded "data/btc_5m_raw.parquet" 10000))
-         ((run-name-sx :String)
+         ((run-name-sx :wat::core::String)
           (:wat::core::string::concat "sma-cross-10k-" iso-str))
          ((agg-sx :trading::sim::Aggregate)
           (:trading::test::proofs::002::run-with-log
@@ -221,12 +221,12 @@
       (:trading::test::proofs::002::BothRuns/up both))
      ((sx :trading::test::proofs::002::Counters)
       (:trading::test::proofs::002::BothRuns/sx both))
-     ((papers-up :i64)   (:trading::test::proofs::002::Counters/papers up))
-     ((grace-up :i64)    (:trading::test::proofs::002::Counters/grace up))
-     ((violence-up :i64) (:trading::test::proofs::002::Counters/violence up))
-     ((papers-sx :i64)   (:trading::test::proofs::002::Counters/papers sx))
-     ((grace-sx :i64)    (:trading::test::proofs::002::Counters/grace sx))
-     ((violence-sx :i64) (:trading::test::proofs::002::Counters/violence sx))
+     ((papers-up :wat::core::i64)   (:trading::test::proofs::002::Counters/papers up))
+     ((grace-up :wat::core::i64)    (:trading::test::proofs::002::Counters/grace up))
+     ((violence-up :wat::core::i64) (:trading::test::proofs::002::Counters/violence up))
+     ((papers-sx :wat::core::i64)   (:trading::test::proofs::002::Counters/papers sx))
+     ((grace-sx :wat::core::i64)    (:trading::test::proofs::002::Counters/grace sx))
+     ((violence-sx :wat::core::i64) (:trading::test::proofs::002::Counters/violence sx))
 
      ((u1 :()) (:wat::test::assert-eq
                  (:wat::core::= papers-up

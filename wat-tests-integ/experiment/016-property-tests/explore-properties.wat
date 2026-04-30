@@ -71,10 +71,10 @@
    (:wat::core::define
      (:exp::verify (r :exp::Receipt)
                    (candidate :wat::holon::HolonAST)
-                   -> :bool)
+                   -> :wat::core::bool)
      (:wat::core::match
        (:wat::holon::bytes-vector (:exp::Receipt/bytes r))
-       -> :bool
+       -> :wat::core::bool
        ((Some v) (:wat::holon::coincident? candidate v))
        (:None false)))
 
@@ -90,7 +90,7 @@
    ;; gives a distinct integer leaf, which produces a distinct
    ;; HolonAST::I64, which encodes distinctly.
    (:wat::core::define
-     (:exp::gen-form (n :i64) -> :wat::holon::HolonAST)
+     (:exp::gen-form (n :wat::core::i64) -> :wat::holon::HolonAST)
      (:wat::holon::Bind
        (:wat::holon::Atom "test-form")
        (:wat::holon::leaf n)))
@@ -103,7 +103,7 @@
 
    ;; P1 — Round-trip: verify(issue(F), F) = true for all F.
    (:wat::core::define
-     (:exp::prop-roundtrip (n :i64) -> :bool)
+     (:exp::prop-roundtrip (n :wat::core::i64) -> :wat::core::bool)
      (:wat::core::let*
        (((form :wat::holon::HolonAST) (:exp::gen-form n))
         ((r :exp::Receipt) (:exp::issue form)))
@@ -111,7 +111,7 @@
 
    ;; P2 — Distinct-form rejection: verify(issue(F_n), F_{n+1}) = false.
    (:wat::core::define
-     (:exp::prop-distinct-rejects (n :i64) -> :bool)
+     (:exp::prop-distinct-rejects (n :wat::core::i64) -> :wat::core::bool)
      (:wat::core::let*
        (((form-a :wat::holon::HolonAST) (:exp::gen-form n))
         ((form-b :wat::holon::HolonAST) (:exp::gen-form (:wat::core::+ n 1)))
@@ -121,7 +121,7 @@
 
    ;; P3 — Determinism: issue(F) twice produces byte-equal receipts.
    (:wat::core::define
-     (:exp::prop-determinism (n :i64) -> :bool)
+     (:exp::prop-determinism (n :wat::core::i64) -> :wat::core::bool)
      (:wat::core::let*
        (((form :wat::holon::HolonAST) (:exp::gen-form n))
         ((r1 :exp::Receipt) (:exp::issue form))
@@ -130,24 +130,24 @@
 
    ;; P4 — Self-coincidence: coincident?(F, F) = true for all F.
    (:wat::core::define
-     (:exp::prop-self-coincident (n :i64) -> :bool)
+     (:exp::prop-self-coincident (n :wat::core::i64) -> :wat::core::bool)
      (:wat::core::let*
        (((form :wat::holon::HolonAST) (:exp::gen-form n)))
        (:wat::holon::coincident? form form)))
 
    ;; P5 — Tamper detection: receipt with empty bytes fails verification.
    (:wat::core::define
-     (:exp::prop-tamper-detect (n :i64) -> :bool)
+     (:exp::prop-tamper-detect (n :wat::core::i64) -> :wat::core::bool)
      (:wat::core::let*
        (((form :wat::holon::HolonAST) (:exp::gen-form n))
-        ((empty-bytes :wat::core::Bytes) (:wat::core::vec :u8))
+        ((empty-bytes :wat::core::Bytes) (:wat::core::vec :wat::core::u8))
         ((tampered :exp::Receipt) (:exp::Receipt/new empty-bytes form)))
        ;; Property holds when verify on tampered receipt returns false.
        (:wat::core::not (:exp::verify tampered form))))
 
    ;; P6 — Cross-form orthogonality: distinct forms are NOT coincident.
    (:wat::core::define
-     (:exp::prop-cross-orthogonal (n :i64) -> :bool)
+     (:exp::prop-cross-orthogonal (n :wat::core::i64) -> :wat::core::bool)
      (:wat::core::let*
        (((form-a :wat::holon::HolonAST) (:exp::gen-form n))
         ((form-b :wat::holon::HolonAST) (:exp::gen-form (:wat::core::+ n 1))))
@@ -161,11 +161,11 @@
    ;; If any iteration fails, the AND short-circuits to false.
    (:wat::core::define
      (:exp::all-iterations-pass
-       (start :i64) (end :i64)
+       (start :wat::core::i64) (end :wat::core::i64)
        (prop :fn(i64)->bool)
-       -> :bool)
+       -> :wat::core::bool)
      (:wat::core::foldl (:wat::core::range start end) true
-       (:wat::core::lambda ((acc :bool) (n :i64) -> :bool)
+       (:wat::core::lambda ((acc :wat::core::bool) (n :wat::core::i64) -> :wat::core::bool)
          (:wat::core::and acc (prop n)))))))
 
 
@@ -175,7 +175,7 @@
 
 (:deftest :exp::t1-roundtrip-property
   (:wat::core::let*
-    (((all-pass :bool)
+    (((all-pass :wat::core::bool)
       (:exp::all-iterations-pass 1 101 :exp::prop-roundtrip)))
     (:wat::test::assert-eq all-pass true)))
 
@@ -186,7 +186,7 @@
 
 (:deftest :exp::t2-distinct-rejection-property
   (:wat::core::let*
-    (((all-pass :bool)
+    (((all-pass :wat::core::bool)
       (:exp::all-iterations-pass 1 101 :exp::prop-distinct-rejects)))
     (:wat::test::assert-eq all-pass true)))
 
@@ -197,7 +197,7 @@
 
 (:deftest :exp::t3-determinism-property
   (:wat::core::let*
-    (((all-pass :bool)
+    (((all-pass :wat::core::bool)
       (:exp::all-iterations-pass 1 101 :exp::prop-determinism)))
     (:wat::test::assert-eq all-pass true)))
 
@@ -208,7 +208,7 @@
 
 (:deftest :exp::t4-self-coincident-property
   (:wat::core::let*
-    (((all-pass :bool)
+    (((all-pass :wat::core::bool)
       (:exp::all-iterations-pass 1 101 :exp::prop-self-coincident)))
     (:wat::test::assert-eq all-pass true)))
 
@@ -219,7 +219,7 @@
 
 (:deftest :exp::t5-tamper-detect-property
   (:wat::core::let*
-    (((all-pass :bool)
+    (((all-pass :wat::core::bool)
       (:exp::all-iterations-pass 1 101 :exp::prop-tamper-detect)))
     (:wat::test::assert-eq all-pass true)))
 
@@ -230,6 +230,6 @@
 
 (:deftest :exp::t6-cross-orthogonal-property
   (:wat::core::let*
-    (((all-pass :bool)
+    (((all-pass :wat::core::bool)
       (:exp::all-iterations-pass 1 101 :exp::prop-cross-orthogonal)))
     (:wat::test::assert-eq all-pass true)))

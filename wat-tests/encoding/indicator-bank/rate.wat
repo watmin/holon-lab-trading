@@ -9,12 +9,12 @@
    (:wat::core::define
      (:test::ring-from-vec
        (vs :Vec<f64>)
-       (cap :i64)
+       (cap :wat::core::i64)
        -> :trading::encoding::RingBuffer)
      (:wat::core::foldl vs
        (:trading::encoding::RingBuffer::fresh cap)
        (:wat::core::lambda
-         ((b :trading::encoding::RingBuffer) (x :f64)
+         ((b :trading::encoding::RingBuffer) (x :wat::core::f64)
           -> :trading::encoding::RingBuffer)
          (:trading::encoding::RingBuffer::push b x))))))
 
@@ -26,7 +26,7 @@
   (:wat::core::let*
     (((buf :trading::encoding::RingBuffer)
       (:test::ring-from-vec
-        (:wat::core::vec :f64 100.0 101.0)
+        (:wat::core::vec :wat::core::f64 100.0 101.0)
         10)))
     (:wat::test::assert-eq
       (:trading::encoding::compute-roc buf 3)
@@ -37,7 +37,7 @@
   (:wat::core::let*
     (((buf :trading::encoding::RingBuffer)
       (:test::ring-from-vec
-        (:wat::core::vec :f64 100.0 105.0 110.0)
+        (:wat::core::vec :wat::core::f64 100.0 105.0 110.0)
         10)))
     (:wat::test::assert-eq
       (:trading::encoding::compute-roc buf 2)
@@ -48,9 +48,9 @@
   (:wat::core::let*
     (((buf :trading::encoding::RingBuffer)
       (:test::ring-from-vec
-        (:wat::core::vec :f64 100.0 101.0 102.0 103.0 104.0 105.0)
+        (:wat::core::vec :wat::core::f64 100.0 101.0 102.0 103.0 104.0 105.0)
         10))
-     ((roc :f64) (:trading::encoding::compute-roc buf 5)))
+     ((roc :wat::core::f64) (:trading::encoding::compute-roc buf 5)))
     (:wat::test::assert-eq (:wat::core::> roc 0.0) true)))
 
 ;; Test 4 — ROC with past = 0 → 0 (defensive).
@@ -58,7 +58,7 @@
   (:wat::core::let*
     (((buf :trading::encoding::RingBuffer)
       (:test::ring-from-vec
-        (:wat::core::vec :f64 0.0 1.0 2.0 3.0)
+        (:wat::core::vec :wat::core::f64 0.0 1.0 2.0 3.0)
         10)))
     (:wat::test::assert-eq
       (:trading::encoding::compute-roc buf 3)
@@ -72,11 +72,11 @@
   (:wat::core::let*
     (((hi :trading::encoding::RingBuffer)
       (:test::ring-from-vec
-        (:wat::core::vec :f64 110.0 110.0 110.0)
+        (:wat::core::vec :wat::core::f64 110.0 110.0 110.0)
         10))
      ((lo :trading::encoding::RingBuffer)
       (:test::ring-from-vec
-        (:wat::core::vec :f64 100.0 100.0 100.0)
+        (:wat::core::vec :wat::core::f64 100.0 100.0 100.0)
         10)))
     (:wat::test::assert-eq
       (:trading::encoding::compute-range-pos hi lo 105.0)
@@ -87,11 +87,11 @@
   (:wat::core::let*
     (((hi :trading::encoding::RingBuffer)
       (:test::ring-from-vec
-        (:wat::core::vec :f64 110.0 110.0)
+        (:wat::core::vec :wat::core::f64 110.0 110.0)
         10))
      ((lo :trading::encoding::RingBuffer)
       (:test::ring-from-vec
-        (:wat::core::vec :f64 100.0 100.0)
+        (:wat::core::vec :wat::core::f64 100.0 100.0)
         10)))
     (:wat::test::assert-eq
       (:trading::encoding::compute-range-pos hi lo 110.0)
@@ -102,11 +102,11 @@
   (:wat::core::let*
     (((hi :trading::encoding::RingBuffer)
       (:test::ring-from-vec
-        (:wat::core::vec :f64 110.0 110.0)
+        (:wat::core::vec :wat::core::f64 110.0 110.0)
         10))
      ((lo :trading::encoding::RingBuffer)
       (:test::ring-from-vec
-        (:wat::core::vec :f64 100.0 100.0)
+        (:wat::core::vec :wat::core::f64 100.0 100.0)
         10)))
     (:wat::test::assert-eq
       (:trading::encoding::compute-range-pos hi lo 100.0)
@@ -117,11 +117,11 @@
   (:wat::core::let*
     (((hi :trading::encoding::RingBuffer)
       (:test::ring-from-vec
-        (:wat::core::vec :f64 100.0 100.0)
+        (:wat::core::vec :wat::core::f64 100.0 100.0)
         10))
      ((lo :trading::encoding::RingBuffer)
       (:test::ring-from-vec
-        (:wat::core::vec :f64 100.0 100.0)
+        (:wat::core::vec :wat::core::f64 100.0 100.0)
         10)))
     (:wat::test::assert-eq
       (:trading::encoding::compute-range-pos hi lo 100.0)

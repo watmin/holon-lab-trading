@@ -36,18 +36,18 @@
     -> :trading::encoding::VocabEmission)
   (:wat::core::let*
     ;; Extract + normalize the four bounded scalars.
-    (((rsi :f64)
+    (((rsi :wat::core::f64)
       (:trading::encoding::round-to-2
         (:trading::types::Candle::Momentum/rsi m)))
-     ((cci :f64)
+     ((cci :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::/
           (:trading::types::Candle::Momentum/cci m) 300.0)))
-     ((mfi :f64)
+     ((mfi :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::/
           (:trading::types::Candle::Momentum/mfi m) 100.0)))
-     ((williams-r :f64)
+     ((williams-r :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::/
           (:wat::core::+
@@ -55,19 +55,19 @@
           100.0)))
 
      ;; Extract + normalize the four ratio-valued scalars.
-     ((roc-1 :f64)
+     ((roc-1 :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::+ 1.0
           (:trading::types::Candle::RateOfChange/roc-1 r))))
-     ((roc-3 :f64)
+     ((roc-3 :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::+ 1.0
           (:trading::types::Candle::RateOfChange/roc-3 r))))
-     ((roc-6 :f64)
+     ((roc-6 :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::+ 1.0
           (:trading::types::Candle::RateOfChange/roc-6 r))))
-     ((roc-12 :f64)
+     ((roc-12 :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::+ 1.0
           (:trading::types::Candle::RateOfChange/roc-12 r))))

@@ -54,8 +54,8 @@
       scales)
     ;; Non-empty branch.
     (:wat::core::let*
-      (((n :i64) (:wat::core::length window))
-       ((n-f64 :f64) (:wat::core::i64::to-f64 n))
+      (((n :wat::core::i64) (:wat::core::length window))
+       ((n-f64 :wat::core::f64) (:wat::core::i64::to-f64 n))
 
        ;; Current candle (last in window) — for price/sma200 reads.
        ;; (last window) returns Some(c) since we just checked
@@ -94,8 +94,8 @@
                       :trading::types::PhaseDirection::None
                       0
                       (:wat::core::vec :trading::types::PhaseRecord)))))))))
-       ((price :f64) (:trading::types::Ohlcv/close (:trading::types::Candle/ohlcv current)))
-       ((sma200 :f64)
+       ((price :wat::core::f64) (:trading::types::Ohlcv/close (:trading::types::Candle/ohlcv current)))
+       ((sma200 :wat::core::f64)
         (:trading::types::Candle::Trend/sma200 (:trading::types::Candle/trend current)))
 
        ;; Window aggregates — max(high), min(low) over the window.
@@ -103,21 +103,21 @@
        ;; is the live arm.
        ((highs :Vec<f64>)
         (:wat::core::map window
-          (:wat::core::lambda ((c :trading::types::Candle) -> :f64)
+          (:wat::core::lambda ((c :trading::types::Candle) -> :wat::core::f64)
             (:trading::types::Ohlcv/high (:trading::types::Candle/ohlcv c)))))
        ((lows :Vec<f64>)
         (:wat::core::map window
-          (:wat::core::lambda ((c :trading::types::Candle) -> :f64)
+          (:wat::core::lambda ((c :trading::types::Candle) -> :wat::core::f64)
             (:trading::types::Ohlcv/low (:trading::types::Candle/ohlcv c)))))
-       ((window-high :f64)
-        (:wat::core::match (:wat::core::f64::max-of highs) -> :f64
+       ((window-high :wat::core::f64)
+        (:wat::core::match (:wat::core::f64::max-of highs) -> :wat::core::f64
           ((Some v) v)
           (:None 0.0)))
-       ((window-low :f64)
-        (:wat::core::match (:wat::core::f64::min-of lows) -> :f64
+       ((window-low :wat::core::f64)
+        (:wat::core::match (:wat::core::f64::min-of lows) -> :wat::core::f64
           ((Some v) v)
           (:None 0.0)))
-       ((window-mid :f64)
+       ((window-mid :wat::core::f64)
         (:wat::core::/
           (:wat::core::+ window-high window-low) 2.0))
 
@@ -126,77 +126,77 @@
        ;; (entire window since last event).
        ((last-rsi-idx :Option<i64>)
         (:wat::core::find-last-index window
-          (:wat::core::lambda ((c :trading::types::Candle) -> :bool)
+          (:wat::core::lambda ((c :trading::types::Candle) -> :wat::core::bool)
             (:wat::core::let*
-              (((rsi :f64)
+              (((rsi :wat::core::f64)
                 (:trading::types::Candle::Momentum/rsi
                   (:trading::types::Candle/momentum c))))
               (:wat::core::or
                 (:wat::core::> rsi 80.0)
                 (:wat::core::< rsi 20.0))))))
-       ((since-rsi :i64)
-        (:wat::core::match last-rsi-idx -> :i64
+       ((since-rsi :wat::core::i64)
+        (:wat::core::match last-rsi-idx -> :wat::core::i64
           ((Some i) (:wat::core::- n i))
           (:None n)))
-       ((since-rsi-extreme :f64)
+       ((since-rsi-extreme :wat::core::f64)
         (:trading::encoding::round-to-2
           (:wat::core::f64::max
             (:wat::core::i64::to-f64 since-rsi) 1.0)))
 
        ((last-vol-idx :Option<i64>)
         (:wat::core::find-last-index window
-          (:wat::core::lambda ((c :trading::types::Candle) -> :bool)
+          (:wat::core::lambda ((c :trading::types::Candle) -> :wat::core::bool)
             (:wat::core::let*
-              (((vol :f64)
+              (((vol :wat::core::f64)
                 (:trading::types::Candle::Momentum/volume-accel
                   (:trading::types::Candle/momentum c))))
               (:wat::core::> vol 2.0)))))
-       ((since-vol :i64)
-        (:wat::core::match last-vol-idx -> :i64
+       ((since-vol :wat::core::i64)
+        (:wat::core::match last-vol-idx -> :wat::core::i64
           ((Some i) (:wat::core::- n i))
           (:None n)))
-       ((since-vol-spike :f64)
+       ((since-vol-spike :wat::core::f64)
         (:trading::encoding::round-to-2
           (:wat::core::f64::max
             (:wat::core::i64::to-f64 since-vol) 1.0)))
 
        ((last-large-idx :Option<i64>)
         (:wat::core::find-last-index window
-          (:wat::core::lambda ((c :trading::types::Candle) -> :bool)
+          (:wat::core::lambda ((c :trading::types::Candle) -> :wat::core::bool)
             (:wat::core::let*
-              (((roc-1 :f64)
+              (((roc-1 :wat::core::f64)
                 (:trading::types::Candle::RateOfChange/roc-1
                   (:trading::types::Candle/roc c))))
               (:wat::core::> (:wat::core::f64::abs roc-1) 0.02)))))
-       ((since-large :i64)
-        (:wat::core::match last-large-idx -> :i64
+       ((since-large :wat::core::i64)
+        (:wat::core::match last-large-idx -> :wat::core::i64
           ((Some i) (:wat::core::- n i))
           (:None n)))
-       ((since-large-move :f64)
+       ((since-large-move :wat::core::f64)
         (:trading::encoding::round-to-2
           (:wat::core::f64::max
             (:wat::core::i64::to-f64 since-large) 1.0)))
 
        ;; Distance atoms — (price - X) / price, round-to-4.
-       ((dist-from-high :f64)
+       ((dist-from-high :wat::core::f64)
         (:trading::encoding::round-to-4
           (:wat::core::/
             (:wat::core::- price window-high) price)))
-       ((dist-from-low :f64)
+       ((dist-from-low :wat::core::f64)
         (:trading::encoding::round-to-4
           (:wat::core::/
             (:wat::core::- price window-low) price)))
-       ((dist-from-midpoint :f64)
+       ((dist-from-midpoint :wat::core::f64)
         (:trading::encoding::round-to-4
           (:wat::core::/
             (:wat::core::- price window-mid) price)))
-       ((dist-from-sma200 :f64)
+       ((dist-from-sma200 :wat::core::f64)
         (:trading::encoding::round-to-4
           (:wat::core::/
             (:wat::core::- price sma200) price)))
 
        ;; session-depth — (1 + n).max(1.0), round-to-2, count family Log.
-       ((session-depth :f64)
+       ((session-depth :wat::core::f64)
         (:trading::encoding::round-to-2
           (:wat::core::f64::max
             (:wat::core::+ 1.0 n-f64) 1.0)))

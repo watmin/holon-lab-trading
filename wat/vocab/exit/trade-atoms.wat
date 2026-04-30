@@ -26,39 +26,39 @@
 (:wat::core::define
   (:trading::vocab::exit::trade-atoms::compute-trade-atoms
     (paper :trading::types::PaperEntry)
-    (current-price :f64)
+    (current-price :wat::core::f64)
     (phase-history :trading::types::PhaseRecords)
     -> :wat::holon::Holons)
   (:wat::core::let*
     ;; ─── Extract paper fields ──────────────────────────────────
-    (((entry :f64)
+    (((entry :wat::core::f64)
       (:trading::types::Price/0
         (:trading::types::PaperEntry/entry-price paper)))
-     ((extreme :f64) (:trading::types::PaperEntry/extreme paper))
-     ((trail-level :f64)
+     ((extreme :wat::core::f64) (:trading::types::PaperEntry/extreme paper))
+     ((trail-level :wat::core::f64)
       (:trading::types::Price/0
         (:trading::types::PaperEntry/trail-level paper)))
-     ((entry-candle :i64) (:trading::types::PaperEntry/entry-candle paper))
-     ((age-i64 :i64) (:trading::types::PaperEntry/age paper))
-     ((age :f64) (:wat::core::i64::to-f64 age-i64))
-     ((signaled-bool :bool) (:trading::types::PaperEntry/signaled paper))
+     ((entry-candle :wat::core::i64) (:trading::types::PaperEntry/entry-candle paper))
+     ((age-i64 :wat::core::i64) (:trading::types::PaperEntry/age paper))
+     ((age :wat::core::f64) (:wat::core::i64::to-f64 age-i64))
+     ((signaled-bool :wat::core::bool) (:trading::types::PaperEntry/signaled paper))
      ((distances :trading::types::Distances)
       (:trading::types::PaperEntry/distances paper))
-     ((trail-distance :f64) (:trading::types::Distances/trail distances))
-     ((stop-distance :f64) (:trading::types::Distances/stop distances))
+     ((trail-distance :wat::core::f64) (:trading::types::Distances/trail distances))
+     ((stop-distance :wat::core::f64) (:trading::types::Distances/stop distances))
      ((price-history :Vec<f64>)
       (:trading::types::PaperEntry/price-history paper))
 
      ;; ─── Computed values per archive ──────────────────────────
-     ((excursion :f64)
+     ((excursion :wat::core::f64)
       (:wat::core::f64::abs
         (:wat::core::/
           (:wat::core::- extreme entry) entry)))
 
      ;; retracement: if excursion > 0.0001, |((extreme - cur) /
      ;; (extreme - entry)).min(1.0)|; else 0.0.
-     ((retracement :f64)
-      (:wat::core::if (:wat::core::> excursion 0.0001) -> :f64
+     ((retracement :wat::core::f64)
+      (:wat::core::if (:wat::core::> excursion 0.0001) -> :wat::core::f64
         (:wat::core::f64::min
           (:wat::core::f64::abs
             (:wat::core::/
@@ -71,12 +71,12 @@
      ;; where p == extreme; peak_age = (length - 1 - i); else 0.
      ((peak-idx-opt :Option<i64>)
       (:wat::core::find-last-index price-history
-        (:wat::core::lambda ((p :f64) -> :bool)
+        (:wat::core::lambda ((p :wat::core::f64) -> :wat::core::bool)
           (:wat::core::<
             (:wat::core::f64::abs (:wat::core::- p extreme))
             0.0000000001))))
-     ((peak-age :f64)
-      (:wat::core::match peak-idx-opt -> :f64
+     ((peak-age :wat::core::f64)
+      (:wat::core::match peak-idx-opt -> :wat::core::f64
         ((Some i)
          (:wat::core::i64::to-f64
            (:wat::core::-
@@ -84,32 +84,32 @@
              i)))
         (:None 0.0)))
 
-     ((signaled :f64)
-      (:wat::core::if signaled-bool -> :f64 1.0 0.0))
+     ((signaled :wat::core::f64)
+      (:wat::core::if signaled-bool -> :wat::core::f64 1.0 0.0))
 
-     ((initial-risk :f64) stop-distance)
-     ((r-multiple :f64)
-      (:wat::core::if (:wat::core::> initial-risk 0.0001) -> :f64
+     ((initial-risk :wat::core::f64) stop-distance)
+     ((r-multiple :wat::core::f64)
+      (:wat::core::if (:wat::core::> initial-risk 0.0001) -> :wat::core::f64
         (:wat::core::/ excursion initial-risk)
         0.0))
 
      ;; remaining-profit = (excursion - retracement * excursion).max(0)
-     ((remaining-profit :f64)
+     ((remaining-profit :wat::core::f64)
       (:wat::core::f64::max
         (:wat::core::-
           excursion
           (:wat::core::* retracement excursion))
         0.0))
 
-     ((heat :f64)
-      (:wat::core::if (:wat::core::> remaining-profit 0.0001) -> :f64
+     ((heat :wat::core::f64)
+      (:wat::core::if (:wat::core::> remaining-profit 0.0001) -> :wat::core::f64
         (:wat::core::/ trail-distance remaining-profit)
         1.0))
 
      ;; trail-cushion: if excursion > 0.0001,
      ;; |(cur - trail) / (extreme - entry)|.min(1.0); else 0.
-     ((trail-cushion :f64)
-      (:wat::core::if (:wat::core::> excursion 0.0001) -> :f64
+     ((trail-cushion :wat::core::f64)
+      (:wat::core::if (:wat::core::> excursion 0.0001) -> :wat::core::f64
         (:wat::core::f64::min
           (:wat::core::/
             (:wat::core::f64::abs
@@ -123,10 +123,10 @@
      ;; >= entry_candle, then max with 1.0.
      ((phases-from-entry :trading::types::PhaseRecords)
       (:wat::core::filter phase-history
-        (:wat::core::lambda ((r :trading::types::PhaseRecord) -> :bool)
+        (:wat::core::lambda ((r :trading::types::PhaseRecord) -> :wat::core::bool)
           (:wat::core::>=
             (:trading::types::PhaseRecord/start-candle r) entry-candle))))
-     ((phases-since-entry :f64)
+     ((phases-since-entry :wat::core::f64)
       (:wat::core::f64::max
         (:wat::core::i64::to-f64
           (:wat::core::length phases-from-entry))
@@ -135,12 +135,12 @@
      ;; phases-survived: count of those that are also Peak.
      ((phases-peak :trading::types::PhaseRecords)
       (:wat::core::filter phases-from-entry
-        (:wat::core::lambda ((r :trading::types::PhaseRecord) -> :bool)
-          (:wat::core::match (:trading::types::PhaseRecord/label r) -> :bool
+        (:wat::core::lambda ((r :trading::types::PhaseRecord) -> :wat::core::bool)
+          (:wat::core::match (:trading::types::PhaseRecord/label r) -> :wat::core::bool
             (:trading::types::PhaseLabel::Peak true)
             (:trading::types::PhaseLabel::Valley false)
             (:trading::types::PhaseLabel::Transition false)))))
-     ((phases-survived :f64)
+     ((phases-survived :wat::core::f64)
       (:wat::core::f64::max
         (:wat::core::i64::to-f64
           (:wat::core::length phases-peak))
@@ -148,22 +148,22 @@
 
      ;; entry-vs-phase-avg: 0 if phase_history empty or entry==0,
      ;; else (entry - mean(close_avg)) / entry.
-     ((entry-vs-phase-avg :f64)
+     ((entry-vs-phase-avg :wat::core::f64)
       (:wat::core::if
         (:wat::core::or
           (:wat::core::empty? phase-history)
-          (:wat::core::= entry 0.0)) -> :f64
+          (:wat::core::= entry 0.0)) -> :wat::core::f64
         0.0
         (:wat::core::let*
           (((closes :Vec<f64>)
             (:wat::core::map phase-history
-              (:wat::core::lambda ((r :trading::types::PhaseRecord) -> :f64)
+              (:wat::core::lambda ((r :trading::types::PhaseRecord) -> :wat::core::f64)
                 (:trading::types::PhaseRecord/close-avg r))))
-           ((sum :f64)
+           ((sum :wat::core::f64)
             (:wat::core::foldl closes 0.0
-              (:wat::core::lambda ((acc :f64) (x :f64) -> :f64)
+              (:wat::core::lambda ((acc :wat::core::f64) (x :wat::core::f64) -> :wat::core::f64)
                 (:wat::core::+ acc x))))
-           ((avg :f64)
+           ((avg :wat::core::f64)
             (:wat::core::/
               sum
               (:wat::core::i64::to-f64
@@ -174,7 +174,7 @@
      ;; ─── Encode the 13 atoms (archive order) ──────────────────
 
      ;; 0: exit-excursion — Log fraction-of-price.
-     ((excursion-floored :f64) (:wat::core::f64::max excursion 0.0001))
+     ((excursion-floored :wat::core::f64) (:wat::core::f64::max excursion 0.0001))
      ((h0 :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "exit-excursion")
@@ -187,14 +187,14 @@
         (:wat::holon::Thermometer retracement -1.0 1.0)))
 
      ;; 2: exit-age — Log count-full-window.
-     ((age-floored :f64) (:wat::core::f64::max age 1.0))
+     ((age-floored :wat::core::f64) (:wat::core::f64::max age 1.0))
      ((h2 :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "exit-age")
         (:wat::holon::Log age-floored 1.0 100.0)))
 
      ;; 3: exit-peak-age — Log count-full-window.
-     ((peak-age-floored :f64) (:wat::core::f64::max peak-age 1.0))
+     ((peak-age-floored :wat::core::f64) (:wat::core::f64::max peak-age 1.0))
      ((h3 :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "exit-peak-age")
@@ -207,7 +207,7 @@
         (:wat::holon::Thermometer signaled -1.0 1.0)))
 
      ;; 5: exit-trail-distance — Log fraction-of-price.
-     ((trail-distance-floored :f64)
+     ((trail-distance-floored :wat::core::f64)
       (:wat::core::f64::max trail-distance 0.0001))
      ((h5 :wat::holon::HolonAST)
       (:wat::holon::Bind
@@ -215,7 +215,7 @@
         (:wat::holon::Log trail-distance-floored 0.0001 0.5)))
 
      ;; 6: exit-stop-distance — Log fraction-of-price.
-     ((stop-distance-floored :f64)
+     ((stop-distance-floored :wat::core::f64)
       (:wat::core::f64::max stop-distance 0.0001))
      ((h6 :wat::holon::HolonAST)
       (:wat::holon::Bind
@@ -223,14 +223,14 @@
         (:wat::holon::Log stop-distance-floored 0.0001 0.5)))
 
      ;; 7: exit-r-multiple — Log multiple family (0.0001, 10).
-     ((r-multiple-floored :f64) (:wat::core::f64::max r-multiple 0.0001))
+     ((r-multiple-floored :wat::core::f64) (:wat::core::f64::max r-multiple 0.0001))
      ((h7 :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "exit-r-multiple")
         (:wat::holon::Log r-multiple-floored 0.0001 10.0)))
 
      ;; 8: exit-heat — Thermometer (clamped to ≤ 1).
-     ((heat-clamped :f64) (:wat::core::f64::min heat 1.0))
+     ((heat-clamped :wat::core::f64) (:wat::core::f64::min heat 1.0))
      ((h8 :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "exit-heat")

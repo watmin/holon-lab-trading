@@ -50,25 +50,25 @@
     -> :trading::encoding::VocabEmission)
   (:wat::core::let*
     ;; Pull raw values once.
-    (((open :f64) (:trading::types::Ohlcv/open o))
-     ((high :f64) (:trading::types::Ohlcv/high o))
-     ((low :f64) (:trading::types::Ohlcv/low o))
-     ((close :f64) (:trading::types::Ohlcv/close o))
-     ((range-ratio-raw :f64)
+    (((open :wat::core::f64) (:trading::types::Ohlcv/open o))
+     ((high :wat::core::f64) (:trading::types::Ohlcv/high o))
+     ((low :wat::core::f64) (:trading::types::Ohlcv/low o))
+     ((close :wat::core::f64) (:trading::types::Ohlcv/close o))
+     ((range-ratio-raw :wat::core::f64)
       (:trading::types::Candle::PriceAction/range-ratio p))
-     ((gap-raw :f64) (:trading::types::Candle::PriceAction/gap p))
-     ((consecutive-up-raw :f64)
+     ((gap-raw :wat::core::f64) (:trading::types::Candle::PriceAction/gap p))
+     ((consecutive-up-raw :wat::core::f64)
       (:trading::types::Candle::PriceAction/consecutive-up p))
-     ((consecutive-down-raw :f64)
+     ((consecutive-down-raw :wat::core::f64)
       (:trading::types::Candle::PriceAction/consecutive-down p))
 
      ;; range-ratio — fraction-of-price family. Floor 0.001, round-to-4.
-     ((range-ratio :f64)
+     ((range-ratio :wat::core::f64)
       (:trading::encoding::round-to-4
         (:wat::core::f64::max range-ratio-raw 0.001)))
 
      ;; gap — clamp (gap / 0.05) to ±1, round-to-4.
-     ((gap :f64)
+     ((gap :wat::core::f64)
       (:trading::encoding::round-to-4
         (:wat::core::f64::clamp
           (:wat::core::/ gap-raw 0.05)
@@ -76,33 +76,33 @@
 
      ;; consecutive-up / consecutive-down — count family. Floor at 1.0
      ;; (matches archive's `(1.0 + count).max(1.0)` pattern), round-to-2.
-     ((consecutive-up :f64)
+     ((consecutive-up :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::f64::max
           (:wat::core::+ 1.0 consecutive-up-raw) 1.0)))
-     ((consecutive-down :f64)
+     ((consecutive-down :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::f64::max
           (:wat::core::+ 1.0 consecutive-down-raw) 1.0)))
 
      ;; Range-conditional setup (matches flow.wat's pattern, default 0.0).
-     ((range :f64) (:wat::core::- high low))
-     ((range-positive :bool) (:wat::core::> range 0.0))
+     ((range :wat::core::f64) (:wat::core::- high low))
+     ((range-positive :wat::core::bool) (:wat::core::> range 0.0))
 
      ;; body-ratio-pa: abs(close - open) / range else 0.0.
-     ((abs-body :f64)
+     ((abs-body :wat::core::f64)
       (:wat::core::f64::abs (:wat::core::- close open)))
-     ((body-ratio-pa :f64)
-      (:wat::core::if range-positive -> :f64
+     ((body-ratio-pa :wat::core::f64)
+      (:wat::core::if range-positive -> :wat::core::f64
         (:trading::encoding::round-to-2
           (:wat::core::/ abs-body range))
         0.0))
 
      ;; upper-wick: (high - max(open, close)) / range else 0.0.
      ;; First non-floor f64::max use (max of two free values).
-     ((body-top :f64) (:wat::core::f64::max open close))
-     ((upper-wick :f64)
-      (:wat::core::if range-positive -> :f64
+     ((body-top :wat::core::f64) (:wat::core::f64::max open close))
+     ((upper-wick :wat::core::f64)
+      (:wat::core::if range-positive -> :wat::core::f64
         (:trading::encoding::round-to-2
           (:wat::core::/
             (:wat::core::- high body-top) range))
@@ -110,9 +110,9 @@
 
      ;; lower-wick: (min(open, close) - low) / range else 0.0.
      ;; **First lab f64::min consumer.**
-     ((body-bottom :f64) (:wat::core::f64::min open close))
-     ((lower-wick :f64)
-      (:wat::core::if range-positive -> :f64
+     ((body-bottom :wat::core::f64) (:wat::core::f64::min open close))
+     ((lower-wick :wat::core::f64)
+      (:wat::core::if range-positive -> :wat::core::f64
         (:trading::encoding::round-to-2
           (:wat::core::/
             (:wat::core::- body-bottom low) range))

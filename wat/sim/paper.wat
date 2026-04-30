@@ -42,7 +42,7 @@
 
 ;; Window cap (per header note).
 (:wat::core::define
-  (:trading::sim::WINDOW-CAP -> :i64)
+  (:trading::sim::WINDOW-CAP -> :wat::core::i64)
   256)
 
 
@@ -53,10 +53,10 @@
   (window         :trading::types::Candles)
   (open-paper     :Option<trading::sim::Paper>)
   (outcomes       :trading::sim::Outcomes)
-  (paper-id       :i64)
+  (paper-id       :wat::core::i64)
   (aggregate      :trading::sim::Aggregate)
-  (prev-phase-gen :i64)
-  (count          :i64))
+  (prev-phase-gen :wat::core::i64)
+  (count          :wat::core::i64))
 
 
 (:wat::core::define
@@ -78,20 +78,20 @@
 ;; For Up: (current - entry) / entry - 2·fee; for Down: invert.
 (:wat::core::define
   (:trading::sim::residue
-    (entry-price :f64)
-    (current-price :f64)
+    (entry-price :wat::core::f64)
+    (current-price :wat::core::f64)
     (direction :trading::sim::Direction)
-    (fee-bps :f64)
-    -> :f64)
+    (fee-bps :wat::core::f64)
+    -> :wat::core::f64)
   (:wat::core::let*
-    (((round-trip-fee :f64)
+    (((round-trip-fee :wat::core::f64)
       (:wat::core::* 2.0 (:wat::core::/ fee-bps 10000.0)))
-     ((raw-move :f64)
-      (:wat::core::if (:wat::core::= entry-price 0.0) -> :f64
+     ((raw-move :wat::core::f64)
+      (:wat::core::if (:wat::core::= entry-price 0.0) -> :wat::core::f64
         0.0
         (:wat::core::/ (:wat::core::- current-price entry-price) entry-price)))
-     ((directed :f64)
-      (:wat::core::match direction -> :f64
+     ((directed :wat::core::f64)
+      (:wat::core::match direction -> :wat::core::f64
         (:trading::sim::Direction::Up raw-move)
         (:trading::sim::Direction::Down (:wat::core::- 0.0 raw-move)))))
     (:wat::core::- directed round-trip-fee)))
@@ -101,16 +101,16 @@
 ;; for the given direction). Used at resolution to feed direction-axis.
 (:wat::core::define
   (:trading::sim::price-move
-    (entry-price :f64)
-    (current-price :f64)
+    (entry-price :wat::core::f64)
+    (current-price :wat::core::f64)
     (direction :trading::sim::Direction)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::let*
-    (((raw-move :f64)
-      (:wat::core::if (:wat::core::= entry-price 0.0) -> :f64
+    (((raw-move :wat::core::f64)
+      (:wat::core::if (:wat::core::= entry-price 0.0) -> :wat::core::f64
         0.0
         (:wat::core::/ (:wat::core::- current-price entry-price) entry-price))))
-    (:wat::core::match direction -> :f64
+    (:wat::core::match direction -> :wat::core::f64
       (:trading::sim::Direction::Up raw-move)
       (:trading::sim::Direction::Down (:wat::core::- 0.0 raw-move)))))
 
@@ -122,14 +122,14 @@
   (:trading::sim::direction-against?
     (paper-direction :trading::sim::Direction)
     (phase-label :trading::types::PhaseLabel)
-    -> :bool)
-  (:wat::core::match paper-direction -> :bool
+    -> :wat::core::bool)
+  (:wat::core::match paper-direction -> :wat::core::bool
     (:trading::sim::Direction::Up
-      (:wat::core::match phase-label -> :bool
+      (:wat::core::match phase-label -> :wat::core::bool
         (:trading::types::PhaseLabel::Peak true)
         (_ false)))
     (:trading::sim::Direction::Down
-      (:wat::core::match phase-label -> :bool
+      (:wat::core::match phase-label -> :wat::core::bool
         (:trading::types::PhaseLabel::Valley true)
         (_ false)))))
 
@@ -139,11 +139,11 @@
 (:wat::core::define
   (:trading::sim::label-trail-grace
     (trail :trading::sim::TriggerEvents)
-    (close-trigger-idx :i64)
+    (close-trigger-idx :wat::core::i64)
     -> :trading::sim::LabeledTriggers)
   (:wat::core::map
     (:wat::core::range 0 (:wat::core::length trail))
-    (:wat::core::lambda ((i :i64) -> :trading::sim::LabeledTrigger)
+    (:wat::core::lambda ((i :wat::core::i64) -> :trading::sim::LabeledTrigger)
       (:wat::core::let*
         (((event :trading::sim::TriggerEvent)
           (:wat::core::match (:wat::core::get trail i) -> :trading::sim::TriggerEvent
@@ -180,7 +180,7 @@
 (:wat::core::define
   (:trading::sim::aggregate-grace
     (agg :trading::sim::Aggregate)
-    (residue :f64)
+    (residue :wat::core::f64)
     -> :trading::sim::Aggregate)
   (:trading::sim::Aggregate/new
     (:wat::core::+ (:trading::sim::Aggregate/papers agg) 1)
@@ -194,7 +194,7 @@
 (:wat::core::define
   (:trading::sim::aggregate-violence
     (agg :trading::sim::Aggregate)
-    (residue :f64)
+    (residue :wat::core::f64)
     -> :trading::sim::Aggregate)
   (:trading::sim::Aggregate/new
     (:wat::core::+ (:trading::sim::Aggregate/papers agg) 1)
@@ -226,14 +226,14 @@
   (:trading::sim::direction-equal?
     (a :trading::sim::Direction)
     (b :trading::sim::Direction)
-    -> :bool)
-  (:wat::core::match a -> :bool
+    -> :wat::core::bool)
+  (:wat::core::match a -> :wat::core::bool
     (:trading::sim::Direction::Up
-      (:wat::core::match b -> :bool
+      (:wat::core::match b -> :wat::core::bool
         (:trading::sim::Direction::Up true)
         (:trading::sim::Direction::Down false)))
     (:trading::sim::Direction::Down
-      (:wat::core::match b -> :bool
+      (:wat::core::match b -> :wat::core::bool
         (:trading::sim::Direction::Up false)
         (:trading::sim::Direction::Down true)))))
 
@@ -271,21 +271,21 @@
 (:wat::core::define
   (:trading::sim::evaluate-grace-eligible?
     (paper :trading::sim::Paper)
-    (trigger-fired? :bool)
+    (trigger-fired? :wat::core::bool)
     (phase-label :trading::types::PhaseLabel)
-    (residue :f64)
+    (residue :wat::core::f64)
     (action :trading::sim::Action)
     (config :trading::sim::Config)
-    -> :bool)
+    -> :wat::core::bool)
   (:wat::core::let*
-    (((g2 :bool)
+    (((g2 :wat::core::bool)
       (:trading::sim::direction-against?
         (:trading::sim::Paper/direction paper) phase-label))
-     ((g3 :bool)
+     ((g3 :wat::core::bool)
       (:wat::core::>= residue
         (:trading::sim::Config/min-residue config)))
-     ((g4 :bool)
-      (:wat::core::match action -> :bool
+     ((g4 :wat::core::bool)
+      (:wat::core::match action -> :wat::core::bool
         (:trading::sim::Action::Exit true)
         (_ false))))
     (:wat::core::and trigger-fired?
@@ -303,16 +303,16 @@
     (bank' :trading::encoding::IndicatorBank)
     (window' :trading::types::Candles)
     (paper :trading::sim::Paper)
-    (current-close :f64)
-    (residue :f64)
+    (current-close :wat::core::f64)
+    (residue :wat::core::f64)
     (trail :trading::sim::TriggerEvents)
-    (count :i64)
-    (gen :i64)
+    (count :wat::core::i64)
+    (gen :wat::core::i64)
     -> :trading::sim::SimState)
   (:wat::core::let*
     (((dir :trading::sim::Direction) (:trading::sim::Paper/direction paper))
-     ((entry-price :f64) (:trading::sim::Paper/entry-price paper))
-     ((pmove :f64)
+     ((entry-price :wat::core::f64) (:trading::sim::Paper/entry-price paper))
+     ((pmove :wat::core::f64)
       (:trading::sim::price-move entry-price current-close dir))
      ((label :wat::holon::HolonAST)
       (:trading::sim::paper-label residue pmove))
@@ -348,20 +348,20 @@
     (bank' :trading::encoding::IndicatorBank)
     (window' :trading::types::Candles)
     (paper :trading::sim::Paper)
-    (current-close :f64)
-    (residue :f64)
+    (current-close :wat::core::f64)
+    (residue :wat::core::f64)
     (trail :trading::sim::TriggerEvents)
-    (count :i64)
-    (gen :i64)
+    (count :wat::core::i64)
+    (gen :wat::core::i64)
     -> :trading::sim::SimState)
   (:wat::core::let*
     (((dir :trading::sim::Direction) (:trading::sim::Paper/direction paper))
-     ((entry-price :f64) (:trading::sim::Paper/entry-price paper))
-     ((pmove :f64)
+     ((entry-price :wat::core::f64) (:trading::sim::Paper/entry-price paper))
+     ((pmove :wat::core::f64)
       (:trading::sim::price-move entry-price current-close dir))
      ((label :wat::holon::HolonAST)
       (:trading::sim::paper-label residue pmove))
-     ((close-idx :i64)
+     ((close-idx :wat::core::i64)
       (:wat::core::- (:wat::core::length trail) 1))
      ((labeled :trading::sim::LabeledTriggers)
       (:trading::sim::label-trail-grace trail close-idx))
@@ -394,15 +394,15 @@
     (window' :trading::types::Candles)
     (surface :wat::holon::HolonAST)
     (dir :trading::sim::Direction)
-    (current-close :f64)
-    (count :i64)
-    (gen :i64)
+    (current-close :wat::core::f64)
+    (count :wat::core::i64)
+    (gen :wat::core::i64)
     (config :trading::sim::Config)
     -> :trading::sim::SimState)
   (:wat::core::let*
-    (((new-id :i64)
+    (((new-id :wat::core::i64)
       (:wat::core::+ (:trading::sim::SimState/paper-id state) 1))
-     ((deadline :i64)
+     ((deadline :wat::core::i64)
       (:wat::core::+ count (:trading::sim::Config/deadline config)))
      ((paper :trading::sim::Paper)
       (:trading::sim::Paper/new
@@ -425,8 +425,8 @@
     (window' :trading::types::Candles)
     (paper :trading::sim::Paper)
     (trail :trading::sim::TriggerEvents)
-    (count :i64)
-    (gen :i64)
+    (count :wat::core::i64)
+    (gen :wat::core::i64)
     -> :trading::sim::SimState)
   (:wat::core::let*
     (((paper' :trading::sim::Paper)
@@ -456,9 +456,9 @@
     (window' :trading::types::Candles)
     (action :trading::sim::Action)
     (surface :wat::holon::HolonAST)
-    (current-close :f64)
-    (count :i64)
-    (gen :i64)
+    (current-close :wat::core::f64)
+    (count :wat::core::i64)
+    (gen :wat::core::i64)
     (config :trading::sim::Config)
     -> :trading::sim::SimState)
   (:wat::core::match action -> :trading::sim::SimState
@@ -504,7 +504,7 @@
      ((appended :trading::types::Candles)
       (:wat::core::conj
         (:trading::sim::SimState/window state) candle))
-     ((window-len :i64) (:wat::core::length appended))
+     ((window-len :wat::core::i64) (:wat::core::length appended))
      ((window' :trading::types::Candles)
       (:wat::core::if (:wat::core::> window-len (:trading::sim::WINDOW-CAP))
                       -> :trading::types::Candles
@@ -527,9 +527,9 @@
      ;; Phase trigger detection — generation incremented this tick.
      ((phase-state :trading::encoding::PhaseState)
       (:trading::encoding::IndicatorBank/phase-state bank'))
-     ((current-gen :i64)
+     ((current-gen :wat::core::i64)
       (:trading::encoding::PhaseState/generation phase-state))
-     ((trigger-fired? :bool)
+     ((trigger-fired? :wat::core::bool)
       (:wat::core::not= current-gen
         (:trading::sim::SimState/prev-phase-gen state)))
      ((current-label :trading::types::PhaseLabel)
@@ -537,7 +537,7 @@
 
      ;; Build TriggerEvent if trigger fired (used regardless of
      ;; whether a paper is open; only appended to open paper's trail).
-     ((next-count :i64)
+     ((next-count :wat::core::i64)
       (:wat::core::+ (:trading::sim::SimState/count state) 1))
      ((trigger-event :trading::sim::TriggerEvent)
       (:trading::sim::TriggerEvent/new
@@ -546,7 +546,7 @@
         surface))
 
      ;; Current close from candle's ohlcv.
-     ((current-close :f64)
+     ((current-close :wat::core::f64)
       (:trading::types::Ohlcv/close
         (:trading::types::Candle/ohlcv candle)))
 
@@ -565,16 +565,16 @@
                 (:wat::core::conj
                   (:trading::sim::Paper/trail paper) trigger-event)
                 (:trading::sim::Paper/trail paper)))
-             ((deadline-reached? :bool)
+             ((deadline-reached? :wat::core::bool)
               (:wat::core::>= next-count
                 (:trading::sim::Paper/deadline-candle paper)))
-             ((current-residue :f64)
+             ((current-residue :wat::core::f64)
               (:trading::sim::residue
                 (:trading::sim::Paper/entry-price paper)
                 current-close
                 (:trading::sim::Paper/direction paper)
                 (:trading::sim::Config/fee-bps config)))
-             ((grace? :bool)
+             ((grace? :wat::core::bool)
               (:trading::sim::evaluate-grace-eligible?
                 paper trigger-fired? current-label
                 current-residue action config)))

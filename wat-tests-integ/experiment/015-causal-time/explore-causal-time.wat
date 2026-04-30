@@ -66,8 +66,8 @@
 ;;     verify-time-claim
 ;;       (receipt          :TimedReceipt)
 ;;       (expected-form    :HolonAST)
-;;       (now              :i64)            ; epoch seconds
-;;       (max-anchor-age   :i64)            ; freshness policy; 0 disables
+;;       (now              :wat::core::i64)            ; epoch seconds
+;;       (max-anchor-age   :wat::core::i64)            ; freshness policy; 0 disables
 ;;       -> :TimeVerdict
 ;;
 ;; A consumer's HTTP handler / smart-contract / CI gate / audit
@@ -90,10 +90,10 @@
    (:wat::core::define
      (:exp::verify-binding (r :exp::Receipt)
                            (candidate :wat::holon::HolonAST)
-                           -> :bool)
+                           -> :wat::core::bool)
      (:wat::core::match
        (:wat::holon::bytes-vector (:exp::Receipt/bytes r))
-       -> :bool
+       -> :wat::core::bool
        ((Some v) (:wat::holon::coincident? candidate v))
        (:None false)))
 
@@ -110,9 +110,9 @@
    ;;   - Git commit: chain="git", id=commit-hash, publication-time=commit-time
    ;;   - NPM publish: chain="npm-tx", id=publish-id, publication-time=publish-time
    (:wat::core::struct :exp::CausalAnchor
-     (chain :String)
-     (id :String)
-     (publication-time :i64))
+     (chain :wat::core::String)
+     (id :wat::core::String)
+     (publication-time :wat::core::i64))
 
 
    ;; ─── TimedReceipt — Receipt + time claim + cited anchors ──
@@ -123,27 +123,27 @@
    (:wat::core::struct :exp::TimedReceipt
      (bytes :wat::core::Bytes)
      (form :wat::holon::HolonAST)
-     (claim-time :i64)
+     (claim-time :wat::core::i64)
      (anchors :Vec<exp::CausalAnchor>))
 
 
    ;; ─── TimeVerdict — what the verifier returns ─────────────
    (:wat::core::struct :exp::TimeVerdict
-     (binding-sound :bool)
-     (claim-sound :bool)
-     (decision :String)    ;; "sound" | "unsound" | "unanchored" | "binding-failed"
-     (reason :String))     ;; human-readable explanation
+     (binding-sound :wat::core::bool)
+     (claim-sound :wat::core::bool)
+     (decision :wat::core::String)    ;; "sound" | "unsound" | "unanchored" | "binding-failed"
+     (reason :wat::core::String))     ;; human-readable explanation
 
 
    ;; ─── Latest-anchor-time helper (max over cited anchors) ──
    (:wat::core::define
      (:exp::latest-anchor-time
        (anchors :Vec<exp::CausalAnchor>)
-       -> :i64)
+       -> :wat::core::i64)
      (:wat::core::foldl anchors 0
-       (:wat::core::lambda ((acc :i64) (a :exp::CausalAnchor) -> :i64)
+       (:wat::core::lambda ((acc :wat::core::i64) (a :exp::CausalAnchor) -> :wat::core::i64)
          (:wat::core::if (:wat::core::> (:exp::CausalAnchor/publication-time a) acc)
-           -> :i64
+           -> :wat::core::i64
            (:exp::CausalAnchor/publication-time a)
            acc))))
 
@@ -160,29 +160,29 @@
      (:exp::verify-time-claim
        (tr :exp::TimedReceipt)
        (expected-form :wat::holon::HolonAST)
-       (now :i64)
-       (max-anchor-age :i64)
+       (now :wat::core::i64)
+       (max-anchor-age :wat::core::i64)
        -> :exp::TimeVerdict)
      (:wat::core::let*
        (((r :exp::Receipt)
          (:exp::Receipt/new (:exp::TimedReceipt/bytes tr)
                             (:exp::TimedReceipt/form tr)))
-        ((binding-ok :bool) (:exp::verify-binding r expected-form))
+        ((binding-ok :wat::core::bool) (:exp::verify-binding r expected-form))
         ((anchors :Vec<exp::CausalAnchor>) (:exp::TimedReceipt/anchors tr))
-        ((claim-time :i64) (:exp::TimedReceipt/claim-time tr))
-        ((no-anchors :bool) (:wat::core::= (:wat::core::length anchors) 0))
-        ((latest-time :i64) (:exp::latest-anchor-time anchors))
-        ((claim-in-future :bool) (:wat::core::> claim-time now))
-        ((claim-predates-anchor :bool)
+        ((claim-time :wat::core::i64) (:exp::TimedReceipt/claim-time tr))
+        ((no-anchors :wat::core::bool) (:wat::core::= (:wat::core::length anchors) 0))
+        ((latest-time :wat::core::i64) (:exp::latest-anchor-time anchors))
+        ((claim-in-future :wat::core::bool) (:wat::core::> claim-time now))
+        ((claim-predates-anchor :wat::core::bool)
           (:wat::core::and (:wat::core::not no-anchors)
                             (:wat::core::< claim-time latest-time)))
-        ((anchor-stale :bool)
+        ((anchor-stale :wat::core::bool)
           (:wat::core::and (:wat::core::and (:wat::core::not no-anchors)
                                               (:wat::core::> max-anchor-age 0))
                             (:wat::core::> (:wat::core::- now latest-time) max-anchor-age)))
 
-        ((decision :String)
-          (:wat::core::cond -> :String
+        ((decision :wat::core::String)
+          (:wat::core::cond -> :wat::core::String
             ((:wat::core::not binding-ok) "binding-failed")
             (no-anchors "unanchored")
             (claim-in-future "unsound")
@@ -190,8 +190,8 @@
             (anchor-stale "unsound")
             (:else "sound")))
 
-        ((reason :String)
-          (:wat::core::cond -> :String
+        ((reason :wat::core::String)
+          (:wat::core::cond -> :wat::core::String
             ((:wat::core::not binding-ok) "form does not encode to bytes")
             (no-anchors "no causal anchors cited")
             (claim-in-future "claim time exceeds verifier's current clock")
@@ -199,7 +199,7 @@
             (anchor-stale "latest cited anchor exceeds freshness policy window")
             (:else "claim is consistent with cited anchors and verifier clock")))
 
-        ((claim-sound :bool)
+        ((claim-sound :wat::core::bool)
           (:wat::core::and (:wat::core::not no-anchors)
             (:wat::core::and (:wat::core::not claim-in-future)
               (:wat::core::and (:wat::core::not claim-predates-anchor)

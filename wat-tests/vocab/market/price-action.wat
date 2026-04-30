@@ -10,7 +10,7 @@
   ((:wat::load-file! "wat/vocab/market/price-action.wat")
    (:wat::core::define
      (:test::fresh-ohlcv
-       (o :f64) (h :f64) (l :f64) (c :f64)
+       (o :wat::core::f64) (h :wat::core::f64) (l :wat::core::f64) (c :wat::core::f64)
        -> :trading::types::Ohlcv)
      (:wat::core::let*
        (((btc :trading::types::Asset)
@@ -20,8 +20,8 @@
          btc btc "" o h l c 0.0)))
    (:wat::core::define
      (:test::fresh-price-action
-       (range-ratio :f64) (gap :f64)
-       (consecutive-up :f64) (consecutive-down :f64)
+       (range-ratio :wat::core::f64) (gap :wat::core::f64)
+       (consecutive-up :wat::core::f64) (consecutive-down :wat::core::f64)
        -> :trading::types::Candle::PriceAction)
      ;; 4-arg: range-ratio, gap, consecutive-up, consecutive-down.
      (:trading::types::Candle::PriceAction/new
@@ -63,7 +63,7 @@
         ((Some h) h)
         (:None (:wat::holon::Atom "unreachable"))))
 
-     ((rounded :f64) (:trading::encoding::round-to-4 0.05))
+     ((rounded :wat::core::f64) (:trading::encoding::round-to-4 0.05))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "range-ratio")
@@ -93,9 +93,9 @@
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) 1.0))
-     ((scale :f64)
+     ((scale :wat::core::f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::- 0.0 scale))
+     ((neg-scale :wat::core::f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "gap")
@@ -175,7 +175,7 @@
         ((Some h) h)
         (:None (:wat::holon::Atom "unreachable"))))
 
-     ((expected-value :f64)
+     ((expected-value :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::/
           (:wat::core::f64::abs (:wat::core::- 102.0 100.0))
@@ -183,9 +183,9 @@
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) expected-value))
-     ((scale :f64)
+     ((scale :wat::core::f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::- 0.0 scale))
+     ((neg-scale :wat::core::f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "body-ratio-pa")
@@ -213,7 +213,7 @@
         ((Some h) h)
         (:None (:wat::holon::Atom "unreachable"))))
 
-     ((expected-value :f64)
+     ((expected-value :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::/
           (:wat::core::- 105.0 (:wat::core::f64::max 100.0 102.0))
@@ -221,9 +221,9 @@
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) expected-value))
-     ((scale :f64)
+     ((scale :wat::core::f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::- 0.0 scale))
+     ((neg-scale :wat::core::f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "upper-wick")
@@ -251,7 +251,7 @@
         ((Some h) h)
         (:None (:wat::holon::Atom "unreachable"))))
 
-     ((expected-value :f64)
+     ((expected-value :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::/
           (:wat::core::- (:wat::core::f64::min 100.0 102.0) 95.0)
@@ -259,9 +259,9 @@
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) expected-value))
-     ((scale :f64)
+     ((scale :wat::core::f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::- 0.0 scale))
+     ((neg-scale :wat::core::f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "lower-wick")

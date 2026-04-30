@@ -19,9 +19,9 @@
 (:deftest :trading::test::proofs::004::step-D-reporter-never-fires
   (:wat::core::let*
     (((now :wat::time::Instant) (:wat::time::now))
-     ((epoch-str :String)
+     ((epoch-str :wat::core::String)
       (:wat::core::i64::to-string (:wat::time::epoch-seconds now)))
-     ((db-path :String)
+     ((db-path :wat::core::String)
       (:wat::core::string::concat "runs/proof-004-D-" epoch-str ".db"))
 
      ((rundb-spawn :wat::telemetry::Service::Spawn<wat::telemetry::Event>)

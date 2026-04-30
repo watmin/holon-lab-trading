@@ -51,38 +51,38 @@
     -> :trading::encoding::VocabEmission)
   (:wat::core::let*
     ;; Pull raw values once.
-    (((close :f64) (:trading::types::Ohlcv/close o))
-     ((sma20 :f64) (:trading::types::Candle::Trend/sma20 t))
-     ((sma50 :f64) (:trading::types::Candle::Trend/sma50 t))
-     ((sma200 :f64) (:trading::types::Candle::Trend/sma200 t))
-     ((macd-hist-raw :f64)
+    (((close :wat::core::f64) (:trading::types::Ohlcv/close o))
+     ((sma20 :wat::core::f64) (:trading::types::Candle::Trend/sma20 t))
+     ((sma50 :wat::core::f64) (:trading::types::Candle::Trend/sma50 t))
+     ((sma200 :wat::core::f64) (:trading::types::Candle::Trend/sma200 t))
+     ((macd-hist-raw :wat::core::f64)
       (:trading::types::Candle::Momentum/macd-hist m))
-     ((plus-di :f64) (:trading::types::Candle::Momentum/plus-di m))
-     ((minus-di :f64) (:trading::types::Candle::Momentum/minus-di m))
-     ((atr-ratio-raw :f64)
+     ((plus-di :wat::core::f64) (:trading::types::Candle::Momentum/plus-di m))
+     ((minus-di :wat::core::f64) (:trading::types::Candle::Momentum/minus-di m))
+     ((atr-ratio-raw :wat::core::f64)
       (:trading::types::Candle::Volatility/atr-ratio v))
 
      ;; Cross-sub-struct compute atoms — (close - sma) / close.
-     ((close-sma20 :f64)
+     ((close-sma20 :wat::core::f64)
       (:trading::encoding::round-to-4
         (:wat::core::/
           (:wat::core::- close sma20) close)))
-     ((close-sma50 :f64)
+     ((close-sma50 :wat::core::f64)
       (:trading::encoding::round-to-4
         (:wat::core::/
           (:wat::core::- close sma50) close)))
-     ((close-sma200 :f64)
+     ((close-sma200 :wat::core::f64)
       (:trading::encoding::round-to-4
         (:wat::core::/
           (:wat::core::- close sma200) close)))
 
      ;; Cross-sub-struct compute — macd-hist / close.
-     ((macd-hist :f64)
+     ((macd-hist :wat::core::f64)
       (:trading::encoding::round-to-4
         (:wat::core::/ macd-hist-raw close)))
 
      ;; Single-sub-struct compute — DMI spread normalized to (-1, 1).
-     ((di-spread :f64)
+     ((di-spread :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::/
           (:wat::core::- plus-di minus-di) 100.0)))
@@ -91,7 +91,7 @@
      ;; arc 046), then round-to-4 (preserves the floor; round-to-2
      ;; would collapse to 0.00). Encoded via plain Log with
      ;; asymmetric bounds (0.001, 0.5).
-     ((atr-ratio :f64)
+     ((atr-ratio :wat::core::f64)
       (:trading::encoding::round-to-4
         (:wat::core::f64::max atr-ratio-raw 0.001)))
 

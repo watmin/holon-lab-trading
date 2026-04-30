@@ -20,7 +20,7 @@
 
 (:deftest :trading::test::io::telemetry::Sqlite::test-lifecycle
   (:wat::core::let*
-    (((path :String) "/tmp/telemetry-sqlite-test-001.db")
+    (((path :wat::core::String) "/tmp/telemetry-sqlite-test-001.db")
      ((cadence :wat::telemetry::Service::MetricsCadence<()>)
       (:wat::telemetry::Service/null-metrics-cadence))
      ((spawn :wat::telemetry::Service::Spawn<wat::telemetry::Event>)
@@ -46,7 +46,7 @@
 
 (:deftest :trading::test::io::telemetry::Sqlite::test-batch-roundtrip
   (:wat::core::let*
-    (((path :String) "/tmp/telemetry-sqlite-test-002.db")
+    (((path :wat::core::String) "/tmp/telemetry-sqlite-test-002.db")
      ((cadence :wat::telemetry::Service::MetricsCadence<()>)
       (:wat::telemetry::Service/null-metrics-cadence))
      ((spawn :wat::telemetry::Service::Spawn<wat::telemetry::Event>)
@@ -63,8 +63,8 @@
           (:wat::core::first handle))
          ((ack-rx :wat::telemetry::Service::AckRx)
           (:wat::core::second handle))
-         ((time-ns :i64) 1700000000000000000)
-         ((uuid :String) (:wat::telemetry::uuid::v4))
+         ((time-ns :wat::core::i64) 1700000000000000000)
+         ((uuid :wat::core::String) (:wat::telemetry::uuid::v4))
          ((ns-ast    :wat::holon::HolonAST) (:wat::holon::Atom :trading.smoke))
          ((cal-ast   :wat::holon::HolonAST) (:wat::holon::Atom :smoke))
          ((level-ast :wat::holon::HolonAST) (:wat::holon::Atom :info))

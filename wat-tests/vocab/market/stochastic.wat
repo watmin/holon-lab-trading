@@ -9,7 +9,7 @@
   ((:wat::load-file! "wat/vocab/market/stochastic.wat")
    (:wat::core::define
      (:test::fresh-momentum-with-stoch
-       (k :f64) (d :f64)
+       (k :wat::core::f64) (d :wat::core::f64)
        -> :trading::types::Candle::Momentum)
      (:trading::types::Candle::Momentum/new
        0.0 0.0 0.0 0.0 0.0    ;; rsi, macd-hist, plus-di, minus-di, adx
@@ -17,7 +17,7 @@
        0.0 0.0 0.0 0.0 0.0))  ;; williams-r, cci, mfi, obv-slope-12, volume-accel
    (:wat::core::define
      (:test::fresh-divergence-with-delta
-       (delta :f64)
+       (delta :wat::core::f64)
        -> :trading::types::Candle::Divergence)
      (:trading::types::Candle::Divergence/new
        0.0 0.0 0.0 delta))    ;; bull, bear, tk-cross-delta, stoch-cross-delta
@@ -60,13 +60,13 @@
         ((Some h) h)
         (:None (:wat::holon::Atom "unreachable"))))
 
-     ((rounded :f64) (:trading::encoding::round-to-2 0.7))
+     ((rounded :wat::core::f64) (:trading::encoding::round-to-2 0.7))
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) rounded))
-     ((scale :f64)
+     ((scale :wat::core::f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::- 0.0 scale))
+     ((neg-scale :wat::core::f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "stoch-k")
@@ -99,13 +99,13 @@
      ;; should coincide with a fresh-tracker encoding of value 1.0.
      ;; Scales accumulate across earlier atoms, but stoch-cross-delta
      ;; is its own key — first observation, fresh tracker.
-     ((rounded :f64) (:trading::encoding::round-to-2 1.0))
+     ((rounded :wat::core::f64) (:trading::encoding::round-to-2 1.0))
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) rounded))
-     ((scale :f64)
+     ((scale :wat::core::f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::- 0.0 scale))
+     ((neg-scale :wat::core::f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "stoch-cross-delta")

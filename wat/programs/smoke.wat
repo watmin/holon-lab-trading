@@ -18,9 +18,9 @@
 ;; ─── Domain enum for console output ─────────────────────────────
 
 (:wat::core::enum :trading::smoke::Event
-  (Started   (run-name :String))
-  (Heartbeat (n :i64))
-  (Stopped   (reason :String)))
+  (Started   (run-name :wat::core::String))
+  (Heartbeat (n :wat::core::i64))
+  (Stopped   (reason :wat::core::String)))
 
 
 ;; ─── Producer body (inside WorkUnit scope) ──────────────────────
@@ -30,7 +30,7 @@
     (wu :wat::telemetry::WorkUnit)
     (logger :wat::telemetry::ConsoleLogger)
     (wlog :wat::telemetry::WorkUnitLog)
-    (run-name :String)
+    (run-name :wat::core::String)
     -> :())
   (:wat::core::let*
     (((_started :())
@@ -72,7 +72,7 @@
   (:trading::smoke/inner
     (con-pool :wat::kernel::HandlePool<wat::std::service::Console::Handle>)
     (sqlite-pool :wat::telemetry::Service::HandlePool<wat::telemetry::Event>)
-    (run-name :String)
+    (run-name :wat::core::String)
     -> :())
   (:wat::core::let*
     (((con-handle :wat::std::service::Console::Handle)
@@ -115,10 +115,10 @@
   (:wat::core::let*
     (((paths :trading::run::Paths)
       (:trading::run/paths/make "smoke" (:wat::time::now)))
-     ((out-path :String) (:trading::run::Paths/out paths))
-     ((err-path :String) (:trading::run::Paths/err paths))
-     ((db-path  :String) (:trading::run::Paths/db  paths))
-     ((run-name :String) db-path)
+     ((out-path :wat::core::String) (:trading::run::Paths/out paths))
+     ((err-path :wat::core::String) (:trading::run::Paths/err paths))
+     ((db-path  :wat::core::String) (:trading::run::Paths/db  paths))
+     ((run-name :wat::core::String) db-path)
      ((out-writer :wat::io::IOWriter)
       (:wat::io::IOWriter/open-file out-path))
      ((err-writer :wat::io::IOWriter)

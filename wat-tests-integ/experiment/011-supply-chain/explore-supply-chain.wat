@@ -55,11 +55,11 @@
    (:wat::core::struct :exp::Receipt
      (bytes :wat::core::Bytes)
      (form :wat::holon::HolonAST)
-     (seed-hint :i64))
+     (seed-hint :wat::core::i64))
 
    (:wat::core::define
      (:exp::issue (form :wat::holon::HolonAST)
-                  (seed-hint :i64)
+                  (seed-hint :wat::core::i64)
                   -> :exp::Receipt)
      (:wat::core::let*
        (((v :wat::holon::Vector) (:wat::holon::encode form))
@@ -69,10 +69,10 @@
    (:wat::core::define
      (:exp::verify (r :exp::Receipt)
                    (candidate :wat::holon::HolonAST)
-                   -> :bool)
+                   -> :wat::core::bool)
      (:wat::core::match
        (:wat::holon::bytes-vector (:exp::Receipt/bytes r))
-       -> :bool
+       -> :wat::core::bool
        ((Some v) (:wat::holon::coincident? candidate v))
        (:None false)))
 
@@ -88,8 +88,8 @@
    ;; address). A Journal is the chronological release log — entries
    ;; in order of publish time.
    (:wat::core::struct :exp::Release
-     (name :String)
-     (version :String)
+     (name :wat::core::String)
+     (version :wat::core::String)
      (form :wat::holon::HolonAST)
      (receipt :exp::Receipt))
 
@@ -139,10 +139,10 @@
    ;; publish` becomes if it were anchored cryptographically.
    (:wat::core::define
      (:exp::release
-       (name :String)
-       (version :String)
+       (name :wat::core::String)
+       (version :wat::core::String)
        (manifest-form :wat::holon::HolonAST)
-       (seed-hint :i64)
+       (seed-hint :wat::core::i64)
        -> :exp::Release)
      (:exp::Release/new name version manifest-form
                         (:exp::issue manifest-form seed-hint)))
@@ -155,7 +155,7 @@
      (:exp::install-verify
        (rel :exp::Release)
        (expected-manifest :wat::holon::HolonAST)
-       -> :bool)
+       -> :wat::core::bool)
      (:exp::verify (:exp::Release/receipt rel) expected-manifest))))
 
 
@@ -191,8 +191,8 @@
 
      ;; Consumer fetches by V and verifies against expected manifest.
      ((fetched :Option<exp::Release>) (:exp::fetch registry pkg-V))
-     ((verified :bool)
-       (:wat::core::match fetched -> :bool
+     ((verified :wat::core::bool)
+       (:wat::core::match fetched -> :wat::core::bool
          ((Some r) (:exp::install-verify r manifest))
          (:None false))))
     (:wat::test::assert-eq verified true)))
@@ -252,9 +252,9 @@
      ;; Consumer fetches the tampered release and verifies it
      ;; against what they EXPECT (the legit manifest from their
      ;; lockfile or upstream announcement).
-     ((expected-legit :bool)
+     ((expected-legit :wat::core::bool)
        (:exp::install-verify tampered-release legit-manifest))
-     ((accepts-malicious :bool)
+     ((accepts-malicious :wat::core::bool)
        (:exp::install-verify tampered-release malicious-manifest))
 
      ;; The legit manifest still verifies against the receipt
@@ -321,15 +321,15 @@
 
      ;; The two V's are byte-distinct (different content; no
      ;; collision at the substrate level).
-     ((same-V :bool) (:wat::core::= legit-V typosquat-V))
+     ((same-V :wat::core::bool) (:wat::core::= legit-V typosquat-V))
      ((_d :()) (:wat::test::assert-eq same-V false))
 
      ;; Fetch by legit V → returns the legit release. The
      ;; typosquat is registered but at a DIFFERENT key; pinning by
      ;; V routes around it.
      ((fetched :Option<exp::Release>) (:exp::fetch registry legit-V))
-     ((got-legit :bool)
-       (:wat::core::match fetched -> :bool
+     ((got-legit :wat::core::bool)
+       (:wat::core::match fetched -> :wat::core::bool
          ((Some r) (:exp::install-verify r legit-manifest))
          (:None false))))
     (:wat::test::assert-eq got-legit true)))
@@ -381,7 +381,7 @@
 
      ;; Consumer verifies against the publicly-trusted manifest
      ;; (e.g., reproduced from source review).
-     ((accepts :bool) (:exp::install-verify shipped legit-manifest)))
+     ((accepts :wat::core::bool) (:exp::install-verify shipped legit-manifest)))
     (:wat::test::assert-eq accepts false)))
 
 
@@ -426,7 +426,7 @@
      ;; pinned-V request (pretending the bytes match by ignoring
      ;; the content-addressing — simulating a registry that
      ;; doesn't honor V-pinning).
-     ((accepts-drift :bool)
+     ((accepts-drift :wat::core::bool)
        (:exp::install-verify release-101 manifest-100)))
     (:wat::test::assert-eq accepts-drift false)))
 
@@ -464,7 +464,7 @@
 
      ;; The two builders produced byte-equal V's. Each can publish
      ;; independently; consumers can verify either.
-     ((reproducible :bool) (:wat::core::= bytes-a bytes-b)))
+     ((reproducible :wat::core::bool) (:wat::core::= bytes-a bytes-b)))
     (:wat::test::assert-eq reproducible true)))
 
 
@@ -514,20 +514,20 @@
      ((entry-0 :Option<exp::Release>) (:wat::core::get entries 0))
      ((entry-2 :Option<exp::Release>) (:wat::core::get entries 2))
 
-     ((order-100 :bool)
-       (:wat::core::match entry-0 -> :bool
+     ((order-100 :wat::core::bool)
+       (:wat::core::match entry-0 -> :wat::core::bool
          ((Some r) (:wat::core::= "1.0.0" (:exp::Release/version r)))
          (:None false)))
-     ((order-110 :bool)
-       (:wat::core::match entry-2 -> :bool
+     ((order-110 :wat::core::bool)
+       (:wat::core::match entry-2 -> :wat::core::bool
          ((Some r) (:wat::core::= "1.1.0" (:exp::Release/version r)))
          (:None false)))
 
      ;; Cross-version swap — claim entry-0 is 1.1.0's manifest.
      ;; Verification rejects (the receipt at index 0 vouches for
      ;; 1.0.0, not 1.1.0).
-     ((swap-detected :bool)
-       (:wat::core::match entry-0 -> :bool
+     ((swap-detected :wat::core::bool)
+       (:wat::core::match entry-0 -> :wat::core::bool
          ((Some r) (:exp::install-verify r m-110))
          (:None false)))
 

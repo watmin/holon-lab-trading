@@ -16,7 +16,7 @@
 (:deftest :trading::test::cache::L1::test-make-empty
   (:wat::core::let*
     (((l1 :trading::cache::L1) (:trading::cache::L1/make 16))
-     ((n :i64) (:trading::cache::L1/len l1)))
+     ((n :wat::core::i64) (:trading::cache::L1/len l1)))
     (:wat::test::assert-eq n 0)))
 
 ;; ─── put-next + get-next: round-trip on the next-cache ──────────
@@ -67,8 +67,8 @@
      ;; Lookup on terminal-cache must miss.
      ((got :Option<wat::holon::HolonAST>)
       (:trading::cache::L1/get-terminal l1 form))
-     ((is-none :bool)
-      (:wat::core::match got -> :bool
+     ((is-none :wat::core::bool)
+      (:wat::core::match got -> :wat::core::bool
         ((Some _) false)
         (:None    true))))
     (:wat::test::assert-eq is-none true)))
@@ -84,7 +84,7 @@
      ((v2 :wat::holon::HolonAST) (:wat::holon::leaf :bv))
      ((_ :()) (:trading::cache::L1/put-next l1 k1 v1))
      ((_ :()) (:trading::cache::L1/put-terminal l1 k2 v2))
-     ((n :i64) (:trading::cache::L1/len l1)))
+     ((n :wat::core::i64) (:trading::cache::L1/len l1)))
     (:wat::test::assert-eq n 2)))
 
 ;; ─── lookup: terminal hit on direct form ────────────────────────
@@ -133,8 +133,8 @@
      ((form :wat::holon::HolonAST) (:wat::holon::leaf :form))
      ((got :Option<wat::holon::HolonAST>)
       (:trading::cache::L1/lookup l1 form))
-     ((is-none :bool)
-      (:wat::core::match got -> :bool
+     ((is-none :wat::core::bool)
+      (:wat::core::match got -> :wat::core::bool
         ((Some _) false)
         (:None    true))))
     (:wat::test::assert-eq is-none true)))
@@ -160,16 +160,16 @@
      ((_ :()) (:trading::cache::L1/put-terminal l1 k3 v))
      ;; k1 evicted
      ((g1 :Option<wat::holon::HolonAST>) (:trading::cache::L1/get-terminal l1 k1))
-     ((k1-evicted :bool)
-      (:wat::core::match g1 -> :bool
+     ((k1-evicted :wat::core::bool)
+      (:wat::core::match g1 -> :wat::core::bool
         ((Some _) false)
         (:None    true)))
      ;; k2 still there
      ((g2 :Option<wat::holon::HolonAST>) (:trading::cache::L1/get-terminal l1 k2))
-     ((k2-present :bool)
-      (:wat::core::match g2 -> :bool
+     ((k2-present :wat::core::bool)
+      (:wat::core::match g2 -> :wat::core::bool
         ((Some _) true)
         (:None    false))))
     (:wat::test::assert-eq
-      (:wat::core::if k1-evicted -> :bool k2-present false)
+      (:wat::core::if k1-evicted -> :wat::core::bool k2-present false)
       true)))

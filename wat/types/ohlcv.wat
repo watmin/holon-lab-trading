@@ -11,14 +11,14 @@
 ;; constructor + `<path>/<field>` accessors per arc 019.
 
 (:wat::core::struct :trading::types::Asset
-  (name :String))
+  (name :wat::core::String))
 
 (:wat::core::struct :trading::types::Ohlcv
   (source-asset :trading::types::Asset)
   (target-asset :trading::types::Asset)
-  (ts           :String)
-  (open         :f64)
-  (high         :f64)
-  (low          :f64)
-  (close        :f64)
-  (volume       :f64))
+  (ts           :wat::core::String)
+  (open         :wat::core::f64)
+  (high         :wat::core::f64)
+  (low          :wat::core::f64)
+  (close        :wat::core::f64)
+  (volume       :wat::core::f64))

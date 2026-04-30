@@ -52,36 +52,36 @@
     -> :trading::encoding::VocabEmission)
   (:wat::core::let*
     ;; Pull raw values once.
-    (((obv-slope-12 :f64)
+    (((obv-slope-12 :wat::core::f64)
       (:trading::types::Candle::Momentum/obv-slope-12 m))
-     ((volume-accel :f64)
+     ((volume-accel :wat::core::f64)
       (:trading::types::Candle::Momentum/volume-accel m))
-     ((vwap-distance-raw :f64)
+     ((vwap-distance-raw :wat::core::f64)
       (:trading::types::Candle::Persistence/vwap-distance p))
-     ((open :f64) (:trading::types::Ohlcv/open o))
-     ((high :f64) (:trading::types::Ohlcv/high o))
-     ((low :f64) (:trading::types::Ohlcv/low o))
-     ((close :f64) (:trading::types::Ohlcv/close o))
+     ((open :wat::core::f64) (:trading::types::Ohlcv/open o))
+     ((high :wat::core::f64) (:trading::types::Ohlcv/high o))
+     ((low :wat::core::f64) (:trading::types::Ohlcv/low o))
+     ((close :wat::core::f64) (:trading::types::Ohlcv/close o))
 
      ;; vwap-distance — direct scaled-linear at round-to-4.
-     ((vwap-distance :f64)
+     ((vwap-distance :wat::core::f64)
       (:trading::encoding::round-to-4 vwap-distance-raw))
 
      ;; Range-conditional compute setup.
-     ((range :f64) (:wat::core::- high low))
-     ((range-positive :bool) (:wat::core::> range 0.0))
+     ((range :wat::core::f64) (:wat::core::- high low))
+     ((range-positive :wat::core::bool) (:wat::core::> range 0.0))
 
      ;; buying-pressure: (close - low) / range else 0.5
-     ((buying-pressure :f64)
-      (:wat::core::if range-positive -> :f64
+     ((buying-pressure :wat::core::f64)
+      (:wat::core::if range-positive -> :wat::core::f64
         (:trading::encoding::round-to-2
           (:wat::core::/
             (:wat::core::- close low) range))
         0.5))
 
      ;; selling-pressure: (high - close) / range else 0.5
-     ((selling-pressure :f64)
-      (:wat::core::if range-positive -> :f64
+     ((selling-pressure :wat::core::f64)
+      (:wat::core::if range-positive -> :wat::core::f64
         (:trading::encoding::round-to-2
           (:wat::core::/
             (:wat::core::- high close) range))
@@ -89,10 +89,10 @@
 
      ;; body-ratio: abs(close - open) / range else 0.0. abs via
      ;; substrate f64::abs (wat-rs arc 046).
-     ((abs-body :f64)
+     ((abs-body :wat::core::f64)
       (:wat::core::f64::abs (:wat::core::- close open)))
-     ((body-ratio :f64)
-      (:wat::core::if range-positive -> :f64
+     ((body-ratio :wat::core::f64)
+      (:wat::core::if range-positive -> :wat::core::f64
         (:trading::encoding::round-to-2
           (:wat::core::/ abs-body range))
         0.0))

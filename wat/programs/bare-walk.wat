@@ -15,17 +15,17 @@
 
 
 (:wat::core::enum :trading::bare::Tick
-  (Started   (run-name :String) (planned :i64))
-  (Stopped   (n :i64)))
+  (Started   (run-name :wat::core::String) (planned :wat::core::i64))
+  (Stopped   (n :wat::core::i64)))
 
 
 ;; Bare walk — pure tail recursion over next!. Counter only.
 (:wat::core::define
   (:trading::bare/walk
     (stream :trading::candles::Stream)
-    (n :i64)
-    -> :i64)
-  (:wat::core::match (:trading::candles::next! stream) -> :i64
+    (n :wat::core::i64)
+    -> :wat::core::i64)
+  (:wat::core::match (:trading::candles::next! stream) -> :wat::core::i64
     ((Some _candle)
       (:trading::bare/walk stream (:wat::core::+ n 1)))
     (:None n)))
@@ -35,8 +35,8 @@
   (:trading::bare/inner
     (con-pool :wat::kernel::HandlePool<wat::std::service::Console::Handle>)
     (stream :trading::candles::Stream)
-    (run-name :String)
-    (planned :i64)
+    (run-name :wat::core::String)
+    (planned :wat::core::i64)
     -> :())
   (:wat::core::let*
     (((con-handle :wat::std::service::Console::Handle)
@@ -52,9 +52,9 @@
       (:wat::telemetry::ConsoleLogger/info logger
         (:trading::bare::Tick::Started run-name planned)))
      ((t-start :wat::time::Instant) (:wat::time::now))
-     ((n :i64) (:trading::bare/walk stream 0))
+     ((n :wat::core::i64) (:trading::bare/walk stream 0))
      ((t-end :wat::time::Instant) (:wat::time::now))
-     ((wall-ns :i64)
+     ((wall-ns :wat::core::i64)
       (:wat::core::- (:wat::time::epoch-nanos t-end)
                      (:wat::time::epoch-nanos t-start)))
      ((_stopped :())
@@ -85,7 +85,7 @@
       (:wat::io::IOWriter/open-file (:trading::run::Paths/out paths)))
      ((err-writer :wat::io::IOWriter)
       (:wat::io::IOWriter/open-file (:trading::run::Paths/err paths)))
-     ((planned :i64) 1000)
+     ((planned :wat::core::i64) 1000)
      ((stream :trading::candles::Stream)
       (:trading::candles::open-bounded "data/btc_5m_raw.parquet" planned))
      ((con-spawn :wat::std::service::Console::Spawn)

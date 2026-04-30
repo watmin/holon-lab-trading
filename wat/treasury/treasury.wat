@@ -43,8 +43,8 @@
 ;; balances map.
 (:wat::core::define
   (:trading::treasury::Treasury::fresh
-    (entry-fee :f64)
-    (exit-fee  :f64)
+    (entry-fee :wat::core::f64)
+    (exit-fee  :wat::core::f64)
     (balances  :trading::treasury::Balances)
     -> :trading::treasury::Treasury)
   (:trading::treasury::Treasury/new
@@ -80,7 +80,7 @@
 (:wat::core::define
   (:trading::treasury::Treasury/get-or-fresh-record
     (t :trading::treasury::Treasury)
-    (owner :i64)
+    (owner :wat::core::i64)
     -> :trading::treasury::ProposerRecord)
   (:wat::core::match
     (:wat::core::get
@@ -98,20 +98,20 @@
 (:wat::core::define
   (:trading::treasury::Treasury::issue-paper
     (t :trading::treasury::Treasury)
-    (owner :i64)
-    (from-asset :String)
-    (to-asset :String)
-    (price :f64)
-    (candle :i64)
-    (deadline-candles :i64)
+    (owner :wat::core::i64)
+    (from-asset :wat::core::String)
+    (to-asset :wat::core::String)
+    (price :wat::core::f64)
+    (candle :wat::core::i64)
+    (deadline-candles :wat::core::i64)
     -> :(trading::treasury::Treasury,trading::treasury::Receipt))
   (:wat::core::let*
-    (((id :i64) (:trading::treasury::Treasury/next-paper-id t))
-     ((amount :f64) 10000.0)
-     ((entry-fee :f64) (:trading::treasury::Treasury/entry-fee t))
-     ((fee :f64) (:wat::core::* amount entry-fee))
-     ((units :f64) (:wat::core::/ (:wat::core::- amount fee) price))
-     ((deadline :i64) (:wat::core::+ candle deadline-candles))
+    (((id :wat::core::i64) (:trading::treasury::Treasury/next-paper-id t))
+     ((amount :wat::core::f64) 10000.0)
+     ((entry-fee :wat::core::f64) (:trading::treasury::Treasury/entry-fee t))
+     ((fee :wat::core::f64) (:wat::core::* amount entry-fee))
+     ((units :wat::core::f64) (:wat::core::/ (:wat::core::- amount fee) price))
+     ((deadline :wat::core::i64) (:wat::core::+ candle deadline-candles))
      ((paper :trading::treasury::Paper)
       (:trading::treasury::Paper/new
         id owner from-asset to-asset
@@ -160,17 +160,17 @@
 (:wat::core::define
   (:trading::treasury::Treasury::gate-predicate
     (record :trading::treasury::ProposerRecord)
-    -> :bool)
+    -> :wat::core::bool)
   (:wat::core::let*
-    (((submitted :i64)
+    (((submitted :wat::core::i64)
       (:trading::treasury::ProposerRecord/paper-submitted record))
-     ((survived :i64)
+     ((survived :wat::core::i64)
       (:trading::treasury::ProposerRecord/paper-survived record))
-     ((failed :i64)
+     ((failed :wat::core::i64)
       (:trading::treasury::ProposerRecord/paper-failed record))
-     ((resolved :i64) (:wat::core::+ survived failed))
-     ((survival-rate :f64)
-      (:wat::core::if (:wat::core::> resolved 0) -> :f64
+     ((resolved :wat::core::i64) (:wat::core::+ survived failed))
+     ((survival-rate :wat::core::f64)
+      (:wat::core::if (:wat::core::> resolved 0) -> :wat::core::f64
         (:wat::core::/ (:wat::core::i64::to-f64 survived)
                        (:wat::core::i64::to-f64 resolved))
         0.0)))
@@ -190,12 +190,12 @@
 (:wat::core::define
   (:trading::treasury::Treasury::issue-real
     (t :trading::treasury::Treasury)
-    (owner :i64)
-    (from-asset :String)
-    (to-asset :String)
-    (price :f64)
-    (candle :i64)
-    (deadline-candles :i64)
+    (owner :wat::core::i64)
+    (from-asset :wat::core::String)
+    (to-asset :wat::core::String)
+    (price :wat::core::f64)
+    (candle :wat::core::i64)
+    (deadline-candles :wat::core::i64)
     -> :(trading::treasury::Treasury,Option<trading::treasury::Receipt>))
   (:wat::core::let*
     (((maybe-record :Option<trading::treasury::ProposerRecord>)
@@ -223,14 +223,14 @@
                   (:wat::core::tuple t :None)
                   ;; Treasury picks amount: min(50, balance).
                   (:wat::core::let*
-                    (((amount :f64)
+                    (((amount :wat::core::f64)
                       (:wat::core::if (:wat::core::< balance 50.0)
-                                      -> :f64 balance 50.0))
-                     ((id :i64) (:trading::treasury::Treasury/next-real-id t))
-                     ((entry-fee :f64) (:trading::treasury::Treasury/entry-fee t))
-                     ((fee :f64) (:wat::core::* amount entry-fee))
-                     ((units :f64) (:wat::core::/ (:wat::core::- amount fee) price))
-                     ((deadline :i64) (:wat::core::+ candle deadline-candles))
+                                      -> :wat::core::f64 balance 50.0))
+                     ((id :wat::core::i64) (:trading::treasury::Treasury/next-real-id t))
+                     ((entry-fee :wat::core::f64) (:trading::treasury::Treasury/entry-fee t))
+                     ((fee :wat::core::f64) (:wat::core::* amount entry-fee))
+                     ((units :wat::core::f64) (:wat::core::/ (:wat::core::- amount fee) price))
+                     ((deadline :wat::core::i64) (:wat::core::+ candle deadline-candles))
                      ((real :trading::treasury::Real)
                       (:trading::treasury::Real/new
                         id owner from-asset to-asset
@@ -274,8 +274,8 @@
 (:wat::core::define
   (:trading::treasury::Treasury::validate-exit
     (t :trading::treasury::Treasury)
-    (paper-id :i64)
-    (current-price :f64)
+    (paper-id :wat::core::i64)
+    (current-price :wat::core::f64)
     -> :Option<f64>)
   (:wat::core::match
     (:wat::core::get (:trading::treasury::Treasury/papers t) paper-id)
@@ -285,12 +285,12 @@
       (:wat::core::match (:trading::treasury::Paper/state paper) -> :Option<f64>
         (:trading::treasury::PositionState::Active
           (:wat::core::let*
-            (((units :f64) (:trading::treasury::Paper/units-acquired paper))
-             ((amount :f64) (:trading::treasury::Paper/amount paper))
-             ((current-value :f64) (:wat::core::* units current-price))
-             ((exit-fee :f64) (:trading::treasury::Treasury/exit-fee t))
-             ((fee :f64) (:wat::core::* current-value exit-fee))
-             ((residue :f64)
+            (((units :wat::core::f64) (:trading::treasury::Paper/units-acquired paper))
+             ((amount :wat::core::f64) (:trading::treasury::Paper/amount paper))
+             ((current-value :wat::core::f64) (:wat::core::* units current-price))
+             ((exit-fee :wat::core::f64) (:trading::treasury::Treasury/exit-fee t))
+             ((fee :wat::core::f64) (:wat::core::* current-value exit-fee))
+             ((residue :wat::core::f64)
               (:wat::core::- (:wat::core::- current-value amount) fee)))
             (:wat::core::if (:wat::core::> residue 0.0) -> :Option<f64>
               (Some residue)
@@ -306,8 +306,8 @@
 (:wat::core::define
   (:trading::treasury::Treasury::resolve-grace
     (t :trading::treasury::Treasury)
-    (paper-id :i64)
-    (current-price :f64)
+    (paper-id :wat::core::i64)
+    (current-price :wat::core::f64)
     -> :(trading::treasury::Treasury,Option<trading::treasury::Verdict>))
   (:wat::core::match
     (:trading::treasury::Treasury::validate-exit t paper-id current-price)
@@ -327,7 +327,7 @@
               (:trading::treasury::Paper/new
                 paper-id 0 "" "" 0.0 0.0 0.0 0 0
                 :trading::treasury::PositionState::Active))))
-         ((owner :i64) (:trading::treasury::Paper/owner paper))
+         ((owner :wat::core::i64) (:trading::treasury::Paper/owner paper))
          ((paper' :trading::treasury::Paper)
           (:trading::treasury::Paper/new
             (:trading::treasury::Paper/paper-id paper)
@@ -388,8 +388,8 @@
 (:wat::core::define
   (:trading::treasury::Treasury::check-deadlines
     (t :trading::treasury::Treasury)
-    (current-candle :i64)
-    (current-price :f64)
+    (current-candle :wat::core::i64)
+    (current-price :wat::core::f64)
     -> :(trading::treasury::Treasury,trading::treasury::Verdicts))
   (:wat::core::let*
     (((papers :trading::treasury::Papers)
@@ -413,12 +413,12 @@
              ((records-acc :trading::treasury::ProposerRecords) (:wat::core::third acc))
              ((state :trading::treasury::PositionState)
               (:trading::treasury::Paper/state paper))
-             ((id :i64) (:trading::treasury::Paper/paper-id paper))
-             ((deadline :i64) (:trading::treasury::Paper/deadline paper))
-             ((owner :i64) (:trading::treasury::Paper/owner paper))
-             ((expired? :bool)
+             ((id :wat::core::i64) (:trading::treasury::Paper/paper-id paper))
+             ((deadline :wat::core::i64) (:trading::treasury::Paper/deadline paper))
+             ((owner :wat::core::i64) (:trading::treasury::Paper/owner paper))
+             ((expired? :wat::core::bool)
               (:wat::core::and
-                (:wat::core::match state -> :bool
+                (:wat::core::match state -> :wat::core::bool
                   (:trading::treasury::PositionState::Active true)
                   (_ false))
                 (:wat::core::>= current-candle deadline))))
@@ -486,12 +486,12 @@
 (:wat::core::define
   (:trading::treasury::Treasury::active-paper-count
     (t :trading::treasury::Treasury)
-    -> :i64)
+    -> :wat::core::i64)
   (:wat::core::foldl
     (:wat::core::values (:trading::treasury::Treasury/papers t))
     0
     (:wat::core::lambda
-      ((acc :i64) (paper :trading::treasury::Paper) -> :i64)
-      (:wat::core::match (:trading::treasury::Paper/state paper) -> :i64
+      ((acc :wat::core::i64) (paper :trading::treasury::Paper) -> :wat::core::i64)
+      (:wat::core::match (:trading::treasury::Paper/state paper) -> :wat::core::i64
         (:trading::treasury::PositionState::Active (:wat::core::+ acc 1))
         (_ acc)))))

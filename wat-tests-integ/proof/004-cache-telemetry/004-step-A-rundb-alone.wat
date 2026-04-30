@@ -16,9 +16,9 @@
 (:deftest :trading::test::proofs::004::step-A-rundb-alone
   (:wat::core::let*
     (((now :wat::time::Instant) (:wat::time::now))
-     ((epoch-str :String)
+     ((epoch-str :wat::core::String)
       (:wat::core::i64::to-string (:wat::time::epoch-seconds now)))
-     ((db-path :String)
+     ((db-path :wat::core::String)
       (:wat::core::string::concat "runs/proof-004-A-" epoch-str ".db"))
      ((rundb-spawn :wat::telemetry::Service::Spawn<wat::telemetry::Event>)
       (:trading::telemetry::Sqlite/spawn db-path 1
@@ -40,8 +40,8 @@
           (:wat::core::second rundb-handle))
 
          ;; Build ONE Event::Log row.
-         ((time-ns :i64) (:wat::time::epoch-nanos (:wat::time::now)))
-         ((uuid :String) (:wat::telemetry::uuid::v4))
+         ((time-ns :wat::core::i64) (:wat::time::epoch-nanos (:wat::time::now)))
+         ((uuid :wat::core::String) (:wat::telemetry::uuid::v4))
          ((tags :wat::telemetry::Tags)
           (:wat::core::HashMap :wat::telemetry::Tag))
          ((event :wat::telemetry::Event)

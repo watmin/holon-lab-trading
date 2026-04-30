@@ -29,8 +29,8 @@
    ;; Tally on disconnect, and the test asserts on its fields. Mirrors
    ;; the AtrWindow/push shape (read accessors, build new via /new).
    (:wat::core::struct :trading::test::experiment::008::handles::Tally
-     (count :i64)
-     (sum   :i64))
+     (count :wat::core::i64)
+     (sum   :wat::core::i64))
 
    ;; Channel-shape aliases per chapter 76 / arc 077 — name nested
    ;; generic instantiations at the consumer. Each shape recurs at
@@ -47,7 +47,7 @@
 
    ;; Step 1 helper — trivial fn that returns a known constant.
    (:wat::core::define
-     (:trading::test::experiment::008::handles::return-42 -> :i64) 42)
+     (:trading::test::experiment::008::handles::return-42 -> :wat::core::i64) 42)
 
    ;; Step 2 helper — fn that panics with a known message.
    (:wat::core::define
@@ -63,9 +63,9 @@
    (:wat::core::define
      (:trading::test::experiment::008::handles::count-recv
        (rx :wat::kernel::QueueReceiver<i64>)
-       (acc :i64)
-       -> :i64)
-     (:wat::core::match (:wat::kernel::recv rx) -> :i64
+       (acc :wat::core::i64)
+       -> :wat::core::i64)
+     (:wat::core::match (:wat::kernel::recv rx) -> :wat::core::i64
        ((Some _v)
          (:trading::test::experiment::008::handles::count-recv rx (:wat::core::+ acc 1)))
        (:None acc)))
@@ -74,7 +74,7 @@
    (:wat::core::define
      (:trading::test::experiment::008::handles::run-counter
        (rx :wat::kernel::QueueReceiver<i64>)
-       -> :i64)
+       -> :wat::core::i64)
      (:trading::test::experiment::008::handles::count-recv rx 0))
 
    ;; Step 4 helper — req/resp round-trip worker.
@@ -106,15 +106,15 @@
    (:wat::core::define
      (:trading::test::experiment::008::handles::select-loop-step
        (rxs :trading::test::experiment::008::handles::Rxs)
-       (acc :i64)
-       -> :i64)
-     (:wat::core::if (:wat::core::empty? rxs) -> :i64
+       (acc :wat::core::i64)
+       -> :wat::core::i64)
+     (:wat::core::if (:wat::core::empty? rxs) -> :wat::core::i64
        acc
        (:wat::core::let*
          (((chosen :wat::kernel::Chosen<i64>) (:wat::kernel::select rxs))
-          ((idx :i64) (:wat::core::first chosen))
+          ((idx :wat::core::i64) (:wat::core::first chosen))
           ((maybe :Option<i64>) (:wat::core::second chosen)))
-         (:wat::core::match maybe -> :i64
+         (:wat::core::match maybe -> :wat::core::i64
            ((Some _v)
              (:trading::test::experiment::008::handles::select-loop-step
                rxs (:wat::core::+ acc 1)))
@@ -125,7 +125,7 @@
    (:wat::core::define
      (:trading::test::experiment::008::handles::run-selector
        (rxs :trading::test::experiment::008::handles::Rxs)
-       -> :i64)
+       -> :wat::core::i64)
      (:trading::test::experiment::008::handles::select-loop-step rxs 0))
 
    ;; Step 6 helper — req/resp PLUS telemetry shadow.
@@ -159,15 +159,15 @@
    (:wat::core::define
      (:trading::test::experiment::008::handles::sum-loop-step
        (rxs :trading::test::experiment::008::handles::Rxs)
-       (acc :i64)
-       -> :i64)
-     (:wat::core::if (:wat::core::empty? rxs) -> :i64
+       (acc :wat::core::i64)
+       -> :wat::core::i64)
+     (:wat::core::if (:wat::core::empty? rxs) -> :wat::core::i64
        acc
        (:wat::core::let*
          (((chosen :wat::kernel::Chosen<i64>) (:wat::kernel::select rxs))
-          ((idx :i64) (:wat::core::first chosen))
+          ((idx :wat::core::i64) (:wat::core::first chosen))
           ((maybe :Option<i64>) (:wat::core::second chosen)))
-         (:wat::core::match maybe -> :i64
+         (:wat::core::match maybe -> :wat::core::i64
            ((Some v)
              (:trading::test::experiment::008::handles::sum-loop-step
                rxs (:wat::core::+ acc v)))
@@ -178,7 +178,7 @@
    (:wat::core::define
      (:trading::test::experiment::008::handles::run-summer
        (rxs :trading::test::experiment::008::handles::Rxs)
-       -> :i64)
+       -> :wat::core::i64)
      (:trading::test::experiment::008::handles::sum-loop-step rxs 0))
 
    ;; Step 8 helpers — stateful recv-loop, struct accumulator.
@@ -252,7 +252,7 @@
     (:wat::core::match (:wat::kernel::join-result handle) -> :()
       ((Ok _) (:wat::test::assert-eq "expected-panic-not-ok" ""))
       ;; Arc 105 widened ThreadDiedError::Panic from 1 field to 2:
-      ;;   { message :String, failure :Option<wat::kernel::Failure> }
+      ;;   { message :wat::core::String, failure :Option<wat::kernel::Failure> }
       ;; We assert on the message; the Failure field is structured
       ;; assertion-payload data we don't need at this site.
       ((Err (:wat::kernel::ThreadDiedError::Panic msg _failure))
@@ -281,7 +281,7 @@
      ((handle :wat::kernel::ProgramHandle<i64>)
       (:wat::core::let*
         (((pair :wat::kernel::QueuePair<i64>)
-          (:wat::kernel::make-bounded-queue :i64 1))
+          (:wat::kernel::make-bounded-queue :wat::core::i64 1))
          ((tx :wat::kernel::QueueSender<i64>) (:wat::core::first pair))
          ((rx :wat::kernel::QueueReceiver<i64>) (:wat::core::second pair))
 
@@ -322,12 +322,12 @@
     (((handle :wat::kernel::ProgramHandle<()>)
       (:wat::core::let*
         (((req-pair :wat::kernel::QueuePair<i64>)
-          (:wat::kernel::make-bounded-queue :i64 1))
+          (:wat::kernel::make-bounded-queue :wat::core::i64 1))
          ((req-tx :wat::kernel::QueueSender<i64>) (:wat::core::first req-pair))
          ((req-rx :wat::kernel::QueueReceiver<i64>) (:wat::core::second req-pair))
 
          ((resp-pair :wat::kernel::QueuePair<i64>)
-          (:wat::kernel::make-bounded-queue :i64 1))
+          (:wat::kernel::make-bounded-queue :wat::core::i64 1))
          ((resp-tx :wat::kernel::QueueSender<i64>) (:wat::core::first resp-pair))
          ((resp-rx :wat::kernel::QueueReceiver<i64>) (:wat::core::second resp-pair))
 
@@ -373,12 +373,12 @@
     (((handle :wat::kernel::ProgramHandle<i64>)
       (:wat::core::let*
         (((p1 :wat::kernel::QueuePair<i64>)
-          (:wat::kernel::make-bounded-queue :i64 1))
+          (:wat::kernel::make-bounded-queue :wat::core::i64 1))
          ((tx1 :wat::kernel::QueueSender<i64>) (:wat::core::first p1))
          ((rx1 :wat::kernel::QueueReceiver<i64>) (:wat::core::second p1))
 
          ((p2 :wat::kernel::QueuePair<i64>)
-          (:wat::kernel::make-bounded-queue :i64 1))
+          (:wat::kernel::make-bounded-queue :wat::core::i64 1))
          ((tx2 :wat::kernel::QueueSender<i64>) (:wat::core::first p2))
          ((rx2 :wat::kernel::QueueReceiver<i64>) (:wat::core::second p2))
 
@@ -426,17 +426,17 @@
     (((handle :wat::kernel::ProgramHandle<()>)
       (:wat::core::let*
         (((req-pair :wat::kernel::QueuePair<i64>)
-          (:wat::kernel::make-bounded-queue :i64 1))
+          (:wat::kernel::make-bounded-queue :wat::core::i64 1))
          ((req-tx :wat::kernel::QueueSender<i64>) (:wat::core::first req-pair))
          ((req-rx :wat::kernel::QueueReceiver<i64>) (:wat::core::second req-pair))
 
          ((resp-pair :wat::kernel::QueuePair<i64>)
-          (:wat::kernel::make-bounded-queue :i64 1))
+          (:wat::kernel::make-bounded-queue :wat::core::i64 1))
          ((resp-tx :wat::kernel::QueueSender<i64>) (:wat::core::first resp-pair))
          ((resp-rx :wat::kernel::QueueReceiver<i64>) (:wat::core::second resp-pair))
 
          ((telem-pair :wat::kernel::QueuePair<i64>)
-          (:wat::kernel::make-bounded-queue :i64 1))
+          (:wat::kernel::make-bounded-queue :wat::core::i64 1))
          ((telem-tx :wat::kernel::QueueSender<i64>) (:wat::core::first telem-pair))
          ((telem-rx :wat::kernel::QueueReceiver<i64>) (:wat::core::second telem-pair))
 
@@ -497,8 +497,8 @@
          ((pairs :trading::test::experiment::008::handles::Pairs)
           (:wat::core::map
             (:wat::core::range 0 3)
-            (:wat::core::lambda ((_i :i64) -> :wat::kernel::QueuePair<i64>)
-              (:wat::kernel::make-bounded-queue :i64 1))))
+            (:wat::core::lambda ((_i :wat::core::i64) -> :wat::kernel::QueuePair<i64>)
+              (:wat::kernel::make-bounded-queue :wat::core::i64 1))))
 
          ((txs :trading::test::experiment::008::handles::Txs)
           (:wat::core::map pairs
@@ -564,7 +564,7 @@
     (((handle :wat::kernel::ProgramHandle<trading::test::experiment::008::handles::Tally>)
       (:wat::core::let*
         (((pair :wat::kernel::QueuePair<i64>)
-          (:wat::kernel::make-bounded-queue :i64 1))
+          (:wat::kernel::make-bounded-queue :wat::core::i64 1))
          ((tx :wat::kernel::QueueSender<i64>) (:wat::core::first pair))
          ((rx :wat::kernel::QueueReceiver<i64>) (:wat::core::second pair))
 
@@ -580,8 +580,8 @@
     (:wat::core::match (:wat::kernel::join-result handle) -> :()
       ((Ok tally)
         (:wat::core::let*
-          (((count :i64) (:trading::test::experiment::008::handles::Tally/count tally))
-           ((sum :i64)   (:trading::test::experiment::008::handles::Tally/sum tally))
+          (((count :wat::core::i64) (:trading::test::experiment::008::handles::Tally/count tally))
+           ((sum :wat::core::i64)   (:trading::test::experiment::008::handles::Tally/sum tally))
            ((_check-count :())
             (:wat::core::if (:wat::core::= count 4) -> :()
               ()

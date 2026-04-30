@@ -27,7 +27,7 @@
 
 ;; OHLCV row shape — what `next!` emits per pull. Aliased so every
 ;; consumer signature stops carrying the bare 6-tuple.
-;; (ts-us :i64, open :f64, high :f64, low :f64, close :f64, volume :f64)
+;; (ts-us :wat::core::i64, open :wat::core::f64, high :wat::core::f64, low :wat::core::f64, close :wat::core::f64, volume :wat::core::f64)
 ;;
 ;; The name `Candle` is taken — `:trading::types::Candle` is the
 ;; richer struct used downstream (with computed fields). `Ohlcv` is
@@ -39,7 +39,7 @@
 ;; Unbounded: emits until the parquet's natural end-of-stream.
 (:wat::core::define
   (:trading::candles::open
-    (path :String)
+    (path :wat::core::String)
     -> :trading::candles::Stream)
   (:rust::trading::CandleStream::open path))
 
@@ -52,8 +52,8 @@
 ;; end-of-stream, not how it loads.
 (:wat::core::define
   (:trading::candles::open-bounded
-    (path :String)
-    (n :i64)
+    (path :wat::core::String)
+    (n :wat::core::i64)
     -> :trading::candles::Stream)
   (:rust::trading::CandleStream::open_bounded path n))
 
@@ -70,5 +70,5 @@
 (:wat::core::define
   (:trading::candles::len
     (s :trading::candles::Stream)
-    -> :i64)
+    -> :wat::core::i64)
   (:rust::trading::CandleStream::len s))

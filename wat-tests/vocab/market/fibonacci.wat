@@ -10,7 +10,7 @@
   ((:wat::load-file! "wat/vocab/market/fibonacci.wat")
    (:wat::core::define
      (:test::fresh-roc
-       (rp-12 :f64) (rp-24 :f64) (rp-48 :f64)
+       (rp-12 :wat::core::f64) (rp-24 :wat::core::f64) (rp-48 :wat::core::f64)
        -> :trading::types::Candle::RateOfChange)
      (:trading::types::Candle::RateOfChange/new
        0.0 0.0 0.0 0.0    ;; roc-1, roc-3, roc-6, roc-12
@@ -52,10 +52,10 @@
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) 0.3))
-     ((scale :f64)
+     ((scale :wat::core::f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::- 0.0 scale))
-     ((rounded :f64) (:trading::encoding::round-to-2 0.3))
+     ((neg-scale :wat::core::f64) (:wat::core::- 0.0 scale))
+     ((rounded :wat::core::f64) (:trading::encoding::round-to-2 0.3))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "range-pos-12")
@@ -85,15 +85,15 @@
      ;; Expected: Bind(Atom("fib-dist-500"),
      ;;                Thermometer(round-to-2(0.6 - 0.5),
      ;;                            -scale, scale))
-     ((rounded :f64)
+     ((rounded :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::- 0.6 0.5)))
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) rounded))
-     ((scale :f64)
+     ((scale :wat::core::f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::- 0.0 scale))
+     ((neg-scale :wat::core::f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "fib-dist-500")

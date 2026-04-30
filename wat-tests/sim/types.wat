@@ -44,10 +44,10 @@
   (:wat::core::let*
     (((a :trading::sim::Action)
       (:trading::sim::Action::Open :trading::sim::Direction::Up))
-     ((is-open-up? :bool)
-      (:wat::core::match a -> :bool
+     ((is-open-up? :wat::core::bool)
+      (:wat::core::match a -> :wat::core::bool
         ((:trading::sim::Action::Open dir)
-          (:wat::core::match dir -> :bool
+          (:wat::core::match dir -> :wat::core::bool
             (:trading::sim::Direction::Up true)
             (_ false)))
         (_ false))))
@@ -57,12 +57,12 @@
   (:wat::core::let*
     (((h :trading::sim::Action) :trading::sim::Action::Hold)
      ((e :trading::sim::Action) :trading::sim::Action::Exit)
-     ((h-is-hold? :bool)
-      (:wat::core::match h -> :bool
+     ((h-is-hold? :wat::core::bool)
+      (:wat::core::match h -> :wat::core::bool
         (:trading::sim::Action::Hold true)
         (_ false)))
-     ((e-is-exit? :bool)
-      (:wat::core::match e -> :bool
+     ((e-is-exit? :wat::core::bool)
+      (:wat::core::match e -> :wat::core::bool
         (:trading::sim::Action::Exit true)
         (_ false))))
     (:wat::core::let*
@@ -76,8 +76,8 @@
   (:wat::core::let*
     (((ps :trading::sim::PositionState)
       (:trading::sim::PositionState::Grace 0.04))
-     ((residue :f64)
-      (:wat::core::match ps -> :f64
+     ((residue :wat::core::f64)
+      (:wat::core::match ps -> :wat::core::f64
         ((:trading::sim::PositionState::Grace r) r)
         (:trading::sim::PositionState::Active 0.0)
         (:trading::sim::PositionState::Violence 0.0))))
@@ -98,7 +98,7 @@
         :trading::sim::Decision::Hold
         surf))
      ;; Round-trip: cosine of the field's surface against itself = 1.
-     ((self-cos :f64)
+     ((self-cos :wat::core::f64)
       (:wat::holon::cosine
         (:trading::sim::TriggerEvent/surface te)
         surf)))
@@ -129,8 +129,8 @@
       (:wat::holon::Atom (:wat::core::quote :anything)))
      ((action :trading::sim::Action)
       ((:trading::sim::Predictor/predict predictor) dummy))
-     ((is-hold? :bool)
-      (:wat::core::match action -> :bool
+     ((is-hold? :wat::core::bool)
+      (:wat::core::match action -> :wat::core::bool
         (:trading::sim::Action::Hold true)
         (_ false))))
     (:wat::test::assert-eq is-hold? true)))

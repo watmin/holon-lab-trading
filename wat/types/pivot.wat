@@ -20,19 +20,19 @@
 (:wat::core::enum :trading::types::PhaseDirection :Up :Down :None)
 
 ;; A completed phase — appended to history when a phase closes.
-;; Rust `usize` candle indices → wat `:i64`.
+;; Rust `usize` candle indices → wat `:wat::core::i64`.
 (:wat::core::struct :trading::types::PhaseRecord
   (label         :trading::types::PhaseLabel)
   (direction     :trading::types::PhaseDirection)
-  (start-candle  :i64)
-  (end-candle    :i64)
-  (duration      :i64)
-  (close-min     :f64)
-  (close-max     :f64)
-  (close-avg     :f64)
-  (close-open    :f64)
-  (close-final   :f64)
-  (volume-avg    :f64))
+  (start-candle  :wat::core::i64)
+  (end-candle    :wat::core::i64)
+  (duration      :wat::core::i64)
+  (close-min     :wat::core::f64)
+  (close-max     :wat::core::f64)
+  (close-avg     :wat::core::f64)
+  (close-open    :wat::core::f64)
+  (close-final   :wat::core::f64)
+  (volume-avg    :wat::core::f64))
 
 ;; PhaseRecords — vector of completed phases. Plural-via-typealias
 ;; per the user direction "expressivity wins" — every site that

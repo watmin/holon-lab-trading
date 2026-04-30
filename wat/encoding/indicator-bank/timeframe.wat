@@ -15,10 +15,10 @@
 ;;               averaged. Range [-1, +1].
 ;;
 ;; Explicit:
-;;   :trading::encoding::compute-tf-ret  buf -> :f64
-;;   :trading::encoding::compute-tf-body buf -> :f64
+;;   :trading::encoding::compute-tf-ret  buf -> :wat::core::f64
+;;   :trading::encoding::compute-tf-body buf -> :wat::core::f64
 ;;   :trading::encoding::compute-tf-agreement
-;;     prev-close close tf-1h-buf tf-4h-buf -> :f64
+;;     prev-close close tf-1h-buf tf-4h-buf -> :wat::core::f64
 
 (:wat::load-file! "primitives.wat")
 
@@ -26,11 +26,11 @@
 ;; signum helper — returns -1.0, 0.0, or +1.0 based on sign.
 (:wat::core::define
   (:trading::encoding::signum
-    (x :f64)
-    -> :f64)
-  (:wat::core::if (:wat::core::> x 0.0) -> :f64
+    (x :wat::core::f64)
+    -> :wat::core::f64)
+  (:wat::core::if (:wat::core::> x 0.0) -> :wat::core::f64
     1.0
-    (:wat::core::if (:wat::core::< x 0.0) -> :f64
+    (:wat::core::if (:wat::core::< x 0.0) -> :wat::core::f64
       -1.0
       0.0)))
 
@@ -39,21 +39,21 @@
 (:wat::core::define
   (:trading::encoding::compute-tf-ret
     (buf :trading::encoding::RingBuffer)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::let*
-    (((len :i64) (:trading::encoding::RingBuffer::len buf)))
-    (:wat::core::if (:wat::core::< len 2) -> :f64
+    (((len :wat::core::i64) (:trading::encoding::RingBuffer::len buf)))
+    (:wat::core::if (:wat::core::< len 2) -> :wat::core::f64
       0.0
       (:wat::core::let*
-        (((newest :f64)
+        (((newest :wat::core::f64)
           (:wat::core::match
-            (:trading::encoding::RingBuffer::get buf 0) -> :f64
+            (:trading::encoding::RingBuffer::get buf 0) -> :wat::core::f64
             ((Some v) v) (:None 0.0)))
-         ((oldest :f64)
+         ((oldest :wat::core::f64)
           (:wat::core::match
-            (:trading::encoding::RingBuffer::get buf (:wat::core::- len 1)) -> :f64
+            (:trading::encoding::RingBuffer::get buf (:wat::core::- len 1)) -> :wat::core::f64
             ((Some v) v) (:None 0.0))))
-        (:wat::core::if (:wat::core::= oldest 0.0) -> :f64
+        (:wat::core::if (:wat::core::= oldest 0.0) -> :wat::core::f64
           0.0
           (:wat::core::/ (:wat::core::- newest oldest) oldest))))))
 
@@ -62,30 +62,30 @@
 (:wat::core::define
   (:trading::encoding::compute-tf-body
     (buf :trading::encoding::RingBuffer)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::let*
-    (((len :i64) (:trading::encoding::RingBuffer::len buf)))
-    (:wat::core::if (:wat::core::< len 2) -> :f64
+    (((len :wat::core::i64) (:trading::encoding::RingBuffer::len buf)))
+    (:wat::core::if (:wat::core::< len 2) -> :wat::core::f64
       0.0
       (:wat::core::let*
-        (((open-val :f64)
+        (((open-val :wat::core::f64)
           (:wat::core::match
-            (:trading::encoding::RingBuffer::get buf (:wat::core::- len 1)) -> :f64
+            (:trading::encoding::RingBuffer::get buf (:wat::core::- len 1)) -> :wat::core::f64
             ((Some v) v) (:None 0.0)))
-         ((close-val :f64)
+         ((close-val :wat::core::f64)
           (:wat::core::match
-            (:trading::encoding::RingBuffer::get buf 0) -> :f64
+            (:trading::encoding::RingBuffer::get buf 0) -> :wat::core::f64
             ((Some v) v) (:None 0.0)))
-         ((high-val :f64)
+         ((high-val :wat::core::f64)
           (:wat::core::match
-            (:trading::encoding::RingBuffer::max buf) -> :f64
+            (:trading::encoding::RingBuffer::max buf) -> :wat::core::f64
             ((Some v) v) (:None 0.0)))
-         ((low-val :f64)
+         ((low-val :wat::core::f64)
           (:wat::core::match
-            (:trading::encoding::RingBuffer::min buf) -> :f64
+            (:trading::encoding::RingBuffer::min buf) -> :wat::core::f64
             ((Some v) v) (:None 0.0)))
-         ((range :f64) (:wat::core::- high-val low-val)))
-        (:wat::core::if (:wat::core::= range 0.0) -> :f64
+         ((range :wat::core::f64) (:wat::core::- high-val low-val)))
+        (:wat::core::if (:wat::core::= range 0.0) -> :wat::core::f64
           0.0
           (:wat::core::/
             (:wat::core::f64::abs (:wat::core::- close-val open-val))
@@ -97,21 +97,21 @@
 ;; on direction; -1 means total disagreement.
 (:wat::core::define
   (:trading::encoding::compute-tf-agreement
-    (prev-close :f64)
-    (close :f64)
+    (prev-close :wat::core::f64)
+    (close :wat::core::f64)
     (tf-1h-buf :trading::encoding::RingBuffer)
     (tf-4h-buf :trading::encoding::RingBuffer)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::let*
-    (((ret-5m :f64)
-      (:wat::core::if (:wat::core::= prev-close 0.0) -> :f64
+    (((ret-5m :wat::core::f64)
+      (:wat::core::if (:wat::core::= prev-close 0.0) -> :wat::core::f64
         0.0
         (:wat::core::/ (:wat::core::- close prev-close) prev-close)))
-     ((ret-1h :f64) (:trading::encoding::compute-tf-ret tf-1h-buf))
-     ((ret-4h :f64) (:trading::encoding::compute-tf-ret tf-4h-buf))
-     ((s5 :f64) (:trading::encoding::signum ret-5m))
-     ((s1 :f64) (:trading::encoding::signum ret-1h))
-     ((s4 :f64) (:trading::encoding::signum ret-4h)))
+     ((ret-1h :wat::core::f64) (:trading::encoding::compute-tf-ret tf-1h-buf))
+     ((ret-4h :wat::core::f64) (:trading::encoding::compute-tf-ret tf-4h-buf))
+     ((s5 :wat::core::f64) (:trading::encoding::signum ret-5m))
+     ((s1 :wat::core::f64) (:trading::encoding::signum ret-1h))
+     ((s4 :wat::core::f64) (:trading::encoding::signum ret-4h)))
     (:wat::core::/
       (:wat::core::+
         (:wat::core::* s5 s1)

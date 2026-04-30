@@ -30,8 +30,8 @@
    ;; first real Treasury domain struct. Just (id, amount) for now;
    ;; future fields: entry-price, deadline, exit-target, etc.
    (:wat::core::struct :exp::Paper
-     (id :i64)
-     (amount :i64))
+     (id :wat::core::i64)
+     (amount :wat::core::i64))
 
    ;;
    ;; T1-T4a established the SHAPE with two placeholder counters.
@@ -43,11 +43,11 @@
    ;; State::fresh absorbs new fields — existing deftests that only
    ;; check counters keep working unchanged.
    (:wat::core::struct :exp::State
-     (tick-count    :i64)
-     (ping-count    :i64)
+     (tick-count    :wat::core::i64)
+     (ping-count    :wat::core::i64)
      (last-price    :Option<f64>)
      (open-papers   :Vec<exp::Paper>)
-     (next-paper-id :i64)
+     (next-paper-id :wat::core::i64)
      (closed-papers :Vec<exp::Paper>))
 
    ;; Convenience constructor — zero counts, no observed price, no
@@ -79,11 +79,11 @@
    ;; an inspect/get-treasury verb will follow the Snapshot pattern.
    (:wat::core::enum :exp::Request
      (Ping       (reply-tx :exp::ReplyTx))
-     (Tick       (price :f64))
+     (Tick       (price :wat::core::f64))
      (Snapshot   (reply-tx :wat::kernel::QueueSender<exp::State>))
-     (OpenPaper  (amount :i64)
+     (OpenPaper  (amount :wat::core::i64)
                  (reply-tx :wat::kernel::QueueSender<i64>))
-     (ClosePaper (id :i64)
+     (ClosePaper (id :wat::core::i64)
                  (reply-tx :exp::PaperReplyTx)))
 
    ;; Per-broker request channel typealiases.
@@ -125,7 +125,7 @@
        state
        (:wat::core::let*
          (((chosen :wat::kernel::Chosen<exp::Request>) (:wat::kernel::select req-rxs))
-          ((idx :i64) (:wat::core::first chosen))
+          ((idx :wat::core::i64) (:wat::core::first chosen))
           ((maybe :Option<exp::Request>) (:wat::core::second chosen)))
          (:wat::core::match maybe -> :exp::State
            ((Some req)
@@ -183,7 +183,7 @@
        ;;   - Increment next-paper-id so the next OpenPaper gets a fresh id
        ((:exp::Request::OpenPaper amount reply-tx)
          (:wat::core::let*
-           (((id :i64) (:exp::State/next-paper-id state))
+           (((id :wat::core::i64) (:exp::State/next-paper-id state))
             ((paper :exp::Paper) (:exp::Paper/new id amount))
             ((papers' :Vec<exp::Paper>)
              (:wat::core::conj (:exp::State/open-papers state) paper))
@@ -209,7 +209,7 @@
          (:wat::core::let*
            (((matches :Vec<exp::Paper>)
              (:wat::core::filter (:exp::State/open-papers state)
-               (:wat::core::lambda ((p :exp::Paper) -> :bool)
+               (:wat::core::lambda ((p :exp::Paper) -> :wat::core::bool)
                  (:wat::core::= (:exp::Paper/id p) id))))
             ((found :Option<exp::Paper>) (:wat::core::first matches)))
            (:wat::core::match found -> :exp::State
@@ -217,7 +217,7 @@
                (:wat::core::let*
                  (((remaining :Vec<exp::Paper>)
                    (:wat::core::filter (:exp::State/open-papers state)
-                     (:wat::core::lambda ((p :exp::Paper) -> :bool)
+                     (:wat::core::lambda ((p :exp::Paper) -> :wat::core::bool)
                        (:wat::core::not= (:exp::Paper/id p) id))))
                   ((closed' :Vec<exp::Paper>)
                    (:wat::core::conj (:exp::State/closed-papers state) paper))
@@ -243,12 +243,12 @@
    ;; (pool, driver). This is the canonical service-program shape per
    ;; SERVICE-PROGRAMS.md "the full service template".
    (:wat::core::define
-     (:exp::Service (count :i64) -> :exp::Spawn)
+     (:exp::Service (count :wat::core::i64) -> :exp::Spawn)
      (:wat::core::let*
        (((pairs :exp::ReqPairs)
          (:wat::core::map
            (:wat::core::range 0 count)
-           (:wat::core::lambda ((_i :i64) -> :wat::kernel::QueuePair<exp::Request>)
+           (:wat::core::lambda ((_i :wat::core::i64) -> :wat::kernel::QueuePair<exp::Request>)
              (:wat::kernel::make-bounded-queue :exp::Request 1))))
 
         ((req-txs :Vec<exp::ReqTx>)
@@ -408,8 +408,8 @@
     (:wat::core::match result -> :()
       ((Ok state)
         (:wat::core::let*
-          (((tc :i64) (:exp::State/tick-count state))
-           ((pc :i64) (:exp::State/ping-count state))
+          (((tc :wat::core::i64) (:exp::State/tick-count state))
+           ((pc :wat::core::i64) (:exp::State/ping-count state))
            ((_check-tc :())
             (:wat::core::if (:wat::core::= tc 3) -> :()
               ()
@@ -478,8 +478,8 @@
           (:wat::core::match snap1 -> :()
             ((Some s)
               (:wat::core::let*
-                (((tc :i64) (:exp::State/tick-count s))
-                 ((pc :i64) (:exp::State/ping-count s))
+                (((tc :wat::core::i64) (:exp::State/tick-count s))
+                 ((pc :wat::core::i64) (:exp::State/ping-count s))
                  ((_t :())
                   (:wat::core::if (:wat::core::= tc 1) -> :()
                     ()
@@ -498,8 +498,8 @@
           (:wat::core::match snap2 -> :()
             ((Some s)
               (:wat::core::let*
-                (((tc :i64) (:exp::State/tick-count s))
-                 ((pc :i64) (:exp::State/ping-count s))
+                (((tc :wat::core::i64) (:exp::State/tick-count s))
+                 ((pc :wat::core::i64) (:exp::State/ping-count s))
                  ((_t :())
                   (:wat::core::if (:wat::core::= tc 2) -> :()
                     ()
@@ -621,7 +621,7 @@
 
          ;; OpenPaper's reply channel — carries the new paper-id.
          ((id-pair :wat::kernel::QueuePair<i64>)
-          (:wat::kernel::make-bounded-queue :i64 1))
+          (:wat::kernel::make-bounded-queue :wat::core::i64 1))
          ((id-tx :wat::kernel::QueueSender<i64>) (:wat::core::first id-pair))
          ((id-rx :wat::kernel::QueueReceiver<i64>) (:wat::core::second id-pair))
 
@@ -685,8 +685,8 @@
             ((Some s)
               (:wat::core::let*
                 (((papers :Vec<exp::Paper>) (:exp::State/open-papers s))
-                 ((len :i64) (:wat::core::length papers))
-                 ((next-id :i64) (:exp::State/next-paper-id s))
+                 ((len :wat::core::i64) (:wat::core::length papers))
+                 ((next-id :wat::core::i64) (:exp::State/next-paper-id s))
                  ((_ :())
                   (:wat::core::if (:wat::core::= len 3) -> :()
                     ()
@@ -736,7 +736,7 @@
 
          ;; OpenPaper reply channel — carries paper-id.
          ((id-pair :wat::kernel::QueuePair<i64>)
-          (:wat::kernel::make-bounded-queue :i64 1))
+          (:wat::kernel::make-bounded-queue :wat::core::i64 1))
          ((id-tx :wat::kernel::QueueSender<i64>) (:wat::core::first id-pair))
          ((id-rx :wat::kernel::QueueReceiver<i64>) (:wat::core::second id-pair))
 
@@ -779,8 +779,8 @@
               (:wat::core::match maybe-paper -> :()
                 ((Some p)
                   (:wat::core::let*
-                    (((pid :i64) (:exp::Paper/id p))
-                     ((amt :i64) (:exp::Paper/amount p))
+                    (((pid :wat::core::i64) (:exp::Paper/id p))
+                     ((amt :wat::core::i64) (:exp::Paper/amount p))
                      ((_ :())
                       (:wat::core::if (:wat::core::= pid 1) -> :()
                         ()
@@ -799,9 +799,9 @@
           (:wat::core::match snap1 -> :()
             ((Some s)
               (:wat::core::let*
-                (((open-len :i64)
+                (((open-len :wat::core::i64)
                   (:wat::core::length (:exp::State/open-papers s)))
-                 ((closed-len :i64)
+                 ((closed-len :wat::core::i64)
                   (:wat::core::length (:exp::State/closed-papers s)))
                  ((_ :())
                   (:wat::core::if (:wat::core::= open-len 2) -> :()

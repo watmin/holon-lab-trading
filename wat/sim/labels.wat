@@ -83,8 +83,8 @@
 ;; directly.
 (:wat::core::define
   (:trading::sim::paper-label
-    (residue :f64)
-    (price-move :f64)
+    (residue :wat::core::f64)
+    (price-move :wat::core::f64)
     -> :wat::holon::HolonAST)
   (:trading::sim::force
     (:wat::holon::Bundle

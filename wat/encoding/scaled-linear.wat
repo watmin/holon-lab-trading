@@ -63,8 +63,8 @@
 
 (:wat::core::define
   (:trading::encoding::scaled-linear
-    (name :String)
-    (value :f64)
+    (name :wat::core::String)
+    (value :wat::core::f64)
     (scales :trading::encoding::Scales)
     -> :trading::encoding::ScaleEmission)
   (:wat::core::let*
@@ -75,11 +75,11 @@
         (:None    (:trading::encoding::ScaleTracker::fresh))))
      ((updated-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update prev value))
-     ((scale :f64)
+     ((scale :wat::core::f64)
       (:trading::encoding::ScaleTracker::scale updated-tracker))
-     ((neg-scale :f64)
+     ((neg-scale :wat::core::f64)
       (:wat::core::- 0.0 scale))
-     ((bucketed-value :f64)
+     ((bucketed-value :wat::core::f64)
       (:trading::encoding::ScaleTracker::bucket value scale))
      ((fact :wat::holon::HolonAST)
       (:wat::holon::Bind

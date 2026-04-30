@@ -16,10 +16,10 @@
    (:wat::load-file! "wat/encoding/scaled-linear.wat")
    (:wat::core::define
      (:test::repeat-scaled-linear
-       (name :String)
-       (v :f64)
+       (name :wat::core::String)
+       (v :wat::core::f64)
        (scales :trading::encoding::Scales)
-       (n :i64)
+       (n :wat::core::i64)
        -> :trading::encoding::Scales)
      (:wat::core::if (:wat::core::<= n 0)
                      -> :trading::encoding::Scales
@@ -121,7 +121,7 @@
     ;; original `empty` must still be empty — :None lookup.
     (:wat::test::assert-eq
       (:wat::core::match (:wat::core::get empty "rsi")
-                         -> :bool
+                         -> :wat::core::bool
         ((Some _) false)
         (:None    true))
       true)))
@@ -153,11 +153,11 @@
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) 0.5))
-     ((scale :f64)
+     ((scale :wat::core::f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64)
+     ((neg-scale :wat::core::f64)
       (:wat::core::- 0.0 scale))
-     ((rounded :f64)
+     ((rounded :wat::core::f64)
       (:trading::encoding::round-to-2 0.5))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind

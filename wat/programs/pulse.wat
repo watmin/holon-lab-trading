@@ -27,8 +27,8 @@
 ;; ─── Console heartbeat enum ─────────────────────────────────────
 
 (:wat::core::enum :trading::pulse::Tick
-  (Started (run-name :String) (planned :i64))
-  (Stopped (n :i64)))
+  (Started (run-name :wat::core::String) (planned :wat::core::i64))
+  (Stopped (n :wat::core::i64)))
 
 
 ;; ─── Pulse summary form — Event::Log payload ───────────────────
@@ -39,9 +39,9 @@
 ;; carrying this RunSummary. Both rows share the wu's uuid; SQL can
 ;; cross-join via `metric.uuid = log.uuid`.
 (:wat::core::struct :trading::pulse::RunSummary
-  (run-name :String)
-  (planned  :i64)
-  (walked   :i64))
+  (run-name :wat::core::String)
+  (planned  :wat::core::i64)
+  (walked   :wat::core::i64))
 
 
 ;; ─── Walker — tail-recursive count over the stream ──────────────
@@ -50,9 +50,9 @@
   (:trading::pulse/walk-step
     (wu :wat::telemetry::WorkUnit)
     (stream :trading::candles::Stream)
-    (n :i64)
-    -> :i64)
-  (:wat::core::match (:trading::candles::next! stream) -> :i64
+    (n :wat::core::i64)
+    -> :wat::core::i64)
+  (:wat::core::match (:trading::candles::next! stream) -> :wat::core::i64
     ((Some _candle)
       (:wat::core::let*
         (((_ :()) (:wat::telemetry::WorkUnit/incr! wu (:wat::holon::Atom :candle))))
@@ -69,8 +69,8 @@
     (con-pool :wat::kernel::HandlePool<wat::std::service::Console::Handle>)
     (sqlite-pool :wat::telemetry::Service::HandlePool<wat::telemetry::Event>)
     (stream :trading::candles::Stream)
-    (run-name :String)
-    (planned :i64)
+    (run-name :wat::core::String)
+    (planned :wat::core::i64)
     -> :())
   (:wat::core::let*
     (((con-handle :wat::std::service::Console::Handle)
@@ -100,11 +100,11 @@
       (:wat::core::assoc
         (:wat::core::HashMap :wat::telemetry::Tag)
         (:wat::holon::Atom :run) (:wat::holon::Atom run-name)))
-     ((n :i64)
+     ((n :wat::core::i64)
       (scope tags
-        (:wat::core::lambda ((wu :wat::telemetry::WorkUnit) -> :i64)
+        (:wat::core::lambda ((wu :wat::telemetry::WorkUnit) -> :wat::core::i64)
           (:wat::core::let*
-            (((walked :i64) (:trading::pulse/walk-step wu stream 0))
+            (((walked :wat::core::i64) (:trading::pulse/walk-step wu stream 0))
              ((summary :trading::pulse::RunSummary)
               (:trading::pulse::RunSummary/new run-name planned walked))
              ((_log :())
@@ -132,9 +132,9 @@
       (:wat::io::IOWriter/open-file (:trading::run::Paths/out paths)))
      ((err-writer :wat::io::IOWriter)
       (:wat::io::IOWriter/open-file (:trading::run::Paths/err paths)))
-     ((db-path  :String) (:trading::run::Paths/db paths))
-     ((run-name :String) db-path)
-     ((planned :i64) 1000)
+     ((db-path  :wat::core::String) (:trading::run::Paths/db paths))
+     ((run-name :wat::core::String) db-path)
+     ((planned :wat::core::i64) 1000)
      ((stream :trading::candles::Stream)
       (:trading::candles::open-bounded "data/btc_5m_raw.parquet" planned))
      ((con-spawn :wat::std::service::Console::Spawn)

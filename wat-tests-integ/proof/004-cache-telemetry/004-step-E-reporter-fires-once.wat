@@ -19,9 +19,9 @@
 (:deftest :trading::test::proofs::004::step-E-reporter-fires-once
   (:wat::core::let*
     (((now :wat::time::Instant) (:wat::time::now))
-     ((epoch-str :String)
+     ((epoch-str :wat::core::String)
       (:wat::core::i64::to-string (:wat::time::epoch-seconds now)))
-     ((db-path :String)
+     ((db-path :wat::core::String)
       (:wat::core::string::concat "runs/proof-004-E-" epoch-str ".db"))
 
      ((rundb-spawn :wat::telemetry::Service::Spawn<wat::telemetry::Event>)
@@ -51,7 +51,7 @@
           (:wat::holon::lru::HologramCacheService::MetricsCadence/new
             0
             (:wat::core::lambda
-              ((_g :i64)
+              ((_g :wat::core::i64)
                (_s :wat::holon::lru::HologramCacheService::Stats)
                -> :(i64,bool))
               (:wat::core::tuple 0 true))))

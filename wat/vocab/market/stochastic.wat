@@ -33,24 +33,24 @@
     -> :trading::encoding::VocabEmission)
   (:wat::core::let*
     ;; Normalize stochastic %K/%D to [0, 1].
-    (((k-norm :f64)
+    (((k-norm :wat::core::f64)
       (:wat::core::/
         (:trading::types::Candle::Momentum/stoch-k m) 100.0))
-     ((d-norm :f64)
+     ((d-norm :wat::core::f64)
       (:wat::core::/
         (:trading::types::Candle::Momentum/stoch-d m) 100.0))
 
      ;; Four atom values, rounded.
-     ((stoch-k :f64) (:trading::encoding::round-to-2 k-norm))
-     ((stoch-d :f64) (:trading::encoding::round-to-2 d-norm))
-     ((stoch-kd-spread :f64)
+     ((stoch-k :wat::core::f64) (:trading::encoding::round-to-2 k-norm))
+     ((stoch-d :wat::core::f64) (:trading::encoding::round-to-2 d-norm))
+     ((stoch-kd-spread :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::- k-norm d-norm)))
 
      ;; Clamp the cross-delta to [-1, 1] via substrate f64::clamp.
-     ((raw-delta :f64)
+     ((raw-delta :wat::core::f64)
       (:trading::types::Candle::Divergence/stoch-cross-delta d))
-     ((stoch-cross-delta :f64)
+     ((stoch-cross-delta :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::f64::clamp raw-delta -1.0 1.0)))
 

@@ -13,7 +13,7 @@
 ;; ── Refactor note (arc 026 slice 2) ──
 ;; AtrState pre-refactor held (period, value, count, accum, prev-close,
 ;; started) — the Wilder math was inlined. After refactor: AtrState
-;; holds (wilder :WilderState, prev-close :f64, started :bool); old
+;; holds (wilder :WilderState, prev-close :wat::core::f64, started :wat::core::bool); old
 ;; field accessors (`:AtrState/value` / `/count` / `/period` / `/accum`)
 ;; go away. New explicit defines for the common reads:
 ;;   - `:AtrState::value`   delegates to wilder.value
@@ -27,8 +27,8 @@
 ;; Explicit:
 ;;   :trading::encoding::AtrState::fresh period -> AtrState
 ;;   :trading::encoding::AtrState::update state high low close -> AtrState
-;;   :trading::encoding::AtrState::value state -> :f64
-;;   :trading::encoding::AtrState::ready? state -> :bool
+;;   :trading::encoding::AtrState::value state -> :wat::core::f64
+;;   :trading::encoding::AtrState::ready? state -> :wat::core::bool
 
 ;; Standalone-loadable: pull WilderState in.
 (:wat::load-file! "indicator-bank/primitives.wat")
@@ -36,15 +36,15 @@
 
 (:wat::core::struct :trading::encoding::AtrState
   (wilder     :trading::encoding::WilderState)
-  (prev-close :f64)
-  (started    :bool))
+  (prev-close :wat::core::f64)
+  (started    :wat::core::bool))
 
 
 ;; Fresh state — empty Wilder accumulator at the given period,
 ;; started=false. The first `update` skips the prev-close branch.
 (:wat::core::define
   (:trading::encoding::AtrState::fresh
-    (period :i64)
+    (period :wat::core::i64)
     -> :trading::encoding::AtrState)
   (:trading::encoding::AtrState/new
     (:trading::encoding::WilderState::fresh period)
@@ -56,19 +56,19 @@
 (:wat::core::define
   (:trading::encoding::AtrState::update
     (state :trading::encoding::AtrState)
-    (high :f64)
-    (low :f64)
-    (close :f64)
+    (high :wat::core::f64)
+    (low :wat::core::f64)
+    (close :wat::core::f64)
     -> :trading::encoding::AtrState)
   (:wat::core::let*
-    (((started :bool) (:trading::encoding::AtrState/started state))
-     ((prev-close :f64) (:trading::encoding::AtrState/prev-close state))
-     ((tr :f64)
-      (:wat::core::if started -> :f64
+    (((started :wat::core::bool) (:trading::encoding::AtrState/started state))
+     ((prev-close :wat::core::f64) (:trading::encoding::AtrState/prev-close state))
+     ((tr :wat::core::f64)
+      (:wat::core::if started -> :wat::core::f64
         (:wat::core::let*
-          (((hl :f64) (:wat::core::- high low))
-           ((hc :f64) (:wat::core::f64::abs (:wat::core::- high prev-close)))
-           ((lc :f64) (:wat::core::f64::abs (:wat::core::- low prev-close))))
+          (((hl :wat::core::f64) (:wat::core::- high low))
+           ((hc :wat::core::f64) (:wat::core::f64::abs (:wat::core::- high prev-close)))
+           ((lc :wat::core::f64) (:wat::core::f64::abs (:wat::core::- low prev-close))))
           (:wat::core::f64::max (:wat::core::f64::max hl hc) lc))
         (:wat::core::- high low)))
      ((new-wilder :trading::encoding::WilderState)
@@ -82,7 +82,7 @@
 (:wat::core::define
   (:trading::encoding::AtrState::value
     (state :trading::encoding::AtrState)
-    -> :f64)
+    -> :wat::core::f64)
   (:trading::encoding::WilderState/value
     (:trading::encoding::AtrState/wilder state)))
 
@@ -91,6 +91,6 @@
 (:wat::core::define
   (:trading::encoding::AtrState::ready?
     (state :trading::encoding::AtrState)
-    -> :bool)
+    -> :wat::core::bool)
   (:trading::encoding::WilderState::ready?
     (:trading::encoding::AtrState/wilder state)))

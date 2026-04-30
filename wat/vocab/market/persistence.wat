@@ -34,13 +34,13 @@
     -> :trading::encoding::VocabEmission)
   (:wat::core::let*
     ;; Normalize + round the three values.
-    (((hurst :f64)
+    (((hurst :wat::core::f64)
       (:trading::encoding::round-to-2
         (:trading::types::Candle::Persistence/hurst p)))
-     ((autocorr :f64)
+     ((autocorr :wat::core::f64)
       (:trading::encoding::round-to-2
         (:trading::types::Candle::Persistence/autocorrelation p)))
-     ((adx :f64)
+     ((adx :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::/
           (:trading::types::Candle::Momentum/adx m) 100.0)))

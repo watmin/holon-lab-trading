@@ -50,11 +50,11 @@
 ;; Tagged at write so SQL-side parsers read back the typed fields
 ;; (hits/misses/ops/hit-rate/size) without ad-hoc EDN traversal.
 (:wat::core::struct :trading::sim::EncodeCacheSnapshot
-  (hits     :i64)
-  (misses   :i64)
-  (ops      :i64)
-  (hit-rate :f64)
-  (size     :i64))
+  (hits     :wat::core::i64)
+  (misses   :wat::core::i64)
+  (ops      :wat::core::i64)
+  (hit-rate :wat::core::f64)
+  (size     :wat::core::i64))
 
 
 ;; The encode cache itself.
@@ -74,7 +74,7 @@
 ;; budget headline.
 (:wat::core::define
   (:trading::sim::encode-cache-new
-    (capacity :i64)
+    (capacity :wat::core::i64)
     -> :trading::sim::EncodeCache)
   (:wat::lru::LocalCache::new capacity))
 
@@ -94,11 +94,11 @@
 (:wat::core::define
   (:trading::sim::encode-stats/incr
     (stats :trading::sim::EncodeStats)
-    (key :String)
+    (key :wat::core::String)
     -> :())
   (:wat::core::let*
-    (((current :i64)
-      (:wat::core::match (:wat::lru::LocalCache::get stats key) -> :i64
+    (((current :wat::core::i64)
+      (:wat::core::match (:wat::lru::LocalCache::get stats key) -> :wat::core::i64
         ((Some n) n)
         (:None 0))))
     (:wat::core::let*
@@ -111,9 +111,9 @@
 (:wat::core::define
   (:trading::sim::encode-stats/get
     (stats :trading::sim::EncodeStats)
-    (key :String)
-    -> :i64)
-  (:wat::core::match (:wat::lru::LocalCache::get stats key) -> :i64
+    (key :wat::core::String)
+    -> :wat::core::i64)
+  (:wat::core::match (:wat::lru::LocalCache::get stats key) -> :wat::core::i64
     ((Some n) n)
     (:None 0)))
 
@@ -155,16 +155,16 @@
   (:trading::sim::encode-cache-stats
     (cache    :trading::sim::EncodeCache)
     (stats    :trading::sim::EncodeStats)
-    (run-name :String)
-    (time-ns  :i64)
+    (run-name :wat::core::String)
+    (time-ns  :wat::core::i64)
     -> :wat::telemetry::Event)
   (:wat::core::let*
-    (((hits   :i64) (:trading::sim::encode-stats/get stats "hits"))
-     ((misses :i64) (:trading::sim::encode-stats/get stats "misses"))
-     ((ops    :i64) (:trading::sim::encode-stats/get stats "ops"))
-     ((size   :i64) (:wat::lru::LocalCache::len cache))
-     ((hit-rate :f64)
-      (:wat::core::if (:wat::core::> ops 0) -> :f64
+    (((hits   :wat::core::i64) (:trading::sim::encode-stats/get stats "hits"))
+     ((misses :wat::core::i64) (:trading::sim::encode-stats/get stats "misses"))
+     ((ops    :wat::core::i64) (:trading::sim::encode-stats/get stats "ops"))
+     ((size   :wat::core::i64) (:wat::lru::LocalCache::len cache))
+     ((hit-rate :wat::core::f64)
+      (:wat::core::if (:wat::core::> ops 0) -> :wat::core::f64
         (:wat::core::/ (:wat::core::i64::to-f64 hits)
                        (:wat::core::i64::to-f64 ops))
         0.0))
@@ -172,7 +172,7 @@
       (:trading::sim::EncodeCacheSnapshot/new
         hits misses ops hit-rate size))
      ((data-ast :wat::holon::HolonAST) (:wat::holon::Atom snap))
-     ((uuid :String) (:wat::telemetry::uuid::v4))
+     ((uuid :wat::core::String) (:wat::telemetry::uuid::v4))
      ((ns-ast    :wat::holon::HolonAST) (:wat::holon::Atom :trading.encode-cache))
      ((cal-ast   :wat::holon::HolonAST) (:wat::holon::Atom :predictor))
      ((level-ast :wat::holon::HolonAST) (:wat::holon::Atom :info))

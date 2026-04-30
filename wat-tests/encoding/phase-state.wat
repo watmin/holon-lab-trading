@@ -71,15 +71,15 @@
      ;; extreme=103, close=103, 103 >= 103-2.5 → Peak.
      ((s4 :trading::encoding::PhaseState)
       (:trading::encoding::PhaseState::step s3 103.0 50.0 4 5.0))
-     ((label-is-peak? :bool)
-      (:wat::core::match (:trading::encoding::PhaseState/current-label s4) -> :bool
+     ((label-is-peak? :wat::core::bool)
+      (:wat::core::match (:trading::encoding::PhaseState/current-label s4) -> :wat::core::bool
         (:trading::types::PhaseLabel::Peak true)
         (_ false)))
-     ((tracking-is-rising? :bool)
-      (:wat::core::match (:trading::encoding::PhaseState/tracking s4) -> :bool
+     ((tracking-is-rising? :wat::core::bool)
+      (:wat::core::match (:trading::encoding::PhaseState/tracking s4) -> :wat::core::bool
         (:trading::encoding::TrackingState::Rising true)
         (_ false)))
-     ((history-len :i64)
+     ((history-len :wat::core::i64)
       (:wat::core::length (:trading::encoding::PhaseState/phase-history s4))))
     (:wat::core::let*
       (((u1 :()) (:wat::test::assert-eq label-is-peak? true))
@@ -116,16 +116,16 @@
       (:trading::encoding::PhaseState/current-label s6))
      ((label-s7 :trading::types::PhaseLabel)
       (:trading::encoding::PhaseState/current-label s7))
-     ((s6-is-transition? :bool)
-      (:wat::core::match label-s6 -> :bool
+     ((s6-is-transition? :wat::core::bool)
+      (:wat::core::match label-s6 -> :wat::core::bool
         (:trading::types::PhaseLabel::Transition true)
         (_ false)))
-     ((s7-is-valley? :bool)
-      (:wat::core::match label-s7 -> :bool
+     ((s7-is-valley? :wat::core::bool)
+      (:wat::core::match label-s7 -> :wat::core::bool
         (:trading::types::PhaseLabel::Valley true)
         (_ false)))
-     ((s7-tracking-falling? :bool)
-      (:wat::core::match (:trading::encoding::PhaseState/tracking s7) -> :bool
+     ((s7-tracking-falling? :wat::core::bool)
+      (:wat::core::match (:trading::encoding::PhaseState/tracking s7) -> :wat::core::bool
         (:trading::encoding::TrackingState::Falling true)
         (_ false))))
     (:wat::core::let*
@@ -153,12 +153,12 @@
       (:trading::encoding::PhaseState::step s3 108.0 50.0 4 10.0))
      ((s5 :trading::encoding::PhaseState)
       (:trading::encoding::PhaseState::step s4 104.0 50.0 5 10.0))
-     ((s2-is-peak? :bool)
-      (:wat::core::match (:trading::encoding::PhaseState/current-label s2) -> :bool
+     ((s2-is-peak? :wat::core::bool)
+      (:wat::core::match (:trading::encoding::PhaseState/current-label s2) -> :wat::core::bool
         (:trading::types::PhaseLabel::Peak true)
         (_ false)))
-     ((s5-is-valley? :bool)
-      (:wat::core::match (:trading::encoding::PhaseState/current-label s5) -> :bool
+     ((s5-is-valley? :wat::core::bool)
+      (:wat::core::match (:trading::encoding::PhaseState/current-label s5) -> :wat::core::bool
         (:trading::types::PhaseLabel::Valley true)
         (_ false))))
     (:wat::core::let*

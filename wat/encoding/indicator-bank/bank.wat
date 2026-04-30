@@ -74,7 +74,7 @@
   ;; here; ATR-history-12 buffer also retained for any other
   ;; consumers; both at period 14)
   (chop-buf         :trading::encoding::RingBuffer)
-  (chop-atr-sum     :f64)
+  (chop-atr-sum     :wat::core::f64)
   ;; Multi-timeframe
   (tf-1h-buf        :trading::encoding::RingBuffer)
   (tf-1h-high       :trading::encoding::RingBuffer)
@@ -99,16 +99,16 @@
   (rsi-peak-buf     :trading::encoding::RingBuffer)
   (price-peak-buf   :trading::encoding::RingBuffer)
   ;; Cross deltas
-  (prev-tk-spread   :f64)
-  (prev-stoch-kd    :f64)
+  (prev-tk-spread   :wat::core::f64)
+  (prev-stoch-kd    :wat::core::f64)
   ;; Price action
   (consecutive      :trading::encoding::ConsecutiveState)
   ;; Phase labeler
   (phase-state      :trading::encoding::PhaseState)
   ;; Previous values
-  (prev-close       :f64)
+  (prev-close       :wat::core::f64)
   ;; Counter
-  (count            :i64))
+  (count            :wat::core::i64))
 
 
 ;; ─── fresh ────────────────────────────────────────────────────────
@@ -185,11 +185,11 @@
     (ohlcv :trading::types::Ohlcv)
     -> :(trading::encoding::IndicatorBank,trading::types::Candle))
   (:wat::core::let*
-    (((o :f64) (:trading::types::Ohlcv/open ohlcv))
-     ((h :f64) (:trading::types::Ohlcv/high ohlcv))
-     ((l :f64) (:trading::types::Ohlcv/low ohlcv))
-     ((c :f64) (:trading::types::Ohlcv/close ohlcv))
-     ((v :f64) (:trading::types::Ohlcv/volume ohlcv))
+    (((o :wat::core::f64) (:trading::types::Ohlcv/open ohlcv))
+     ((h :wat::core::f64) (:trading::types::Ohlcv/high ohlcv))
+     ((l :wat::core::f64) (:trading::types::Ohlcv/low ohlcv))
+     ((c :wat::core::f64) (:trading::types::Ohlcv/close ohlcv))
+     ((v :wat::core::f64) (:trading::types::Ohlcv/volume ohlcv))
 
      ;; ── 1. Step every per-indicator state ─────────────────────
      ((sma20'   :trading::encoding::SmaState)
@@ -270,16 +270,16 @@
      ;; Choppiness: ATR sum with peek-and-subtract on eviction.
      ((chop-buf-prev :trading::encoding::RingBuffer)
       (:trading::encoding::IndicatorBank/chop-buf bank))
-     ((chop-was-full? :bool)
+     ((chop-was-full? :wat::core::bool)
       (:trading::encoding::RingBuffer::full? chop-buf-prev))
-     ((chop-evicted :f64)
-      (:wat::core::if chop-was-full? -> :f64
+     ((chop-evicted :wat::core::f64)
+      (:wat::core::if chop-was-full? -> :wat::core::f64
         (:wat::core::match
           (:trading::encoding::RingBuffer::get
             chop-buf-prev
             (:wat::core::-
               (:trading::encoding::RingBuffer::len chop-buf-prev) 1))
-          -> :f64
+          -> :wat::core::f64
           ((Some x) x) (:None 0.0))
         0.0))
      ((chop-buf' :trading::encoding::RingBuffer)
@@ -289,8 +289,8 @@
           chop-buf-prev
           (:trading::encoding::AtrState::value atr'))
         chop-buf-prev))
-     ((chop-atr-sum' :f64)
-      (:wat::core::if (:trading::encoding::AtrState::ready? atr') -> :f64
+     ((chop-atr-sum' :wat::core::f64)
+      (:wat::core::if (:trading::encoding::AtrState::ready? atr') -> :wat::core::f64
         (:wat::core::+
           (:wat::core::- (:trading::encoding::IndicatorBank/chop-atr-sum bank)
                          chop-evicted)
@@ -340,14 +340,14 @@
       (:trading::encoding::RingBuffer::push
         (:trading::encoding::IndicatorBank/var-ratio-buf bank) c))
      ;; Entropy: discretize the return into a bin BEFORE pushing.
-     ((entropy-ret :f64)
+     ((entropy-ret :wat::core::f64)
       (:wat::core::if (:wat::core::= (:trading::encoding::IndicatorBank/prev-close bank)
-                                     0.0) -> :f64
+                                     0.0) -> :wat::core::f64
         0.0
         (:wat::core::/
           (:wat::core::- c (:trading::encoding::IndicatorBank/prev-close bank))
           (:trading::encoding::IndicatorBank/prev-close bank))))
-     ((entropy-bin :f64) (:trading::encoding::compute-entropy-bin entropy-ret))
+     ((entropy-bin :wat::core::f64) (:trading::encoding::compute-entropy-bin entropy-ret))
      ((entropy-buf' :trading::encoding::RingBuffer)
       (:trading::encoding::RingBuffer::push
         (:trading::encoding::IndicatorBank/entropy-buf bank) entropy-bin))
@@ -378,9 +378,9 @@
      ;; Phase labeler — smoothing = 2·ATR (Proposal 052; v1 doesn't
      ;; gate on ATR-window's median yet — that's an arc 025 slice 4
      ;; concern. Use 2·current-ATR which works once ATR is ready.).
-     ((smoothing :f64)
+     ((smoothing :wat::core::f64)
       (:wat::core::* 2.0 (:trading::encoding::AtrState::value atr')))
-     ((next-count :i64)
+     ((next-count :wat::core::i64)
       (:wat::core::+ (:trading::encoding::IndicatorBank/count bank) 1))
      ((phase'   :trading::encoding::PhaseState)
       (:trading::encoding::PhaseState::step
@@ -390,120 +390,120 @@
      ;; ── 2. Compute Candle field values ─────────────────────────
 
      ;; SMA values (post-update)
-     ((sma20-val :f64) (:trading::encoding::SmaState::value sma20'))
-     ((sma50-val :f64) (:trading::encoding::SmaState::value sma50'))
-     ((sma200-val :f64) (:trading::encoding::SmaState::value sma200'))
+     ((sma20-val :wat::core::f64) (:trading::encoding::SmaState::value sma20'))
+     ((sma50-val :wat::core::f64) (:trading::encoding::SmaState::value sma50'))
+     ((sma200-val :wat::core::f64) (:trading::encoding::SmaState::value sma200'))
 
      ;; Bollinger
-     ((bb-width-val :f64) (:trading::encoding::BollingerState::width boll'))
-     ((bb-pos-val :f64) (:trading::encoding::BollingerState::pos boll' c))
+     ((bb-width-val :wat::core::f64) (:trading::encoding::BollingerState::width boll'))
+     ((bb-pos-val :wat::core::f64) (:trading::encoding::BollingerState::pos boll' c))
 
      ;; Keltner
-     ((atr-val :f64) (:trading::encoding::AtrState::value atr'))
-     ((kelt-upper-val :f64)
+     ((atr-val :wat::core::f64) (:trading::encoding::AtrState::value atr'))
+     ((kelt-upper-val :wat::core::f64)
       (:trading::encoding::KeltnerState::upper kelt' atr-val))
-     ((kelt-lower-val :f64)
+     ((kelt-lower-val :wat::core::f64)
       (:trading::encoding::KeltnerState::lower kelt' atr-val))
-     ((kelt-pos-val :f64)
+     ((kelt-pos-val :wat::core::f64)
       (:trading::encoding::KeltnerState::pos kelt' atr-val c))
      ;; Squeeze: bb-width / kelt-width-as-fraction-of-close.
-     ((kelt-range :f64) (:wat::core::- kelt-upper-val kelt-lower-val))
-     ((kelt-width-ratio :f64)
-      (:wat::core::if (:wat::core::= c 0.0) -> :f64
+     ((kelt-range :wat::core::f64) (:wat::core::- kelt-upper-val kelt-lower-val))
+     ((kelt-width-ratio :wat::core::f64)
+      (:wat::core::if (:wat::core::= c 0.0) -> :wat::core::f64
         0.0
         (:wat::core::/ kelt-range c)))
-     ((squeeze-val :f64)
+     ((squeeze-val :wat::core::f64)
       (:trading::encoding::compute-squeeze bb-width-val kelt-width-ratio))
-     ((atr-ratio-val :f64) (:trading::encoding::compute-atr-ratio atr-val c))
+     ((atr-ratio-val :wat::core::f64) (:trading::encoding::compute-atr-ratio atr-val c))
 
      ;; RSI / MACD / DMI
-     ((rsi-val :f64) (:trading::encoding::RsiState::value rsi'))
-     ((macd-hist-val :f64) (:trading::encoding::MacdState::hist-value macd'))
-     ((plus-di-val :f64) (:trading::encoding::DmiState::plus-di dmi'))
-     ((minus-di-val :f64) (:trading::encoding::DmiState::minus-di dmi'))
-     ((adx-val :f64) (:trading::encoding::DmiState::adx dmi'))
+     ((rsi-val :wat::core::f64) (:trading::encoding::RsiState::value rsi'))
+     ((macd-hist-val :wat::core::f64) (:trading::encoding::MacdState::hist-value macd'))
+     ((plus-di-val :wat::core::f64) (:trading::encoding::DmiState::plus-di dmi'))
+     ((minus-di-val :wat::core::f64) (:trading::encoding::DmiState::minus-di dmi'))
+     ((adx-val :wat::core::f64) (:trading::encoding::DmiState::adx dmi'))
 
      ;; Stochastic + Williams %R
-     ((stoch-k-val :f64) (:trading::encoding::StochState::k stoch'))
-     ((stoch-d-val :f64) (:trading::encoding::StochState::d stoch'))
-     ((williams-val :f64) (:trading::encoding::compute-williams-r stoch' c))
+     ((stoch-k-val :wat::core::f64) (:trading::encoding::StochState::k stoch'))
+     ((stoch-d-val :wat::core::f64) (:trading::encoding::StochState::d stoch'))
+     ((williams-val :wat::core::f64) (:trading::encoding::compute-williams-r stoch' c))
 
      ;; CCI / MFI / OBV / Volume Accel
-     ((cci-val :f64) (:trading::encoding::CciState::value cci'))
-     ((mfi-val :f64) (:trading::encoding::MfiState::value mfi'))
-     ((obv-slope-val :f64) (:trading::encoding::ObvState::slope obv'))
-     ((vol-accel-val :f64) (:trading::encoding::VolumeAccelState::value volume-accel'))
+     ((cci-val :wat::core::f64) (:trading::encoding::CciState::value cci'))
+     ((mfi-val :wat::core::f64) (:trading::encoding::MfiState::value mfi'))
+     ((obv-slope-val :wat::core::f64) (:trading::encoding::ObvState::slope obv'))
+     ((vol-accel-val :wat::core::f64) (:trading::encoding::VolumeAccelState::value volume-accel'))
 
      ;; ROC
-     ((roc-1-val :f64) (:trading::encoding::compute-roc roc-buf' 1))
-     ((roc-3-val :f64) (:trading::encoding::compute-roc roc-buf' 3))
-     ((roc-6-val :f64) (:trading::encoding::compute-roc roc-buf' 6))
-     ((roc-12-val :f64) (:trading::encoding::compute-roc roc-buf' 12))
+     ((roc-1-val :wat::core::f64) (:trading::encoding::compute-roc roc-buf' 1))
+     ((roc-3-val :wat::core::f64) (:trading::encoding::compute-roc roc-buf' 3))
+     ((roc-6-val :wat::core::f64) (:trading::encoding::compute-roc roc-buf' 6))
+     ((roc-12-val :wat::core::f64) (:trading::encoding::compute-roc roc-buf' 12))
 
      ;; Range positions
-     ((rp-12 :f64) (:trading::encoding::compute-range-pos rh12' rl12' c))
-     ((rp-24 :f64) (:trading::encoding::compute-range-pos rh24' rl24' c))
-     ((rp-48 :f64) (:trading::encoding::compute-range-pos rh48' rl48' c))
+     ((rp-12 :wat::core::f64) (:trading::encoding::compute-range-pos rh12' rl12' c))
+     ((rp-24 :wat::core::f64) (:trading::encoding::compute-range-pos rh24' rl24' c))
+     ((rp-48 :wat::core::f64) (:trading::encoding::compute-range-pos rh48' rl48' c))
 
      ;; Multi-timeframe
-     ((tf-1h-ret-val :f64) (:trading::encoding::compute-tf-ret tf-1h'))
-     ((tf-1h-body-val :f64) (:trading::encoding::compute-tf-body tf-1h'))
-     ((tf-4h-ret-val :f64) (:trading::encoding::compute-tf-ret tf-4h'))
-     ((tf-4h-body-val :f64) (:trading::encoding::compute-tf-body tf-4h'))
-     ((tf-agree :f64)
+     ((tf-1h-ret-val :wat::core::f64) (:trading::encoding::compute-tf-ret tf-1h'))
+     ((tf-1h-body-val :wat::core::f64) (:trading::encoding::compute-tf-body tf-1h'))
+     ((tf-4h-ret-val :wat::core::f64) (:trading::encoding::compute-tf-ret tf-4h'))
+     ((tf-4h-body-val :wat::core::f64) (:trading::encoding::compute-tf-body tf-4h'))
+     ((tf-agree :wat::core::f64)
       (:trading::encoding::compute-tf-agreement
         (:trading::encoding::IndicatorBank/prev-close bank)
         c tf-1h' tf-4h'))
 
      ;; Ichimoku
-     ((tenkan :f64) (:trading::encoding::IchimokuState::tenkan ichi'))
-     ((kijun :f64) (:trading::encoding::IchimokuState::kijun ichi'))
-     ((cloud-top-val :f64) (:trading::encoding::IchimokuState::cloud-top ichi'))
-     ((cloud-bottom-val :f64) (:trading::encoding::IchimokuState::cloud-bottom ichi'))
+     ((tenkan :wat::core::f64) (:trading::encoding::IchimokuState::tenkan ichi'))
+     ((kijun :wat::core::f64) (:trading::encoding::IchimokuState::kijun ichi'))
+     ((cloud-top-val :wat::core::f64) (:trading::encoding::IchimokuState::cloud-top ichi'))
+     ((cloud-bottom-val :wat::core::f64) (:trading::encoding::IchimokuState::cloud-bottom ichi'))
 
      ;; Cross deltas
-     ((tk-spread :f64) (:wat::core::- tenkan kijun))
-     ((tk-delta :f64)
+     ((tk-spread :wat::core::f64) (:wat::core::- tenkan kijun))
+     ((tk-delta :wat::core::f64)
       (:wat::core::- tk-spread (:trading::encoding::IndicatorBank/prev-tk-spread bank)))
-     ((stoch-kd :f64) (:wat::core::- stoch-k-val stoch-d-val))
-     ((stoch-delta :f64)
+     ((stoch-kd :wat::core::f64) (:wat::core::- stoch-k-val stoch-d-val))
+     ((stoch-delta :wat::core::f64)
       (:wat::core::- stoch-kd (:trading::encoding::IndicatorBank/prev-stoch-kd bank)))
 
      ;; Persistence
      ((cb48-vals :Vec<f64>) (:trading::encoding::RingBuffer/values cb48'))
-     ((hurst-val :f64) (:trading::encoding::compute-hurst cb48-vals))
-     ((autocorr-val :f64)
+     ((hurst-val :wat::core::f64) (:trading::encoding::compute-hurst cb48-vals))
+     ((autocorr-val :wat::core::f64)
       (:trading::encoding::compute-autocorrelation-lag1 cb48-vals))
-     ((vwap-val :f64) (:trading::encoding::VwapState::distance vwap' c))
+     ((vwap-val :wat::core::f64) (:trading::encoding::VwapState::distance vwap' c))
 
      ;; Regime
      ((ke-vals :Vec<f64>) (:trading::encoding::RingBuffer/values ke-buf'))
-     ((kama-er-val :f64)
-      (:wat::core::if (:trading::encoding::RingBuffer::full? ke-buf') -> :f64
+     ((kama-er-val :wat::core::f64)
+      (:wat::core::if (:trading::encoding::RingBuffer::full? ke-buf') -> :wat::core::f64
         (:trading::encoding::compute-kama-er ke-vals)
         0.5))
-     ((chop-val :f64)
-      (:wat::core::if (:trading::encoding::RingBuffer::full? chop-buf') -> :f64
+     ((chop-val :wat::core::f64)
+      (:wat::core::if (:trading::encoding::RingBuffer::full? chop-buf') -> :wat::core::f64
         (:trading::encoding::compute-choppiness chop-atr-sum' rh12' rl12')
         50.0))
      ((dfa-vals :Vec<f64>) (:trading::encoding::RingBuffer/values dfa-buf'))
-     ((dfa-val :f64) (:trading::encoding::compute-dfa-alpha dfa-vals))
+     ((dfa-val :wat::core::f64) (:trading::encoding::compute-dfa-alpha dfa-vals))
      ((vr-vals :Vec<f64>) (:trading::encoding::RingBuffer/values vr-buf'))
-     ((vr-val :f64) (:trading::encoding::compute-variance-ratio vr-vals))
+     ((vr-val :wat::core::f64) (:trading::encoding::compute-variance-ratio vr-vals))
      ((entropy-vals :Vec<f64>) (:trading::encoding::RingBuffer/values entropy-buf'))
-     ((entropy-val :f64) (:trading::encoding::compute-entropy-rate entropy-vals))
+     ((entropy-val :wat::core::f64) (:trading::encoding::compute-entropy-rate entropy-vals))
      ((aroon-h-vals :Vec<f64>) (:trading::encoding::RingBuffer/values aroon-h'))
-     ((aroon-up-val :f64)
-      (:wat::core::if (:trading::encoding::RingBuffer::full? aroon-h') -> :f64
+     ((aroon-up-val :wat::core::f64)
+      (:wat::core::if (:trading::encoding::RingBuffer::full? aroon-h') -> :wat::core::f64
         (:trading::encoding::compute-aroon-up aroon-h-vals)
         50.0))
      ((aroon-l-vals :Vec<f64>) (:trading::encoding::RingBuffer/values aroon-l'))
-     ((aroon-down-val :f64)
-      (:wat::core::if (:trading::encoding::RingBuffer::full? aroon-l') -> :f64
+     ((aroon-down-val :wat::core::f64)
+      (:wat::core::if (:trading::encoding::RingBuffer::full? aroon-l') -> :wat::core::f64
         (:trading::encoding::compute-aroon-down aroon-l-vals)
         50.0))
      ((fractal-vals :Vec<f64>) (:trading::encoding::RingBuffer/values fractal-buf'))
-     ((fractal-val :f64) (:trading::encoding::compute-fractal-dim fractal-vals))
+     ((fractal-val :wat::core::f64) (:trading::encoding::compute-fractal-dim fractal-vals))
 
      ;; Divergence
      ((price-peak-vals :Vec<f64>)
@@ -512,17 +512,17 @@
       (:trading::encoding::RingBuffer/values rsi-peak'))
      ((divergence-pair :(f64,f64))
       (:trading::encoding::detect-divergence price-peak-vals rsi-peak-vals))
-     ((div-bull :f64) (:wat::core::first divergence-pair))
-     ((div-bear :f64) (:wat::core::second divergence-pair))
+     ((div-bull :wat::core::f64) (:wat::core::first divergence-pair))
+     ((div-bear :wat::core::f64) (:wat::core::second divergence-pair))
 
      ;; Price action
-     ((range-ratio-val :f64) (:trading::encoding::compute-range-ratio h l))
-     ((gap-val :f64)
+     ((range-ratio-val :wat::core::f64) (:trading::encoding::compute-range-ratio h l))
+     ((gap-val :wat::core::f64)
       (:trading::encoding::compute-gap o
         (:trading::encoding::IndicatorBank/prev-close bank)))
-     ((cons-up-val :f64)
+     ((cons-up-val :wat::core::f64)
       (:wat::core::i64::to-f64 (:trading::encoding::ConsecutiveState::up cons')))
-     ((cons-down-val :f64)
+     ((cons-down-val :wat::core::f64)
       (:wat::core::i64::to-f64 (:trading::encoding::ConsecutiveState::down cons')))
 
      ;; Phase
@@ -530,7 +530,7 @@
       (:trading::encoding::PhaseState/current-label phase'))
      ((phase-direction :trading::types::PhaseDirection)
       (:trading::encoding::PhaseState/current-direction phase'))
-     ((phase-duration :i64)
+     ((phase-duration :wat::core::i64)
       (:trading::encoding::PhaseState/count phase'))
      ((phase-history :trading::types::PhaseRecords)
       (:trading::encoding::PhaseState/phase-history phase'))

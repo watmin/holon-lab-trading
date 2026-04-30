@@ -62,11 +62,11 @@
    (:wat::core::struct :exp::Receipt
      (bytes :wat::core::Bytes)
      (form :wat::holon::HolonAST)
-     (seed-hint :i64))
+     (seed-hint :wat::core::i64))
 
    (:wat::core::define
      (:exp::issue (form :wat::holon::HolonAST)
-                  (seed-hint :i64)
+                  (seed-hint :wat::core::i64)
                   -> :exp::Receipt)
      (:wat::core::let*
        (((v :wat::holon::Vector) (:wat::holon::encode form))
@@ -76,10 +76,10 @@
    (:wat::core::define
      (:exp::verify (r :exp::Receipt)
                    (candidate :wat::holon::HolonAST)
-                   -> :bool)
+                   -> :wat::core::bool)
      (:wat::core::match
        (:wat::holon::bytes-vector (:exp::Receipt/bytes r))
-       -> :bool
+       -> :wat::core::bool
        ((Some v) (:wat::holon::coincident? candidate v))
        (:None false)))
 
@@ -95,9 +95,9 @@
    ;; system-prompt + params + output — as one structural object.
    ;; Any change to any field changes the form's fingerprint.
    (:wat::core::struct :exp::Inference
-     (model-id :String)
-     (prompt :String)
-     (output :String)
+     (model-id :wat::core::String)
+     (prompt :wat::core::String)
+     (output :wat::core::String)
      (form :wat::holon::HolonAST)
      (receipt :exp::Receipt))
 
@@ -109,7 +109,7 @@
    (:wat::core::struct :exp::AgentStep
      (observation :wat::holon::HolonAST)
      (action :wat::holon::HolonAST)
-     (reasoning :String)
+     (reasoning :wat::core::String)
      (inference :exp::Inference))
 
    ;; A trace is the agent's chronological action history — a
@@ -134,11 +134,11 @@
    ;; it were anchored cryptographically.
    (:wat::core::define
      (:exp::record-inference
-       (model-id :String)
-       (prompt :String)
-       (output :String)
+       (model-id :wat::core::String)
+       (prompt :wat::core::String)
+       (output :wat::core::String)
        (binding-form :wat::holon::HolonAST)
-       (seed-hint :i64)
+       (seed-hint :wat::core::i64)
        -> :exp::Inference)
      (:exp::Inference/new model-id prompt output binding-form
                           (:exp::issue binding-form seed-hint)))
@@ -150,7 +150,7 @@
      (:exp::audit-inference
        (inf :exp::Inference)
        (expected-form :wat::holon::HolonAST)
-       -> :bool)
+       -> :wat::core::bool)
      (:exp::verify (:exp::Inference/receipt inf) expected-form))
 
    ;; The consumer's "verify an agent step" — same shape; Receipt
@@ -159,7 +159,7 @@
      (:exp::audit-step
        (s :exp::AgentStep)
        (expected-form :wat::holon::HolonAST)
-       -> :bool)
+       -> :wat::core::bool)
      (:exp::audit-inference (:exp::AgentStep/inference s) expected-form))))
 
 
@@ -188,7 +188,7 @@
         "2+2 equals 4."
         binding 42))
 
-     ((verified :bool) (:exp::audit-inference inf binding)))
+     ((verified :wat::core::bool) (:exp::audit-inference inf binding)))
     (:wat::test::assert-eq verified true)))
 
 
@@ -241,7 +241,7 @@
 
      ;; Consumer reconstructs the binding-form from the spoofer's
      ;; (model, prompt, output) claim and demands verification.
-     ((accepts :bool) (:exp::audit-inference spoofed-inf spoofed-claim)))
+     ((accepts :wat::core::bool) (:exp::audit-inference spoofed-inf spoofed-claim)))
     (:wat::test::assert-eq accepts false)))
 
 
@@ -286,7 +286,7 @@
      ;; Consumer reconstructs the form from the tampered transcript.
      ;; Verification rejects — the Receipt's bytes encode the real
      ;; prompt, not the tampered one.
-     ((accepts-tampered :bool)
+     ((accepts-tampered :wat::core::bool)
        (:exp::audit-inference real-inf tampered-binding)))
     (:wat::test::assert-eq accepts-tampered false)))
 
@@ -329,7 +329,7 @@
           (prompt "Should I take this medical action?")
           (output "[some medical advice]")))))
 
-     ((accepts-substitution :bool)
+     ((accepts-substitution :wat::core::bool)
        (:exp::audit-inference actual-inf claimed-binding)))
     (:wat::test::assert-eq accepts-substitution false)))
 
@@ -380,7 +380,7 @@
 
      ;; Auditor verifies against the INTENDED form (what the
      ;; deployment thought was active). Detects the injection.
-     ((accepts :bool) (:exp::audit-inference compromised-inf intended-form)))
+     ((accepts :wat::core::bool) (:exp::audit-inference compromised-inf intended-form)))
     (:wat::test::assert-eq accepts false)))
 
 
@@ -439,7 +439,7 @@
 
      ;; Auditor reconstructs the binding from the agent's claimed
      ;; observation, action, reasoning, model.
-     ((verified :bool) (:exp::audit-step step step-binding)))
+     ((verified :wat::core::bool) (:exp::audit-step step step-binding)))
     (:wat::test::assert-eq verified true)))
 
 
@@ -521,24 +521,24 @@
      ((s2-opt :Option<exp::AgentStep>) (:wat::core::get all-steps 1))
      ((s3-opt :Option<exp::AgentStep>) (:wat::core::get all-steps 2))
 
-     ((s1-ok :bool)
-       (:wat::core::match s1-opt -> :bool
+     ((s1-ok :wat::core::bool)
+       (:wat::core::match s1-opt -> :wat::core::bool
          ((Some s) (:exp::audit-step s bind-1))
          (:None false)))
-     ((s2-ok :bool)
-       (:wat::core::match s2-opt -> :bool
+     ((s2-ok :wat::core::bool)
+       (:wat::core::match s2-opt -> :wat::core::bool
          ((Some s) (:exp::audit-step s bind-2))
          (:None false)))
-     ((s3-ok :bool)
-       (:wat::core::match s3-opt -> :bool
+     ((s3-ok :wat::core::bool)
+       (:wat::core::match s3-opt -> :wat::core::bool
          ((Some s) (:exp::audit-step s bind-3))
          (:None false)))
 
      ;; Tampering: claim step 1's binding is bind-2 (i.e., reorder
      ;; or swap). Each step's Receipt commits to its own binding;
      ;; the swap is detected.
-     ((swap-detected :bool)
-       (:wat::core::match s1-opt -> :bool
+     ((swap-detected :wat::core::bool)
+       (:wat::core::match s1-opt -> :wat::core::bool
          ((Some s) (:exp::audit-step s bind-2))
          (:None false)))
 

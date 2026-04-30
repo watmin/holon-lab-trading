@@ -12,7 +12,7 @@
   ((:wat::load-file! "wat/vocab/exit/regime.wat")
    (:wat::core::define
      (:test::fresh-regime
-       (kama :f64) (vr :f64)
+       (kama :wat::core::f64) (vr :wat::core::f64)
        -> :trading::types::Candle::Regime)
      ;; 8-arg constructor: kama-er, choppiness, dfa-alpha,
      ;; variance-ratio, entropy-rate, aroon-up, aroon-down,

@@ -77,12 +77,12 @@
   (:wat::core::let*
     (((l1 :trading::cache::L1) (:trading::cache::L1/make 16))
      ((form :wat::holon::HolonAST) (:wat::holon::leaf :alpha))
-     ((len-before :i64) (:trading::cache::L1/len l1))
+     ((len-before :wat::core::i64) (:trading::cache::L1/len l1))
      ((_ :Option<wat::holon::HolonAST>)
       (:trading::cache::resolve form l1))
-     ((len-after :i64) (:trading::cache::L1/len l1)))
+     ((len-after :wat::core::i64) (:trading::cache::L1/len l1)))
     (:wat::test::assert-eq
-      (:wat::core::if (:wat::core::i64::= len-before 0) -> :bool
+      (:wat::core::if (:wat::core::i64::= len-before 0) -> :wat::core::bool
         (:wat::core::i64::> len-after 0)
         false)
       true)))

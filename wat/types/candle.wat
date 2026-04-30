@@ -37,102 +37,102 @@
 
 ;; Moving averages + Ichimoku cloud.
 (:wat::core::struct :trading::types::Candle::Trend
-  (sma20        :f64)
-  (sma50        :f64)
-  (sma200       :f64)
-  (tenkan-sen   :f64)
-  (kijun-sen    :f64)
-  (cloud-top    :f64)
-  (cloud-bottom :f64))
+  (sma20        :wat::core::f64)
+  (sma50        :wat::core::f64)
+  (sma200       :wat::core::f64)
+  (tenkan-sen   :wat::core::f64)
+  (kijun-sen    :wat::core::f64)
+  (cloud-top    :wat::core::f64)
+  (cloud-bottom :wat::core::f64))
 
 ;; Volatility bands + ATR + squeeze.
 (:wat::core::struct :trading::types::Candle::Volatility
-  (bb-width   :f64)
-  (bb-pos     :f64)
-  (kelt-upper :f64)
-  (kelt-lower :f64)
-  (kelt-pos   :f64)
-  (squeeze    :f64)
-  (atr-ratio  :f64))
+  (bb-width   :wat::core::f64)
+  (bb-pos     :wat::core::f64)
+  (kelt-upper :wat::core::f64)
+  (kelt-lower :wat::core::f64)
+  (kelt-pos   :wat::core::f64)
+  (squeeze    :wat::core::f64)
+  (atr-ratio  :wat::core::f64))
 
 ;; Momentum indicators — RSI, MACD, DMI, Stochastic, CCI, MFI, Williams %R,
 ;; OBV, volume-accel.
 (:wat::core::struct :trading::types::Candle::Momentum
-  (rsi          :f64)
-  (macd-hist    :f64)
-  (plus-di      :f64)
-  (minus-di     :f64)
-  (adx          :f64)
-  (stoch-k      :f64)
-  (stoch-d      :f64)
-  (williams-r   :f64)
-  (cci          :f64)
-  (mfi          :f64)
-  (obv-slope-12 :f64)
-  (volume-accel :f64))
+  (rsi          :wat::core::f64)
+  (macd-hist    :wat::core::f64)
+  (plus-di      :wat::core::f64)
+  (minus-di     :wat::core::f64)
+  (adx          :wat::core::f64)
+  (stoch-k      :wat::core::f64)
+  (stoch-d      :wat::core::f64)
+  (williams-r   :wat::core::f64)
+  (cci          :wat::core::f64)
+  (mfi          :wat::core::f64)
+  (obv-slope-12 :wat::core::f64)
+  (volume-accel :wat::core::f64))
 
 ;; Divergence + cross deltas — the accountability of momentum shifts.
 (:wat::core::struct :trading::types::Candle::Divergence
-  (rsi-divergence-bull :f64)
-  (rsi-divergence-bear :f64)
-  (tk-cross-delta      :f64)
-  (stoch-cross-delta   :f64))
+  (rsi-divergence-bull :wat::core::f64)
+  (rsi-divergence-bear :wat::core::f64)
+  (tk-cross-delta      :wat::core::f64)
+  (stoch-cross-delta   :wat::core::f64))
 
 ;; Rate-of-change over multiple windows + position within range.
 (:wat::core::struct :trading::types::Candle::RateOfChange
-  (roc-1        :f64)
-  (roc-3        :f64)
-  (roc-6        :f64)
-  (roc-12       :f64)
-  (range-pos-12 :f64)
-  (range-pos-24 :f64)
-  (range-pos-48 :f64))
+  (roc-1        :wat::core::f64)
+  (roc-3        :wat::core::f64)
+  (roc-6        :wat::core::f64)
+  (roc-12       :wat::core::f64)
+  (range-pos-12 :wat::core::f64)
+  (range-pos-24 :wat::core::f64)
+  (range-pos-48 :wat::core::f64))
 
 ;; Long-memory / correlation structure.
 (:wat::core::struct :trading::types::Candle::Persistence
-  (hurst           :f64)
-  (autocorrelation :f64)
-  (vwap-distance   :f64))
+  (hurst           :wat::core::f64)
+  (autocorrelation :wat::core::f64)
+  (vwap-distance   :wat::core::f64))
 
 ;; Regime classifiers — KAMA-ER, choppiness, entropy, fractal dimension.
 (:wat::core::struct :trading::types::Candle::Regime
-  (kama-er        :f64)
-  (choppiness     :f64)
-  (dfa-alpha      :f64)
-  (variance-ratio :f64)
-  (entropy-rate   :f64)
-  (aroon-up       :f64)
-  (aroon-down     :f64)
-  (fractal-dim    :f64))
+  (kama-er        :wat::core::f64)
+  (choppiness     :wat::core::f64)
+  (dfa-alpha      :wat::core::f64)
+  (variance-ratio :wat::core::f64)
+  (entropy-rate   :wat::core::f64)
+  (aroon-up       :wat::core::f64)
+  (aroon-down     :wat::core::f64)
+  (fractal-dim    :wat::core::f64))
 
 ;; Candle-local price action — range, gap, consecutive-move counts.
 (:wat::core::struct :trading::types::Candle::PriceAction
-  (range-ratio      :f64)
-  (gap              :f64)
-  (consecutive-up   :f64)
-  (consecutive-down :f64))
+  (range-ratio      :wat::core::f64)
+  (gap              :wat::core::f64)
+  (consecutive-up   :wat::core::f64)
+  (consecutive-down :wat::core::f64))
 
 ;; Multi-timeframe aggregation.
 (:wat::core::struct :trading::types::Candle::Timeframe
-  (tf-1h-ret    :f64)
-  (tf-1h-body   :f64)
-  (tf-4h-ret    :f64)
-  (tf-4h-body   :f64)
-  (tf-agreement :f64))
+  (tf-1h-ret    :wat::core::f64)
+  (tf-1h-body   :wat::core::f64)
+  (tf-4h-ret    :wat::core::f64)
+  (tf-4h-body   :wat::core::f64)
+  (tf-agreement :wat::core::f64))
 
 ;; Calendar position — circular scalars (minute of hour through month of year).
 (:wat::core::struct :trading::types::Candle::Time
-  (minute        :f64)
-  (hour          :f64)
-  (day-of-week   :f64)
-  (day-of-month  :f64)
-  (month-of-year :f64))
+  (minute        :wat::core::f64)
+  (hour          :wat::core::f64)
+  (day-of-week   :wat::core::f64)
+  (day-of-month  :wat::core::f64)
+  (month-of-year :wat::core::f64))
 
 ;; Phase labeler — Proposal 049.
 (:wat::core::struct :trading::types::Candle::Phase
   (label     :trading::types::PhaseLabel)
   (direction :trading::types::PhaseDirection)
-  (duration  :i64)
+  (duration  :wat::core::i64)
   (history   :trading::types::PhaseRecords))
 
 ;; ─── Candle — composed of Ohlcv + 11 indicator-family sub-structs ──────

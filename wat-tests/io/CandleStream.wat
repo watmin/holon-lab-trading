@@ -22,7 +22,7 @@
   (:wat::core::let*
     (((s :trading::candles::Stream)
       (:trading::candles::open "data/btc_5m_raw.parquet"))
-     ((n :i64) (:trading::candles::len s)))
+     ((n :wat::core::i64) (:trading::candles::len s)))
     ;; The 6-year 5-min BTC raw parquet was 652_608 rows the day this
     ;; shim landed. Append-only data file → length only grows. Assert
     ;; the floor we saw, not the exact value.

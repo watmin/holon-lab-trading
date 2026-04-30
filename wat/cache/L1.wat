@@ -33,7 +33,7 @@
 ;; `cap = 10000` (~100 entries per slot).
 (:wat::core::define
   (:trading::cache::L1/make
-    (cap :i64)
+    (cap :wat::core::i64)
     -> :trading::cache::L1)
   (:trading::cache::L1/new
     (:wat::holon::lru::HologramCache/make (:wat::holon::filter-coincident) cap)
@@ -96,7 +96,7 @@
 (:wat::core::define
   (:trading::cache::L1/len
     (l1 :trading::cache::L1)
-    -> :i64)
+    -> :wat::core::i64)
   (:wat::core::i64::+
     (:wat::holon::lru::HologramCache/len (:trading::cache::L1/next l1))
     (:wat::holon::lru::HologramCache/len (:trading::cache::L1/terminal l1))))

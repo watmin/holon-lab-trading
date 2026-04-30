@@ -10,20 +10,20 @@
 ;; runs are training data — they accumulate; never `rm -rf runs/`.
 
 (:wat::core::struct :trading::run::Paths
-  (out :String)
-  (err :String)
-  (db  :String))
+  (out :wat::core::String)
+  (err :wat::core::String)
+  (db  :wat::core::String))
 
 
 ;; Build the three paths from a descriptor + the wall-clock epoch
 ;; seconds. Pure data — no I/O.
 (:wat::core::define
   (:trading::run/paths/make
-    (descriptor :String)
+    (descriptor :wat::core::String)
     (now :wat::time::Instant)
     -> :trading::run::Paths)
   (:wat::core::let*
-    (((stem :String)
+    (((stem :wat::core::String)
       (:wat::core::string::concat "runs/"
         (:wat::core::string::concat descriptor
           (:wat::core::string::concat "-"

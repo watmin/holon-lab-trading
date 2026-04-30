@@ -11,7 +11,7 @@
   ((:wat::load-file! "wat/vocab/market/persistence.wat")
    (:wat::core::define
      (:test::fresh-momentum
-       (adx :f64)
+       (adx :wat::core::f64)
        -> :trading::types::Candle::Momentum)
      (:trading::types::Candle::Momentum/new
        0.0 0.0 0.0 0.0    ;; rsi, macd-hist, plus-di, minus-di
@@ -20,7 +20,7 @@
        0.0 0.0 0.0 0.0))  ;; cci, mfi, obv-slope-12, volume-accel
    (:wat::core::define
      (:test::fresh-persistence
-       (hurst :f64) (autocorr :f64)
+       (hurst :wat::core::f64) (autocorr :wat::core::f64)
        -> :trading::types::Candle::Persistence)
      (:trading::types::Candle::Persistence/new
        hurst autocorr 0.0))  ;; hurst, autocorrelation, vwap-distance
@@ -61,10 +61,10 @@
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) 0.5))
-     ((scale :f64)
+     ((scale :wat::core::f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::- 0.0 scale))
-     ((rounded :f64) (:trading::encoding::round-to-2 0.5))
+     ((neg-scale :wat::core::f64) (:wat::core::- 0.0 scale))
+     ((rounded :wat::core::f64) (:trading::encoding::round-to-2 0.5))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "hurst")
@@ -91,13 +91,13 @@
         ((Some h) h)
         (:None (:wat::holon::Atom "unreachable"))))
 
-     ((rounded :f64) (:trading::encoding::round-to-2 0.5))
+     ((rounded :wat::core::f64) (:trading::encoding::round-to-2 0.5))
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) rounded))
-     ((scale :f64)
+     ((scale :wat::core::f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::- 0.0 scale))
+     ((neg-scale :wat::core::f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "adx")

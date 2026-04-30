@@ -8,7 +8,7 @@
 (:wat::test::make-deftest :deftest
   ((:wat::load-file! "wat/vocab/market/momentum.wat")
    (:wat::core::define
-     (:test::fresh-ohlcv (c :f64) -> :trading::types::Ohlcv)
+     (:test::fresh-ohlcv (c :wat::core::f64) -> :trading::types::Ohlcv)
      (:wat::core::let*
        (((btc :trading::types::Asset)
          (:trading::types::Asset/new "BTC")))
@@ -17,7 +17,7 @@
        (:trading::types::Ohlcv/new
          btc btc "" 0.0 0.0 0.0 c 0.0)))
    (:wat::core::define
-     (:test::fresh-trend (sma20 :f64) -> :trading::types::Candle::Trend)
+     (:test::fresh-trend (sma20 :wat::core::f64) -> :trading::types::Candle::Trend)
      ;; 7-arg: sma20, sma50, sma200, tenkan-sen, kijun-sen,
      ;; cloud-top, cloud-bottom. Only sma20 matters here; the
      ;; sma50/200-driven tests construct directly.
@@ -25,7 +25,7 @@
        sma20 0.0 0.0 0.0 0.0 0.0 0.0))
    (:wat::core::define
      (:test::fresh-momentum
-       (macd-hist :f64) (plus-di :f64) (minus-di :f64)
+       (macd-hist :wat::core::f64) (plus-di :wat::core::f64) (minus-di :wat::core::f64)
        -> :trading::types::Candle::Momentum)
      ;; 12-arg: rsi, macd-hist, plus-di, minus-di, adx, stoch-k,
      ;; stoch-d, williams-r, cci, mfi, obv-slope-12, volume-accel.
@@ -33,7 +33,7 @@
        0.0 macd-hist plus-di minus-di 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0))
    (:wat::core::define
      (:test::fresh-volatility
-       (atr-ratio :f64)
+       (atr-ratio :wat::core::f64)
        -> :trading::types::Candle::Volatility)
      ;; 7-arg: bb-width, bb-pos, kelt-upper, kelt-lower, kelt-pos,
      ;; squeeze, atr-ratio.
@@ -83,16 +83,16 @@
         (:None (:wat::holon::Atom "unreachable"))))
 
      ;; Recompute symmetrically.
-     ((expected-value :f64)
+     ((expected-value :wat::core::f64)
       (:trading::encoding::round-to-4
         (:wat::core::/
           (:wat::core::- 100.0 95.0) 100.0)))
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) expected-value))
-     ((scale :f64)
+     ((scale :wat::core::f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::- 0.0 scale))
+     ((neg-scale :wat::core::f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "close-sma20")
@@ -122,15 +122,15 @@
         ((Some h) h)
         (:None (:wat::holon::Atom "unreachable"))))
 
-     ((expected-value :f64)
+     ((expected-value :wat::core::f64)
       (:trading::encoding::round-to-4
         (:wat::core::/ 0.5 100.0)))
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) expected-value))
-     ((scale :f64)
+     ((scale :wat::core::f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::- 0.0 scale))
+     ((neg-scale :wat::core::f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "macd-hist")
@@ -160,16 +160,16 @@
         ((Some h) h)
         (:None (:wat::holon::Atom "unreachable"))))
 
-     ((expected-value :f64)
+     ((expected-value :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::/
           (:wat::core::- 25.0 20.0) 100.0)))
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) expected-value))
-     ((scale :f64)
+     ((scale :wat::core::f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::- 0.0 scale))
+     ((neg-scale :wat::core::f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "di-spread")
@@ -200,7 +200,7 @@
         ((Some h) h)
         (:None (:wat::holon::Atom "unreachable"))))
 
-     ((rounded :f64) (:trading::encoding::round-to-4 0.02))
+     ((rounded :wat::core::f64) (:trading::encoding::round-to-4 0.02))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "atr-ratio")

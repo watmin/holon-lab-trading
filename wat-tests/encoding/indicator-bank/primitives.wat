@@ -9,8 +9,8 @@
    (:wat::core::define
      (:test::ema-feed
        (s :trading::encoding::EmaState)
-       (x :f64)
-       (n :i64)
+       (x :wat::core::f64)
+       (n :wat::core::i64)
        -> :trading::encoding::EmaState)
      (:wat::core::if (:wat::core::<= n 0)
                      -> :trading::encoding::EmaState
@@ -22,8 +22,8 @@
    (:wat::core::define
      (:test::sma-feed
        (s :trading::encoding::SmaState)
-       (x :f64)
-       (n :i64)
+       (x :wat::core::f64)
+       (n :wat::core::i64)
        -> :trading::encoding::SmaState)
      (:wat::core::if (:wat::core::<= n 0)
                      -> :trading::encoding::SmaState
@@ -60,13 +60,13 @@
      ((b2 :trading::encoding::RingBuffer) (:trading::encoding::RingBuffer::push b1 2.0))
      ((b3 :trading::encoding::RingBuffer) (:trading::encoding::RingBuffer::push b2 3.0))
      ;; After: values should be [2.0, 3.0]; len 2.
-     ((len :i64) (:trading::encoding::RingBuffer::len b3))
+     ((len :wat::core::i64) (:trading::encoding::RingBuffer::len b3))
      ;; Most recent (i=0) is 3.0; one prior (i=1) is 2.0.
-     ((most :f64)
-      (:wat::core::match (:trading::encoding::RingBuffer::get b3 0) -> :f64
+     ((most :wat::core::f64)
+      (:wat::core::match (:trading::encoding::RingBuffer::get b3 0) -> :wat::core::f64
         ((Some v) v) (:None -1.0)))
-     ((prior :f64)
-      (:wat::core::match (:trading::encoding::RingBuffer::get b3 1) -> :f64
+     ((prior :wat::core::f64)
+      (:wat::core::match (:trading::encoding::RingBuffer::get b3 1) -> :wat::core::f64
         ((Some v) v) (:None -1.0))))
     (:wat::core::let*
       (((u1 :()) (:wat::test::assert-eq len 2))
@@ -82,8 +82,8 @@
       (:trading::encoding::RingBuffer::push b0 7.0))
      ((g :Option<f64>)
       (:trading::encoding::RingBuffer::get b1 5))
-     ((is-none? :bool)
-      (:wat::core::match g -> :bool
+     ((is-none? :wat::core::bool)
+      (:wat::core::match g -> :wat::core::bool
         ((Some _) false)
         (:None true))))
     (:wat::test::assert-eq is-none? true)))
@@ -137,10 +137,10 @@
     (((s0 :trading::encoding::EmaState)
       (:trading::encoding::EmaState::fresh 5))
      ((s4 :trading::encoding::EmaState) (:test::ema-feed s0 50.0 4))
-     ((not-yet? :bool) (:trading::encoding::EmaState::ready? s4))
+     ((not-yet? :wat::core::bool) (:trading::encoding::EmaState::ready? s4))
      ((s5 :trading::encoding::EmaState)
       (:trading::encoding::EmaState::update s4 50.0))
-     ((ready? :bool) (:trading::encoding::EmaState::ready? s5)))
+     ((ready? :wat::core::bool) (:trading::encoding::EmaState::ready? s5)))
     (:wat::core::let*
       (((u1 :()) (:wat::test::assert-eq not-yet? false)))
       (:wat::test::assert-eq ready? true))))
@@ -169,10 +169,10 @@
     (((s0 :trading::encoding::SmaState)
       (:trading::encoding::SmaState::fresh 4))
      ((s3 :trading::encoding::SmaState) (:test::sma-feed s0 7.0 3))
-     ((not-yet? :bool) (:trading::encoding::SmaState::ready? s3))
+     ((not-yet? :wat::core::bool) (:trading::encoding::SmaState::ready? s3))
      ((s4 :trading::encoding::SmaState)
       (:trading::encoding::SmaState::update s3 7.0))
-     ((ready? :bool) (:trading::encoding::SmaState::ready? s4)))
+     ((ready? :wat::core::bool) (:trading::encoding::SmaState::ready? s4)))
     (:wat::core::let*
       (((u1 :()) (:wat::test::assert-eq not-yet? false)))
       (:wat::test::assert-eq ready? true))))

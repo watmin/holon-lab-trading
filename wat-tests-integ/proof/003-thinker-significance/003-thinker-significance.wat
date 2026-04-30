@@ -26,8 +26,8 @@
    (:wat::core::define
      (:trading::test::proofs::003::dir-str
        (d :trading::sim::Direction)
-       -> :String)
-     (:wat::core::match d -> :String
+       -> :wat::core::String)
+     (:wat::core::match d -> :wat::core::String
        (:trading::sim::Direction::Up   "Up")
        (:trading::sim::Direction::Down "Down")))
 
@@ -35,7 +35,7 @@
    (:wat::core::define
      (:trading::test::proofs::003::skip-n
        (stream :trading::candles::Stream)
-       (n :i64)
+       (n :wat::core::i64)
        -> :())
      (:wat::core::if (:wat::core::<= n 0) -> :()
        ()
@@ -48,21 +48,21 @@
    ;; PaperResolved struct; emit-site lifts via :wat::core::struct->form.
    (:wat::core::define
      (:trading::test::proofs::003::outcome->resolved
-       (run-name :String)
-       (thinker-name :String) (predictor-name :String)
+       (run-name :wat::core::String)
+       (thinker-name :wat::core::String) (predictor-name :wat::core::String)
        (out :trading::sim::Outcome)
        -> :Option<trading::PaperResolved>)
      (:wat::core::let*
        (((paper :trading::sim::Paper) (:trading::sim::Outcome/paper out))
-        ((paper-id :i64)              (:trading::sim::Paper/id paper))
+        ((paper-id :wat::core::i64)              (:trading::sim::Paper/id paper))
         ((dir :trading::sim::Direction)
                                       (:trading::sim::Paper/direction paper))
-        ((entry-candle :i64)          (:trading::sim::Paper/entry-candle paper))
-        ((closed-at :i64)             (:trading::sim::Outcome/closed-at out))
+        ((entry-candle :wat::core::i64)          (:trading::sim::Paper/entry-candle paper))
+        ((closed-at :wat::core::i64)             (:trading::sim::Outcome/closed-at out))
         ((state :trading::sim::PositionState)
                                       (:trading::sim::Paper/state paper))
-        ((final-residue :f64)         (:trading::sim::Outcome/final-residue out))
-        ((dir-str :String)            (:trading::test::proofs::003::dir-str dir)))
+        ((final-residue :wat::core::f64)         (:trading::sim::Outcome/final-residue out))
+        ((dir-str :wat::core::String)            (:trading::test::proofs::003::dir-str dir)))
        (:wat::core::match state -> :Option<trading::PaperResolved>
          ((:trading::sim::PositionState::Grace _r)
            (Some
@@ -85,15 +85,15 @@
    (:wat::core::define
      (:trading::test::proofs::003::run-window
        (sqlite-handle :wat::telemetry::Service::Handle<wat::telemetry::Event>)
-       (path :String)
-       (start :i64)
-       (n :i64)
+       (path :wat::core::String)
+       (start :wat::core::i64)
+       (n :wat::core::i64)
        (cfg :trading::sim::Config)
        (thinker :trading::sim::Thinker)
        (predictor :trading::sim::Predictor)
-       (run-name :String)
-       (thinker-name :String)
-       (predictor-name :String)
+       (run-name :wat::core::String)
+       (thinker-name :wat::core::String)
+       (predictor-name :wat::core::String)
        -> :())
      (:wat::core::let*
        (((wlog :wat::telemetry::WorkUnitLog)
@@ -142,20 +142,20 @@
    (:wat::core::define
      (:trading::test::proofs::003::run-thinker-windows
        (sqlite-handle :wat::telemetry::Service::Handle<wat::telemetry::Event>)
-       (path :String)
+       (path :wat::core::String)
        (cfg :trading::sim::Config)
        (thinker :trading::sim::Thinker)
        (predictor :trading::sim::Predictor)
-       (thinker-name :String)
-       (predictor-name :String)
-       (iso-str :String)
+       (thinker-name :wat::core::String)
+       (predictor-name :wat::core::String)
+       (iso-str :wat::core::String)
        -> :())
      (:wat::core::foldl (:wat::core::range 0 10) ()
        (:wat::core::lambda
-         ((_acc :()) (i :i64) -> :())
+         ((_acc :()) (i :wat::core::i64) -> :())
          (:wat::core::let*
-           (((start :i64) (:wat::core::* i 65261))
-            ((run-name :String)
+           (((start :wat::core::i64) (:wat::core::* i 65261))
+            ((run-name :wat::core::String)
              (:wat::core::string::concat
                thinker-name "-w" (:wat::core::i64::to-string i) "-" iso-str)))
            (:trading::test::proofs::003::run-window
@@ -168,15 +168,15 @@
 
 (:deftest :trading::test::proofs::003::thinker-significance
   (:wat::core::let*
-    (((path :String) "data/btc_5m_raw.parquet")
+    (((path :wat::core::String) "data/btc_5m_raw.parquet")
      ((cfg :trading::sim::Config)
       (:trading::sim::Config/new 288 0.01 35.0 14))
      ((now :wat::time::Instant) (:wat::time::now))
-     ((epoch-str :String)
+     ((epoch-str :wat::core::String)
       (:wat::core::i64::to-string (:wat::time::epoch-seconds now)))
-     ((iso-str :String) (:wat::time::to-iso8601 now 3))
+     ((iso-str :wat::core::String) (:wat::time::to-iso8601 now 3))
 
-     ((db-path :String)
+     ((db-path :wat::core::String)
       (:wat::core::string::concat "runs/proof-003-" epoch-str ".db"))
 
      ((spawn :wat::telemetry::Service::Spawn<wat::telemetry::Event>)

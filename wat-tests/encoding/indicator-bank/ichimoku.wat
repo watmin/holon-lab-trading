@@ -6,8 +6,8 @@
    (:wat::core::define
      (:test::ichi-feed
        (s :trading::encoding::IchimokuState)
-       (h :f64) (l :f64)
-       (n :i64)
+       (h :wat::core::f64) (l :wat::core::f64)
+       (n :wat::core::i64)
        -> :trading::encoding::IchimokuState)
      (:wat::core::if (:wat::core::<= n 0)
                      -> :trading::encoding::IchimokuState
@@ -40,8 +40,8 @@
      ;; 30 candles to fill the 26-period buffer.
      ((s30 :trading::encoding::IchimokuState)
       (:test::ichi-feed s0 110.0 100.0 30))
-     ((tenkan :f64) (:trading::encoding::IchimokuState::tenkan s30))
-     ((kijun :f64) (:trading::encoding::IchimokuState::kijun s30)))
+     ((tenkan :wat::core::f64) (:trading::encoding::IchimokuState::tenkan s30))
+     ((kijun :wat::core::f64) (:trading::encoding::IchimokuState::kijun s30)))
     ;; Tenkan = (110+100)/2 = 105; kijun likewise.
     (:wat::core::let*
       (((u1 :()) (:wat::test::assert-eq tenkan 105.0)))
@@ -68,8 +68,8 @@
       (:trading::encoding::IchimokuState::fresh))
      ((s60 :trading::encoding::IchimokuState)
       (:test::ichi-feed s0 110.0 100.0 60))
-     ((top :f64) (:trading::encoding::IchimokuState::cloud-top s60))
-     ((bot :f64) (:trading::encoding::IchimokuState::cloud-bottom s60)))
+     ((top :wat::core::f64) (:trading::encoding::IchimokuState::cloud-top s60))
+     ((bot :wat::core::f64) (:trading::encoding::IchimokuState::cloud-bottom s60)))
     (:wat::test::assert-eq top bot)))
 
 ;; Test 5 — cloud ordering: cloud-top >= cloud-bottom always.
@@ -83,8 +83,8 @@
      ((s3 :trading::encoding::IchimokuState) (:trading::encoding::IchimokuState::update s2 125.0 105.0))
      ((s60 :trading::encoding::IchimokuState)
       (:test::ichi-feed s3 128.0 108.0 57))
-     ((top :f64) (:trading::encoding::IchimokuState::cloud-top s60))
-     ((bot :f64) (:trading::encoding::IchimokuState::cloud-bottom s60)))
+     ((top :wat::core::f64) (:trading::encoding::IchimokuState::cloud-top s60))
+     ((bot :wat::core::f64) (:trading::encoding::IchimokuState::cloud-bottom s60)))
     (:wat::test::assert-eq (:wat::core::>= top bot) true)))
 
 
@@ -98,7 +98,7 @@
       (:trading::encoding::IchimokuState::fresh))
      ((s30 :trading::encoding::IchimokuState)
       (:test::ichi-feed s0 110.0 100.0 30))
-     ((delta :f64) (:trading::encoding::IchimokuState::tk-cross-delta s30)))
+     ((delta :wat::core::f64) (:trading::encoding::IchimokuState::tk-cross-delta s30)))
     (:wat::test::assert-eq delta 0.0)))
 
 
@@ -111,10 +111,10 @@
       (:trading::encoding::IchimokuState::fresh))
      ((s51 :trading::encoding::IchimokuState)
       (:test::ichi-feed s0 110.0 100.0 51))
-     ((not-yet? :bool) (:trading::encoding::IchimokuState::ready? s51))
+     ((not-yet? :wat::core::bool) (:trading::encoding::IchimokuState::ready? s51))
      ((s52 :trading::encoding::IchimokuState)
       (:trading::encoding::IchimokuState::update s51 110.0 100.0))
-     ((ready? :bool) (:trading::encoding::IchimokuState::ready? s52)))
+     ((ready? :wat::core::bool) (:trading::encoding::IchimokuState::ready? s52)))
     (:wat::core::let*
       (((u1 :()) (:wat::test::assert-eq not-yet? false)))
       (:wat::test::assert-eq ready? true))))
@@ -129,5 +129,5 @@
       (:trading::encoding::IchimokuState::fresh))
      ((s30 :trading::encoding::IchimokuState)
       (:test::ichi-feed s0 110.0 100.0 30))
-     ((sa :f64) (:trading::encoding::IchimokuState::senkou-a s30)))
+     ((sa :wat::core::f64) (:trading::encoding::IchimokuState::senkou-a s30)))
     (:wat::test::assert-eq sa 105.0)))

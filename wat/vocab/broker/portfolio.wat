@@ -29,23 +29,23 @@
     ;; Per-field Vec<f64> projections from the snapshot window.
     (((avg-age-vals :Vec<f64>)
       (:wat::core::map snapshots
-        (:wat::core::lambda ((s :trading::types::PortfolioSnapshot) -> :f64)
+        (:wat::core::lambda ((s :trading::types::PortfolioSnapshot) -> :wat::core::f64)
           (:trading::types::PortfolioSnapshot/avg-age s))))
      ((avg-tp-vals :Vec<f64>)
       (:wat::core::map snapshots
-        (:wat::core::lambda ((s :trading::types::PortfolioSnapshot) -> :f64)
+        (:wat::core::lambda ((s :trading::types::PortfolioSnapshot) -> :wat::core::f64)
           (:trading::types::PortfolioSnapshot/avg-tp s))))
      ((avg-unrealized-vals :Vec<f64>)
       (:wat::core::map snapshots
-        (:wat::core::lambda ((s :trading::types::PortfolioSnapshot) -> :f64)
+        (:wat::core::lambda ((s :trading::types::PortfolioSnapshot) -> :wat::core::f64)
           (:trading::types::PortfolioSnapshot/avg-unrealized s))))
      ((grace-rate-vals :Vec<f64>)
       (:wat::core::map snapshots
-        (:wat::core::lambda ((s :trading::types::PortfolioSnapshot) -> :f64)
+        (:wat::core::lambda ((s :trading::types::PortfolioSnapshot) -> :wat::core::f64)
           (:trading::types::PortfolioSnapshot/grace-rate s))))
      ((active-count-vals :Vec<f64>)
       (:wat::core::map snapshots
-        (:wat::core::lambda ((s :trading::types::PortfolioSnapshot) -> :f64)
+        (:wat::core::lambda ((s :trading::types::PortfolioSnapshot) -> :wat::core::f64)
           (:trading::types::PortfolioSnapshot/active-count s))))
 
      ;; Five rhythm calls in archive order. `try` unwraps each

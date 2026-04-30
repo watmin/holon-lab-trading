@@ -64,15 +64,15 @@
 ;; delegate; deeper field access goes through `:AtrState/wilder`.
 
 (:wat::core::struct :trading::encoding::WilderState
-  (period :i64)
-  (value  :f64)
-  (count  :i64)
-  (accum  :f64))
+  (period :wat::core::i64)
+  (value  :wat::core::f64)
+  (count  :wat::core::i64)
+  (accum  :wat::core::f64))
 
 
 (:wat::core::define
   (:trading::encoding::WilderState::fresh
-    (period :i64)
+    (period :wat::core::i64)
     -> :trading::encoding::WilderState)
   (:trading::encoding::WilderState/new period 0.0 0 0.0))
 
@@ -80,22 +80,22 @@
 (:wat::core::define
   (:trading::encoding::WilderState::update
     (state :trading::encoding::WilderState)
-    (x :f64)
+    (x :wat::core::f64)
     -> :trading::encoding::WilderState)
   (:wat::core::let*
-    (((period :i64) (:trading::encoding::WilderState/period state))
-     ((p-f64 :f64) (:wat::core::i64::to-f64 period))
-     ((old-count :i64) (:trading::encoding::WilderState/count state))
-     ((new-count :i64) (:wat::core::+ old-count 1))
-     ((old-accum :f64) (:trading::encoding::WilderState/accum state))
-     ((old-value :f64) (:trading::encoding::WilderState/value state))
-     ((new-accum :f64)
-      (:wat::core::if (:wat::core::<= new-count period) -> :f64
+    (((period :wat::core::i64) (:trading::encoding::WilderState/period state))
+     ((p-f64 :wat::core::f64) (:wat::core::i64::to-f64 period))
+     ((old-count :wat::core::i64) (:trading::encoding::WilderState/count state))
+     ((new-count :wat::core::i64) (:wat::core::+ old-count 1))
+     ((old-accum :wat::core::f64) (:trading::encoding::WilderState/accum state))
+     ((old-value :wat::core::f64) (:trading::encoding::WilderState/value state))
+     ((new-accum :wat::core::f64)
+      (:wat::core::if (:wat::core::<= new-count period) -> :wat::core::f64
         (:wat::core::+ old-accum x)
         old-accum))
-     ((new-value :f64)
-      (:wat::core::if (:wat::core::<= new-count period) -> :f64
-        (:wat::core::if (:wat::core::= new-count period) -> :f64
+     ((new-value :wat::core::f64)
+      (:wat::core::if (:wat::core::<= new-count period) -> :wat::core::f64
+        (:wat::core::if (:wat::core::= new-count period) -> :wat::core::f64
           (:wat::core::/ new-accum p-f64)
           old-value)
         ;; Post-warmup: value' = x/p + value · (p-1)/p
@@ -108,7 +108,7 @@
 (:wat::core::define
   (:trading::encoding::WilderState::ready?
     (state :trading::encoding::WilderState)
-    -> :bool)
+    -> :wat::core::bool)
   (:wat::core::>=
     (:trading::encoding::WilderState/count state)
     (:trading::encoding::WilderState/period state)))
@@ -118,16 +118,16 @@
 
 (:wat::core::struct :trading::encoding::RingBuffer
   (values   :Vec<f64>)
-  (capacity :i64))
+  (capacity :wat::core::i64))
 
 
 ;; Fresh — empty Vec, given capacity.
 (:wat::core::define
   (:trading::encoding::RingBuffer::fresh
-    (capacity :i64)
+    (capacity :wat::core::i64)
     -> :trading::encoding::RingBuffer)
   (:trading::encoding::RingBuffer/new
-    (:wat::core::vec :f64)
+    (:wat::core::vec :wat::core::f64)
     capacity))
 
 
@@ -135,13 +135,13 @@
 (:wat::core::define
   (:trading::encoding::RingBuffer::push
     (buf :trading::encoding::RingBuffer)
-    (x :f64)
+    (x :wat::core::f64)
     -> :trading::encoding::RingBuffer)
   (:wat::core::let*
-    (((cap :i64) (:trading::encoding::RingBuffer/capacity buf))
+    (((cap :wat::core::i64) (:trading::encoding::RingBuffer/capacity buf))
      ((appended :Vec<f64>)
       (:wat::core::conj (:trading::encoding::RingBuffer/values buf) x))
-     ((len :i64) (:wat::core::length appended))
+     ((len :wat::core::i64) (:wat::core::length appended))
      ((trimmed :Vec<f64>)
       (:wat::core::if (:wat::core::> len cap) -> :Vec<f64>
         (:wat::core::drop appended (:wat::core::- len cap))
@@ -152,7 +152,7 @@
 (:wat::core::define
   (:trading::encoding::RingBuffer::len
     (buf :trading::encoding::RingBuffer)
-    -> :i64)
+    -> :wat::core::i64)
   (:wat::core::length (:trading::encoding::RingBuffer/values buf)))
 
 
@@ -160,11 +160,11 @@
 (:wat::core::define
   (:trading::encoding::RingBuffer::sum
     (buf :trading::encoding::RingBuffer)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::foldl
     (:trading::encoding::RingBuffer/values buf)
     0.0
-    (:wat::core::lambda ((acc :f64) (x :f64) -> :f64)
+    (:wat::core::lambda ((acc :wat::core::f64) (x :wat::core::f64) -> :wat::core::f64)
       (:wat::core::+ acc x))))
 
 
@@ -174,10 +174,10 @@
 (:wat::core::define
   (:trading::encoding::RingBuffer::mean
     (buf :trading::encoding::RingBuffer)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::let*
-    (((n :i64) (:trading::encoding::RingBuffer::len buf)))
-    (:wat::core::if (:wat::core::= n 0) -> :f64
+    (((n :wat::core::i64) (:trading::encoding::RingBuffer::len buf)))
+    (:wat::core::if (:wat::core::= n 0) -> :wat::core::f64
       0.0
       (:wat::core::/
         (:trading::encoding::RingBuffer::sum buf)
@@ -207,12 +207,12 @@
 (:wat::core::define
   (:trading::encoding::RingBuffer::get
     (buf :trading::encoding::RingBuffer)
-    (i :i64)
+    (i :wat::core::i64)
     -> :Option<f64>)
   (:wat::core::let*
     (((vs :Vec<f64>) (:trading::encoding::RingBuffer/values buf))
-     ((n :i64) (:wat::core::length vs))
-     ((idx :i64) (:wat::core::- (:wat::core::- n 1) i)))
+     ((n :wat::core::i64) (:wat::core::length vs))
+     ((idx :wat::core::i64) (:wat::core::- (:wat::core::- n 1) i)))
     (:wat::core::if (:wat::core::< idx 0) -> :Option<f64>
       :None
       (:wat::core::get vs idx))))
@@ -222,7 +222,7 @@
 (:wat::core::define
   (:trading::encoding::RingBuffer::full?
     (buf :trading::encoding::RingBuffer)
-    -> :bool)
+    -> :wat::core::bool)
   (:wat::core::>=
     (:trading::encoding::RingBuffer::len buf)
     (:trading::encoding::RingBuffer/capacity buf)))
@@ -239,20 +239,20 @@
 ;; the recurrence `value' = alpha · x + (1 - alpha) · value`.
 
 (:wat::core::struct :trading::encoding::EmaState
-  (period :i64)
-  (alpha  :f64)
-  (value  :f64)
-  (count  :i64)
-  (accum  :f64))
+  (period :wat::core::i64)
+  (alpha  :wat::core::f64)
+  (value  :wat::core::f64)
+  (count  :wat::core::i64)
+  (accum  :wat::core::f64))
 
 
 (:wat::core::define
   (:trading::encoding::EmaState::fresh
-    (period :i64)
+    (period :wat::core::i64)
     -> :trading::encoding::EmaState)
   (:wat::core::let*
-    (((p-f64 :f64) (:wat::core::i64::to-f64 period))
-     ((alpha :f64)
+    (((p-f64 :wat::core::f64) (:wat::core::i64::to-f64 period))
+     ((alpha :wat::core::f64)
       (:wat::core::/ 2.0 (:wat::core::+ p-f64 1.0))))
     (:trading::encoding::EmaState/new period alpha 0.0 0 0.0)))
 
@@ -260,23 +260,23 @@
 (:wat::core::define
   (:trading::encoding::EmaState::update
     (state :trading::encoding::EmaState)
-    (x :f64)
+    (x :wat::core::f64)
     -> :trading::encoding::EmaState)
   (:wat::core::let*
-    (((period :i64) (:trading::encoding::EmaState/period state))
-     ((p-f64 :f64) (:wat::core::i64::to-f64 period))
-     ((alpha :f64) (:trading::encoding::EmaState/alpha state))
-     ((old-count :i64) (:trading::encoding::EmaState/count state))
-     ((new-count :i64) (:wat::core::+ old-count 1))
-     ((old-accum :f64) (:trading::encoding::EmaState/accum state))
-     ((old-value :f64) (:trading::encoding::EmaState/value state))
-     ((new-accum :f64)
-      (:wat::core::if (:wat::core::<= new-count period) -> :f64
+    (((period :wat::core::i64) (:trading::encoding::EmaState/period state))
+     ((p-f64 :wat::core::f64) (:wat::core::i64::to-f64 period))
+     ((alpha :wat::core::f64) (:trading::encoding::EmaState/alpha state))
+     ((old-count :wat::core::i64) (:trading::encoding::EmaState/count state))
+     ((new-count :wat::core::i64) (:wat::core::+ old-count 1))
+     ((old-accum :wat::core::f64) (:trading::encoding::EmaState/accum state))
+     ((old-value :wat::core::f64) (:trading::encoding::EmaState/value state))
+     ((new-accum :wat::core::f64)
+      (:wat::core::if (:wat::core::<= new-count period) -> :wat::core::f64
         (:wat::core::+ old-accum x)
         old-accum))
-     ((new-value :f64)
-      (:wat::core::if (:wat::core::<= new-count period) -> :f64
-        (:wat::core::if (:wat::core::= new-count period) -> :f64
+     ((new-value :wat::core::f64)
+      (:wat::core::if (:wat::core::<= new-count period) -> :wat::core::f64
+        (:wat::core::if (:wat::core::= new-count period) -> :wat::core::f64
           ;; SMA seed at end of warmup
           (:wat::core::/ new-accum p-f64)
           old-value)
@@ -290,7 +290,7 @@
 (:wat::core::define
   (:trading::encoding::EmaState::ready?
     (state :trading::encoding::EmaState)
-    -> :bool)
+    -> :wat::core::bool)
   (:wat::core::>=
     (:trading::encoding::EmaState/count state)
     (:trading::encoding::EmaState/period state)))
@@ -305,14 +305,14 @@
 ;; period.
 
 (:wat::core::struct :trading::encoding::SmaState
-  (period :i64)
+  (period :wat::core::i64)
   (buffer :trading::encoding::RingBuffer)
-  (sum    :f64))
+  (sum    :wat::core::f64))
 
 
 (:wat::core::define
   (:trading::encoding::SmaState::fresh
-    (period :i64)
+    (period :wat::core::i64)
     -> :trading::encoding::SmaState)
   (:trading::encoding::SmaState/new
     period
@@ -333,29 +333,29 @@
 (:wat::core::define
   (:trading::encoding::SmaState::update
     (state :trading::encoding::SmaState)
-    (x :f64)
+    (x :wat::core::f64)
     -> :trading::encoding::SmaState)
   (:wat::core::let*
-    (((period :i64) (:trading::encoding::SmaState/period state))
+    (((period :wat::core::i64) (:trading::encoding::SmaState/period state))
      ((buf :trading::encoding::RingBuffer)
       (:trading::encoding::SmaState/buffer state))
-     ((old-sum :f64) (:trading::encoding::SmaState/sum state))
-     ((was-full? :bool) (:trading::encoding::RingBuffer::full? buf))
+     ((old-sum :wat::core::f64) (:trading::encoding::SmaState/sum state))
+     ((was-full? :wat::core::bool) (:trading::encoding::RingBuffer::full? buf))
      ;; If at capacity, the oldest entry is at index (len - 1)
      ;; under our 0-most-recent convention.
-     ((evicted :f64)
-      (:wat::core::if was-full? -> :f64
+     ((evicted :wat::core::f64)
+      (:wat::core::if was-full? -> :wat::core::f64
         (:wat::core::match
           (:trading::encoding::RingBuffer::get
             buf
             (:wat::core::- (:trading::encoding::RingBuffer::len buf) 1))
-          -> :f64
+          -> :wat::core::f64
           ((Some v) v)
           (:None 0.0))
         0.0))
      ((new-buf :trading::encoding::RingBuffer)
       (:trading::encoding::RingBuffer::push buf x))
-     ((new-sum :f64)
+     ((new-sum :wat::core::f64)
       (:wat::core::+ (:wat::core::- old-sum evicted) x)))
     (:trading::encoding::SmaState/new period new-buf new-sum)))
 
@@ -363,12 +363,12 @@
 (:wat::core::define
   (:trading::encoding::SmaState::value
     (state :trading::encoding::SmaState)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::let*
     (((buf :trading::encoding::RingBuffer)
       (:trading::encoding::SmaState/buffer state))
-     ((n :i64) (:trading::encoding::RingBuffer::len buf)))
-    (:wat::core::if (:wat::core::= n 0) -> :f64
+     ((n :wat::core::i64) (:trading::encoding::RingBuffer::len buf)))
+    (:wat::core::if (:wat::core::= n 0) -> :wat::core::f64
       0.0
       (:wat::core::/
         (:trading::encoding::SmaState/sum state)
@@ -378,7 +378,7 @@
 (:wat::core::define
   (:trading::encoding::SmaState::ready?
     (state :trading::encoding::SmaState)
-    -> :bool)
+    -> :wat::core::bool)
   (:trading::encoding::RingBuffer::full?
     (:trading::encoding::SmaState/buffer state)))
 
@@ -395,13 +395,13 @@
 
 (:wat::core::struct :trading::encoding::RollingStddev
   (buffer :trading::encoding::RingBuffer)
-  (sum    :f64)
-  (sum-sq :f64))
+  (sum    :wat::core::f64)
+  (sum-sq :wat::core::f64))
 
 
 (:wat::core::define
   (:trading::encoding::RollingStddev::fresh
-    (period :i64)
+    (period :wat::core::i64)
     -> :trading::encoding::RollingStddev)
   (:trading::encoding::RollingStddev/new
     (:trading::encoding::RingBuffer::fresh period)
@@ -412,32 +412,32 @@
 (:wat::core::define
   (:trading::encoding::RollingStddev::update
     (state :trading::encoding::RollingStddev)
-    (x :f64)
+    (x :wat::core::f64)
     -> :trading::encoding::RollingStddev)
   (:wat::core::let*
     (((buf :trading::encoding::RingBuffer)
       (:trading::encoding::RollingStddev/buffer state))
-     ((old-sum :f64) (:trading::encoding::RollingStddev/sum state))
-     ((old-sum-sq :f64) (:trading::encoding::RollingStddev/sum-sq state))
-     ((was-full? :bool) (:trading::encoding::RingBuffer::full? buf))
-     ((evicted :f64)
-      (:wat::core::if was-full? -> :f64
+     ((old-sum :wat::core::f64) (:trading::encoding::RollingStddev/sum state))
+     ((old-sum-sq :wat::core::f64) (:trading::encoding::RollingStddev/sum-sq state))
+     ((was-full? :wat::core::bool) (:trading::encoding::RingBuffer::full? buf))
+     ((evicted :wat::core::f64)
+      (:wat::core::if was-full? -> :wat::core::f64
         (:wat::core::match
           (:trading::encoding::RingBuffer::get
             buf
             (:wat::core::- (:trading::encoding::RingBuffer::len buf) 1))
-          -> :f64
+          -> :wat::core::f64
           ((Some v) v)
           (:None 0.0))
         0.0))
-     ((sum-after-evict :f64)
+     ((sum-after-evict :wat::core::f64)
       (:wat::core::- old-sum evicted))
-     ((sum-sq-after-evict :f64)
+     ((sum-sq-after-evict :wat::core::f64)
       (:wat::core::- old-sum-sq (:wat::core::* evicted evicted)))
      ((new-buf :trading::encoding::RingBuffer)
       (:trading::encoding::RingBuffer::push buf x))
-     ((new-sum :f64) (:wat::core::+ sum-after-evict x))
-     ((new-sum-sq :f64) (:wat::core::+ sum-sq-after-evict (:wat::core::* x x))))
+     ((new-sum :wat::core::f64) (:wat::core::+ sum-after-evict x))
+     ((new-sum-sq :wat::core::f64) (:wat::core::+ sum-sq-after-evict (:wat::core::* x x))))
     (:trading::encoding::RollingStddev/new new-buf new-sum new-sum-sq)))
 
 
@@ -446,28 +446,28 @@
 (:wat::core::define
   (:trading::encoding::RollingStddev::value
     (state :trading::encoding::RollingStddev)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::let*
     (((buf :trading::encoding::RingBuffer)
       (:trading::encoding::RollingStddev/buffer state))
-     ((n :i64) (:trading::encoding::RingBuffer::len buf))
-     ((n-f64 :f64) (:wat::core::i64::to-f64 n)))
-    (:wat::core::if (:wat::core::< n 2) -> :f64
+     ((n :wat::core::i64) (:trading::encoding::RingBuffer::len buf))
+     ((n-f64 :wat::core::f64) (:wat::core::i64::to-f64 n)))
+    (:wat::core::if (:wat::core::< n 2) -> :wat::core::f64
       0.0
       (:wat::core::let*
-        (((mean :f64)
+        (((mean :wat::core::f64)
           (:wat::core::/ (:trading::encoding::RollingStddev/sum state) n-f64))
-         ((var-raw :f64)
+         ((var-raw :wat::core::f64)
           (:wat::core::-
             (:wat::core::/ (:trading::encoding::RollingStddev/sum-sq state) n-f64)
             (:wat::core::* mean mean)))
-         ((var :f64) (:wat::core::f64::max var-raw 0.0)))
+         ((var :wat::core::f64) (:wat::core::f64::max var-raw 0.0)))
         (:wat::std::math::sqrt var)))))
 
 
 (:wat::core::define
   (:trading::encoding::RollingStddev::ready?
     (state :trading::encoding::RollingStddev)
-    -> :bool)
+    -> :wat::core::bool)
   (:trading::encoding::RingBuffer::full?
     (:trading::encoding::RollingStddev/buffer state)))

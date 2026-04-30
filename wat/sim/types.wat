@@ -37,7 +37,7 @@
 
 (:wat::core::enum :trading::sim::PositionState
   :Active
-  (Grace (residue :f64))
+  (Grace (residue :wat::core::f64))
   :Violence)
 
 
@@ -84,7 +84,7 @@
 ;; `(surface, paper-label)` into the future reckoner-backed Predictor.
 
 (:wat::core::struct :trading::sim::TriggerEvent
-  (candle-i    :i64)
+  (candle-i    :wat::core::i64)
   (phase-label :trading::types::PhaseLabel)
   (decision    :trading::sim::Decision)
   (surface     :wat::holon::HolonAST))
@@ -118,12 +118,12 @@
 ;; without indirecting through the trail.
 
 (:wat::core::struct :trading::sim::Paper
-  (id              :i64)
+  (id              :wat::core::i64)
   (direction       :trading::sim::Direction)
-  (entry-price     :f64)
-  (entry-candle    :i64)
+  (entry-price     :wat::core::f64)
+  (entry-candle    :wat::core::i64)
   (entry-surface   :wat::holon::HolonAST)
-  (deadline-candle :i64)
+  (deadline-candle :wat::core::i64)
   (state           :trading::sim::PositionState)
   (trail           :trading::sim::TriggerEvents))
 
@@ -138,8 +138,8 @@
 
 (:wat::core::struct :trading::sim::Outcome
   (paper          :trading::sim::Paper)
-  (closed-at      :i64)
-  (final-residue  :f64)
+  (closed-at      :wat::core::i64)
+  (final-residue  :wat::core::f64)
   (paper-label    :wat::holon::HolonAST)
   (labeled-trail  :trading::sim::LabeledTriggers))
 
@@ -147,11 +147,11 @@
 ;; ─── Aggregate — per-run summary statistics ──────────────────────
 
 (:wat::core::struct :trading::sim::Aggregate
-  (papers         :i64)
-  (grace-count    :i64)
-  (violence-count :i64)
-  (total-residue  :f64)
-  (total-loss     :f64))
+  (papers         :wat::core::i64)
+  (grace-count    :wat::core::i64)
+  (violence-count :wat::core::i64)
+  (total-residue  :wat::core::f64)
+  (total-loss     :wat::core::f64))
 
 
 ;; ─── Config — per-run knobs ──────────────────────────────────────
@@ -161,10 +161,10 @@
 ;; (0.35% per swap), atr-period=14 (Wilder convention).
 
 (:wat::core::struct :trading::sim::Config
-  (deadline    :i64)
-  (min-residue :f64)
-  (fee-bps     :f64)
-  (atr-period  :i64))
+  (deadline    :wat::core::i64)
+  (min-residue :wat::core::f64)
+  (fee-bps     :wat::core::f64)
+  (atr-period  :wat::core::i64))
 
 
 ;; ─── Thinker — vocabulary (Chapter 55) ───────────────────────────

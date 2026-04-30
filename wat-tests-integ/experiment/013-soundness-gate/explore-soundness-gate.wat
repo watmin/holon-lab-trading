@@ -95,21 +95,21 @@
 
    ;; ─── Axiom and Claim — the wat-form units ─────────────────
    (:wat::core::struct :exp::Axiom
-     (id :String)
-     (kind :String)         ;; "policy" (allowed) | "prohibition" (forbidden)
+     (id :wat::core::String)
+     (kind :wat::core::String)         ;; "policy" (allowed) | "prohibition" (forbidden)
      (form :wat::holon::HolonAST))
 
    (:wat::core::struct :exp::Claim
-     (id :String)
-     (title :String)        ;; one-line human-readable summary
+     (id :wat::core::String)
+     (title :wat::core::String)        ;; one-line human-readable summary
      (form :wat::holon::HolonAST))
 
    (:wat::core::struct :exp::Verdict
-     (claim-id :String)
-     (allowed-coherence :f64)
-     (forbidden-coherence :f64)
-     (decision :String)     ;; "approve" | "review" | "reject"
-     (rendered :String))    ;; English render on approve/review; "" on reject
+     (claim-id :wat::core::String)
+     (allowed-coherence :wat::core::f64)
+     (forbidden-coherence :wat::core::f64)
+     (decision :wat::core::String)     ;; "approve" | "review" | "reject"
+     (rendered :wat::core::String))    ;; English render on approve/review; "" on reject
 
 
    ;; ─── Max-coherence — strongest match over individual axioms ─
@@ -143,9 +143,9 @@
      (:exp::max-coherence
        (claim :wat::holon::HolonAST)
        (axioms :Vec<exp::Axiom>)
-       -> :f64)
+       -> :wat::core::f64)
      (:wat::core::foldl axioms 0.0
-       (:wat::core::lambda ((acc :f64) (a :exp::Axiom) -> :f64)
+       (:wat::core::lambda ((acc :wat::core::f64) (a :exp::Axiom) -> :wat::core::f64)
          (:wat::core::f64::max acc
            (:wat::holon::cosine claim (:exp::Axiom/form a))))))
 
@@ -159,8 +159,8 @@
    ;;   allowed > 0.40                         → APPROVE (aligned)
    ;;   else                                   → REVIEW (low confidence)
    (:wat::core::define
-     (:exp::gate (allowed :f64) (forbidden :f64) -> :String)
-     (:wat::core::cond -> :String
+     (:exp::gate (allowed :wat::core::f64) (forbidden :wat::core::f64) -> :wat::core::String)
+     (:wat::core::cond -> :wat::core::String
        ((:wat::core::f64::> forbidden 0.40) "reject")
        ((:wat::core::and (:wat::core::f64::> forbidden 0.20)
                           (:wat::core::f64::> forbidden allowed)) "review")
@@ -176,7 +176,7 @@
    ;; structured display. Real deployment grows a templated
    ;; renderer that knows specific claim shapes.
    (:wat::core::define
-     (:exp::render-claim (c :exp::Claim) -> :String)
+     (:exp::render-claim (c :exp::Claim) -> :wat::core::String)
      (:wat::core::string::concat
        (:exp::Claim/title c)
        (:wat::core::string::concat
@@ -197,13 +197,13 @@
        (forbidden-axioms :Vec<exp::Axiom>)
        -> :exp::Verdict)
      (:wat::core::let*
-       (((allowed :f64) (:exp::max-coherence (:exp::Claim/form claim) allowed-axioms))
-        ((forbidden :f64) (:exp::max-coherence (:exp::Claim/form claim) forbidden-axioms))
+       (((allowed :wat::core::f64) (:exp::max-coherence (:exp::Claim/form claim) allowed-axioms))
+        ((forbidden :wat::core::f64) (:exp::max-coherence (:exp::Claim/form claim) forbidden-axioms))
 
-        ((decision :String) (:exp::gate allowed forbidden))
+        ((decision :wat::core::String) (:exp::gate allowed forbidden))
 
-        ((rendered :String)
-          (:wat::core::cond -> :String
+        ((rendered :wat::core::String)
+          (:wat::core::cond -> :wat::core::String
             ((:wat::core::= decision "approve") (:exp::render-claim claim))
             ((:wat::core::= decision "review")
               (:wat::core::string::concat "[REVIEW] " (:exp::render-claim claim)))
@@ -340,7 +340,7 @@
      ((verdict :exp::Verdict)
       (:exp::evaluate claim (:exp::all-allowed) (:exp::all-forbidden)))
 
-     ((decision :String) (:exp::Verdict/decision verdict))
+     ((decision :wat::core::String) (:exp::Verdict/decision verdict))
      ((_d :()) (:wat::test::assert-eq decision "approve")))
     ;; The English render must include the title (so the user
     ;; reading sees a claim that's been gated).
@@ -378,7 +378,7 @@
      ((verdict :exp::Verdict)
       (:exp::evaluate claim (:exp::all-allowed) (:exp::all-forbidden)))
 
-     ((decision :String) (:exp::Verdict/decision verdict))
+     ((decision :wat::core::String) (:exp::Verdict/decision verdict))
      ((_d :()) (:wat::test::assert-eq decision "reject")))
     ;; The render must NOT contain the claim's title — it was
     ;; blocked. Render is the [REJECTED] sentinel.
@@ -409,7 +409,7 @@
      ((verdict :exp::Verdict)
       (:exp::evaluate claim (:exp::all-allowed) (:exp::all-forbidden)))
 
-     ((decision :String) (:exp::Verdict/decision verdict)))
+     ((decision :wat::core::String) (:exp::Verdict/decision verdict)))
     (:wat::test::assert-eq decision "reject")))
 
 
@@ -437,7 +437,7 @@
      ((verdict :exp::Verdict)
       (:exp::evaluate claim (:exp::all-allowed) (:exp::all-forbidden)))
 
-     ((decision :String) (:exp::Verdict/decision verdict)))
+     ((decision :wat::core::String) (:exp::Verdict/decision verdict)))
     (:wat::test::assert-eq decision "approve")))
 
 
@@ -477,11 +477,11 @@
 
      ;; Chain verdict — fold over the verdicts; if ANY is "reject"
      ;; the whole chain rejects.
-     ((d1 :String) (:exp::Verdict/decision v1))
-     ((d2 :String) (:exp::Verdict/decision v2))
-     ((d3 :String) (:exp::Verdict/decision v3))
+     ((d1 :wat::core::String) (:exp::Verdict/decision v1))
+     ((d2 :wat::core::String) (:exp::Verdict/decision v2))
+     ((d3 :wat::core::String) (:exp::Verdict/decision v3))
 
-     ((chain-rejected :bool)
+     ((chain-rejected :wat::core::bool)
        (:wat::core::or
          (:wat::core::or (:wat::core::= d1 "reject")
                           (:wat::core::= d2 "reject"))
@@ -517,12 +517,12 @@
      ((verdict :exp::Verdict)
       (:exp::evaluate claim (:exp::all-allowed) (:exp::all-forbidden)))
 
-     ((claim-id :String) (:exp::Verdict/claim-id verdict))
-     ((decision :String) (:exp::Verdict/decision verdict))
-     ((rendered :String) (:exp::Verdict/rendered verdict))
+     ((claim-id :wat::core::String) (:exp::Verdict/claim-id verdict))
+     ((decision :wat::core::String) (:exp::Verdict/decision verdict))
+     ((rendered :wat::core::String) (:exp::Verdict/rendered verdict))
 
-     ((id-preserved :bool) (:wat::core::= claim-id "T6-pipeline-test"))
-     ((approved :bool) (:wat::core::= decision "approve"))
+     ((id-preserved :wat::core::bool) (:wat::core::= claim-id "T6-pipeline-test"))
+     ((approved :wat::core::bool) (:wat::core::= decision "approve"))
 
      ((_id :()) (:wat::test::assert-eq id-preserved true))
      ((_app :()) (:wat::test::assert-eq approved true)))
@@ -558,13 +558,13 @@
      ((verdict :exp::Verdict)
       (:exp::evaluate claim (:exp::all-allowed) (:exp::all-forbidden)))
 
-     ((decision :String) (:exp::Verdict/decision verdict))
-     ((forbidden-coherence :f64) (:exp::Verdict/forbidden-coherence verdict))
-     ((rendered :String) (:exp::Verdict/rendered verdict))
+     ((decision :wat::core::String) (:exp::Verdict/decision verdict))
+     ((forbidden-coherence :wat::core::f64) (:exp::Verdict/forbidden-coherence verdict))
+     ((rendered :wat::core::String) (:exp::Verdict/rendered verdict))
 
      ;; Forbidden coherence is meaningfully high (> 0.40 under
      ;; max-over-axioms at d=10000).
-     ((high-forbidden :bool) (:wat::core::f64::> forbidden-coherence 0.40))
+     ((high-forbidden :wat::core::bool) (:wat::core::f64::> forbidden-coherence 0.40))
 
      ((_h :()) (:wat::test::assert-eq high-forbidden true))
      ((_d :()) (:wat::test::assert-eq decision "reject")))

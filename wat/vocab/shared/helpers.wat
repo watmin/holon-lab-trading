@@ -26,8 +26,8 @@
 ;; algebra's view.
 (:wat::core::define
   (:trading::vocab::shared::circ
-    (value :f64)
-    (period :f64)
+    (value :wat::core::f64)
+    (period :wat::core::f64)
     -> :wat::holon::HolonAST)
   (:wat::holon::Circular
     (:wat::core::f64::round value 0)
@@ -40,7 +40,7 @@
 ;; across every vocab module.
 (:wat::core::define
   (:trading::vocab::shared::named-bind
-    (name :String)
+    (name :wat::core::String)
     (child :wat::holon::HolonAST)
     -> :wat::holon::HolonAST)
   (:wat::holon::Bind

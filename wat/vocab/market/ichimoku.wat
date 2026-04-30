@@ -48,28 +48,28 @@
     -> :trading::encoding::VocabEmission)
   (:wat::core::let*
     ;; Pull raw values once.
-    (((close :f64) (:trading::types::Ohlcv/close o))
-     ((tenkan :f64) (:trading::types::Candle::Trend/tenkan-sen t))
-     ((kijun :f64) (:trading::types::Candle::Trend/kijun-sen t))
-     ((cloud-top :f64) (:trading::types::Candle::Trend/cloud-top t))
-     ((cloud-bottom :f64) (:trading::types::Candle::Trend/cloud-bottom t))
-     ((tk-cross-delta-raw :f64)
+    (((close :wat::core::f64) (:trading::types::Ohlcv/close o))
+     ((tenkan :wat::core::f64) (:trading::types::Candle::Trend/tenkan-sen t))
+     ((kijun :wat::core::f64) (:trading::types::Candle::Trend/kijun-sen t))
+     ((cloud-top :wat::core::f64) (:trading::types::Candle::Trend/cloud-top t))
+     ((cloud-bottom :wat::core::f64) (:trading::types::Candle::Trend/cloud-bottom t))
+     ((tk-cross-delta-raw :wat::core::f64)
       (:trading::types::Candle::Divergence/tk-cross-delta d))
 
      ;; Cloud geometry — derived once, used by cloud-position +
      ;; cloud-thickness.
-     ((cloud-mid :f64)
+     ((cloud-mid :wat::core::f64)
       (:wat::core::/
         (:wat::core::+ cloud-top cloud-bottom) 2.0))
-     ((cloud-width :f64)
+     ((cloud-width :wat::core::f64)
       (:wat::core::- cloud-top cloud-bottom))
 
      ;; cloud-position — nested branch on cloud-width > 0.
      ;; Positive branch: scale by max(cloud-width, close * 0.001).
      ;; Collapsed branch: scale by close * 0.01.
      ;; Both branches clamped to ±1, then round-to-2.
-     ((cloud-position-raw :f64)
-      (:wat::core::if (:wat::core::> cloud-width 0.0) -> :f64
+     ((cloud-position-raw :wat::core::f64)
+      (:wat::core::if (:wat::core::> cloud-width 0.0) -> :wat::core::f64
         (:wat::core::/
           (:wat::core::- close cloud-mid)
           (:wat::core::f64::max cloud-width
@@ -77,42 +77,42 @@
         (:wat::core::/
           (:wat::core::- close cloud-mid)
           (:wat::core::* close 0.01))))
-     ((cloud-position :f64)
+     ((cloud-position :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::f64::clamp cloud-position-raw -1.0 1.0)))
 
      ;; cloud-thickness — floor at 0.0001 via substrate f64::max,
      ;; round-to-4, plain Log bounds (0.0001, 0.5).
-     ((thickness-raw :f64)
+     ((thickness-raw :wat::core::f64)
       (:wat::core::/ cloud-width close))
-     ((cloud-thickness :f64)
+     ((cloud-thickness :wat::core::f64)
       (:trading::encoding::round-to-4
         (:wat::core::f64::max thickness-raw 0.0001)))
 
      ;; tk-cross-delta — clamp ±1, round-to-2.
-     ((tk-cross-delta :f64)
+     ((tk-cross-delta :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::f64::clamp tk-cross-delta-raw -1.0 1.0)))
 
      ;; tk-spread, tenkan-dist, kijun-dist — same shape: numerator
      ;; / (close × 0.01), clamp ±1, round-to-2. denom shared.
-     ((pct-denom :f64) (:wat::core::* close 0.01))
+     ((pct-denom :wat::core::f64) (:wat::core::* close 0.01))
 
-     ((tk-spread :f64)
+     ((tk-spread :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::f64::clamp
           (:wat::core::/
             (:wat::core::- tenkan kijun) pct-denom)
           -1.0 1.0)))
 
-     ((tenkan-dist :f64)
+     ((tenkan-dist :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::f64::clamp
           (:wat::core::/
             (:wat::core::- close tenkan) pct-denom)
           -1.0 1.0)))
 
-     ((kijun-dist :f64)
+     ((kijun-dist :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::f64::clamp
           (:wat::core::/

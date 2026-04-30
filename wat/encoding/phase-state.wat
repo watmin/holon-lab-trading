@@ -34,7 +34,7 @@
 ;; Explicit:
 ;;   :trading::encoding::PhaseState::fresh -> PhaseState
 ;;   :trading::encoding::PhaseState::step state close volume candle-i smoothing -> PhaseState
-;;   :trading::encoding::PhaseState::HISTORY-MAX-AGE -> :i64    ;; 2016
+;;   :trading::encoding::PhaseState::HISTORY-MAX-AGE -> :wat::core::i64    ;; 2016
 
 
 ;; Standalone-loadable: pull in our type deps so this file freezes
@@ -58,24 +58,24 @@
   (tracking            :trading::encoding::TrackingState)
   (current-label       :trading::types::PhaseLabel)
   (current-direction   :trading::types::PhaseDirection)
-  (extreme             :f64)
-  (extreme-candle      :i64)
+  (extreme             :wat::core::f64)
+  (extreme-candle      :wat::core::i64)
   (current-phase-label :trading::types::PhaseLabel)
-  (current-start       :i64)
-  (close-sum           :f64)
-  (volume-sum          :f64)
-  (high                :f64)
-  (low                 :f64)
-  (open-close          :f64)
-  (last-close          :f64)
-  (count               :i64)
+  (current-start       :wat::core::i64)
+  (close-sum           :wat::core::f64)
+  (volume-sum          :wat::core::f64)
+  (high                :wat::core::f64)
+  (low                 :wat::core::f64)
+  (open-close          :wat::core::f64)
+  (last-close          :wat::core::f64)
+  (count               :wat::core::i64)
   (phase-history       :trading::types::PhaseRecords)
-  (generation          :i64))
+  (generation          :wat::core::i64))
 
 
 ;; One week of 5-minute candles.
 (:wat::core::define
-  (:trading::encoding::PhaseState::HISTORY-MAX-AGE -> :i64)
+  (:trading::encoding::PhaseState::HISTORY-MAX-AGE -> :wat::core::i64)
   2016)
 
 
@@ -111,13 +111,13 @@
 (:wat::core::define
   (:trading::encoding::trim-front
     (history :trading::types::PhaseRecords)
-    (now :i64)
+    (now :wat::core::i64)
     -> :trading::types::PhaseRecords)
   (:wat::core::match (:wat::core::first history) -> :trading::types::PhaseRecords
     (:None history)
     ((Some front)
       (:wat::core::let*
-        (((age :i64)
+        (((age :wat::core::i64)
           (:wat::core::- now (:trading::types::PhaseRecord/start-candle front))))
         (:wat::core::if (:wat::core::> age (:trading::encoding::PhaseState::HISTORY-MAX-AGE)) -> :trading::types::PhaseRecords
           (:trading::encoding::trim-front (:wat::core::drop history 1) now)
@@ -130,17 +130,17 @@
 (:wat::core::define
   (:trading::encoding::close-phase
     (state :trading::encoding::PhaseState)
-    (end-candle :i64)
+    (end-candle :wat::core::i64)
     -> :trading::types::PhaseRecords)
   (:wat::core::let*
-    (((duration :i64) (:trading::encoding::PhaseState/count state))
-     ((dur-f64 :f64) (:wat::core::i64::to-f64 duration))
-     ((avg-close :f64)
-      (:wat::core::if (:wat::core::> duration 0) -> :f64
+    (((duration :wat::core::i64) (:trading::encoding::PhaseState/count state))
+     ((dur-f64 :wat::core::f64) (:wat::core::i64::to-f64 duration))
+     ((avg-close :wat::core::f64)
+      (:wat::core::if (:wat::core::> duration 0) -> :wat::core::f64
         (:wat::core::/ (:trading::encoding::PhaseState/close-sum state) dur-f64)
         0.0))
-     ((avg-volume :f64)
-      (:wat::core::if (:wat::core::> duration 0) -> :f64
+     ((avg-volume :wat::core::f64)
+      (:wat::core::if (:wat::core::> duration 0) -> :wat::core::f64
         (:wat::core::/ (:trading::encoding::PhaseState/volume-sum state) dur-f64)
         0.0))
      ((record :trading::types::PhaseRecord)
@@ -169,9 +169,9 @@
     (state :trading::encoding::PhaseState)
     (label :trading::types::PhaseLabel)
     (direction :trading::types::PhaseDirection)
-    (close :f64)
-    (volume :f64)
-    (candle-i :i64)
+    (close :wat::core::f64)
+    (volume :wat::core::f64)
+    (candle-i :wat::core::i64)
     (new-history :trading::types::PhaseRecords)
     -> :trading::encoding::PhaseState)
   (:trading::encoding::PhaseState/new
@@ -205,10 +205,10 @@
 (:wat::core::define
   (:trading::encoding::PhaseState::step
     (state :trading::encoding::PhaseState)
-    (close :f64)
-    (volume :f64)
-    (candle-i :i64)
-    (smoothing :f64)
+    (close :wat::core::f64)
+    (volume :wat::core::f64)
+    (candle-i :wat::core::i64)
+    (smoothing :wat::core::f64)
     -> :trading::encoding::PhaseState)
   (:wat::core::if (:wat::core::= (:trading::encoding::PhaseState/count state) 0) -> :trading::encoding::PhaseState
     ;; First-candle branch — direct seed.
@@ -232,53 +232,53 @@
     ;; Subsequent-candle branch.
     (:wat::core::let*
       (;; Update running stats (this candle counts in the active phase).
-       ((new-close-sum :f64)
+       ((new-close-sum :wat::core::f64)
         (:wat::core::+ (:trading::encoding::PhaseState/close-sum state) close))
-       ((new-volume-sum :f64)
+       ((new-volume-sum :wat::core::f64)
         (:wat::core::+ (:trading::encoding::PhaseState/volume-sum state) volume))
-       ((new-count :i64)
+       ((new-count :wat::core::i64)
         (:wat::core::+ (:trading::encoding::PhaseState/count state) 1))
-       ((new-high :f64)
-        (:wat::core::if (:wat::core::> close (:trading::encoding::PhaseState/high state)) -> :f64
+       ((new-high :wat::core::f64)
+        (:wat::core::if (:wat::core::> close (:trading::encoding::PhaseState/high state)) -> :wat::core::f64
           close
           (:trading::encoding::PhaseState/high state)))
-       ((new-low :f64)
-        (:wat::core::if (:wat::core::< close (:trading::encoding::PhaseState/low state)) -> :f64
+       ((new-low :wat::core::f64)
+        (:wat::core::if (:wat::core::< close (:trading::encoding::PhaseState/low state)) -> :wat::core::f64
           close
           (:trading::encoding::PhaseState/low state)))
 
        ;; State machine transition — Rising vs Falling.
        ((old-tracking :trading::encoding::TrackingState)
         (:trading::encoding::PhaseState/tracking state))
-       ((old-extreme :f64)
+       ((old-extreme :wat::core::f64)
         (:trading::encoding::PhaseState/extreme state))
-       ((old-extreme-candle :i64)
+       ((old-extreme-candle :wat::core::i64)
         (:trading::encoding::PhaseState/extreme-candle state))
 
        ;; In Rising: track the higher extreme; if extreme - close > smoothing → switch.
        ;; In Falling: track the lower extreme; if close - extreme > smoothing → switch.
-       ((track-extreme :f64)
-        (:wat::core::match old-tracking -> :f64
+       ((track-extreme :wat::core::f64)
+        (:wat::core::match old-tracking -> :wat::core::f64
           (:trading::encoding::TrackingState::Rising
-            (:wat::core::if (:wat::core::> close old-extreme) -> :f64
+            (:wat::core::if (:wat::core::> close old-extreme) -> :wat::core::f64
               close
               old-extreme))
           (:trading::encoding::TrackingState::Falling
-            (:wat::core::if (:wat::core::< close old-extreme) -> :f64
+            (:wat::core::if (:wat::core::< close old-extreme) -> :wat::core::f64
               close
               old-extreme))))
-       ((track-extreme-candle :i64)
-        (:wat::core::match old-tracking -> :i64
+       ((track-extreme-candle :wat::core::i64)
+        (:wat::core::match old-tracking -> :wat::core::i64
           (:trading::encoding::TrackingState::Rising
-            (:wat::core::if (:wat::core::> close old-extreme) -> :i64
+            (:wat::core::if (:wat::core::> close old-extreme) -> :wat::core::i64
               candle-i
               old-extreme-candle))
           (:trading::encoding::TrackingState::Falling
-            (:wat::core::if (:wat::core::< close old-extreme) -> :i64
+            (:wat::core::if (:wat::core::< close old-extreme) -> :wat::core::i64
               candle-i
               old-extreme-candle))))
-       ((switch? :bool)
-        (:wat::core::match old-tracking -> :bool
+       ((switch? :wat::core::bool)
+        (:wat::core::match old-tracking -> :wat::core::bool
           (:trading::encoding::TrackingState::Rising
             (:wat::core::> (:wat::core::- track-extreme close) smoothing))
           (:trading::encoding::TrackingState::Falling
@@ -290,13 +290,13 @@
             (:trading::encoding::TrackingState::Falling :trading::encoding::TrackingState::Rising))
           old-tracking))
        ;; On switch the extreme resets to close — the boundary candle.
-       ((new-extreme :f64)
-        (:wat::core::if switch? -> :f64 close track-extreme))
-       ((new-extreme-candle :i64)
-        (:wat::core::if switch? -> :i64 candle-i track-extreme-candle))
+       ((new-extreme :wat::core::f64)
+        (:wat::core::if switch? -> :wat::core::f64 close track-extreme))
+       ((new-extreme-candle :wat::core::i64)
+        (:wat::core::if switch? -> :wat::core::i64 candle-i track-extreme-candle))
 
        ;; Derive label from new-tracking + position vs new-extreme.
-       ((half-smooth :f64) (:wat::core::/ smoothing 2.0))
+       ((half-smooth :wat::core::f64) (:wat::core::/ smoothing 2.0))
        ((label+dir :(trading::types::PhaseLabel,trading::types::PhaseDirection))
         (:wat::core::match new-tracking
                            -> :(trading::types::PhaseLabel,trading::types::PhaseDirection)
@@ -340,7 +340,7 @@
           (:trading::encoding::PhaseState/generation state)))
 
        ;; Phase boundary check.
-       ((boundary? :bool)
+       ((boundary? :wat::core::bool)
         (:wat::core::not= new-label
           (:trading::encoding::PhaseState/current-phase-label state))))
       (:wat::core::if boundary? -> :trading::encoding::PhaseState

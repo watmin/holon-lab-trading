@@ -8,8 +8,8 @@
    (:wat::core::define
      (:test::obv-feed
        (s :trading::encoding::ObvState)
-       (c :f64) (v :f64)
-       (n :i64)
+       (c :wat::core::f64) (v :wat::core::f64)
+       (n :wat::core::i64)
        -> :trading::encoding::ObvState)
      (:wat::core::if (:wat::core::<= n 0)
                      -> :trading::encoding::ObvState
@@ -26,16 +26,16 @@
 (:deftest :trading::test::encoding::indicator-bank::test-linreg-perfect-line
   (:wat::core::let*
     (((ys :Vec<f64>)
-      (:wat::core::vec :f64 1.0 3.0 5.0 7.0 9.0))
-     ((slope :f64) (:trading::encoding::compute-linreg-slope ys)))
+      (:wat::core::vec :wat::core::f64 1.0 3.0 5.0 7.0 9.0))
+     ((slope :wat::core::f64) (:trading::encoding::compute-linreg-slope ys)))
     (:wat::test::assert-eq slope 2.0)))
 
 ;; Test 2 — flat input → slope 0.
 (:deftest :trading::test::encoding::indicator-bank::test-linreg-flat-zero
   (:wat::core::let*
     (((ys :Vec<f64>)
-      (:wat::core::vec :f64 5.0 5.0 5.0 5.0 5.0))
-     ((slope :f64) (:trading::encoding::compute-linreg-slope ys)))
+      (:wat::core::vec :wat::core::f64 5.0 5.0 5.0 5.0 5.0))
+     ((slope :wat::core::f64) (:trading::encoding::compute-linreg-slope ys)))
     (:wat::test::assert-eq slope 0.0)))
 
 
@@ -65,8 +65,8 @@
      ((s6 :trading::encoding::ObvState) (:trading::encoding::ObvState::update s5 110.0 50.0))
      ((s7 :trading::encoding::ObvState) (:trading::encoding::ObvState::update s6 112.0 50.0))
      ((s8 :trading::encoding::ObvState) (:trading::encoding::ObvState::update s7 114.0 50.0))
-     ((obv :f64) (:trading::encoding::ObvState::value s8))
-     ((slope :f64) (:trading::encoding::ObvState::slope s8)))
+     ((obv :wat::core::f64) (:trading::encoding::ObvState::value s8))
+     ((slope :wat::core::f64) (:trading::encoding::ObvState::slope s8)))
     (:wat::core::let*
       (((u1 :()) (:wat::test::assert-eq (:wat::core::> obv 0.0) true)))
       (:wat::test::assert-eq (:wat::core::> slope 0.0) true))))
@@ -84,8 +84,8 @@
      ((s6 :trading::encoding::ObvState) (:trading::encoding::ObvState::update s5 90.0 50.0))
      ((s7 :trading::encoding::ObvState) (:trading::encoding::ObvState::update s6 88.0 50.0))
      ((s8 :trading::encoding::ObvState) (:trading::encoding::ObvState::update s7 86.0 50.0))
-     ((obv :f64) (:trading::encoding::ObvState::value s8))
-     ((slope :f64) (:trading::encoding::ObvState::slope s8)))
+     ((obv :wat::core::f64) (:trading::encoding::ObvState::value s8))
+     ((slope :wat::core::f64) (:trading::encoding::ObvState::slope s8)))
     (:wat::core::let*
       (((u1 :()) (:wat::test::assert-eq (:wat::core::< obv 0.0) true)))
       (:wat::test::assert-eq (:wat::core::< slope 0.0) true))))
@@ -131,6 +131,6 @@
      ((s3 :trading::encoding::VolumeAccelState) (:trading::encoding::VolumeAccelState::update s2 100.0))
      ((s4 :trading::encoding::VolumeAccelState) (:trading::encoding::VolumeAccelState::update s3 100.0))
      ((s5 :trading::encoding::VolumeAccelState) (:trading::encoding::VolumeAccelState::update s4 200.0))  ;; spike
-     ((ratio :f64) (:trading::encoding::VolumeAccelState::value s5)))
+     ((ratio :wat::core::f64) (:trading::encoding::VolumeAccelState::value s5)))
     ;; SMA(5) of {100,100,100,100,200} = 120; ratio = 200/120 ≈ 1.67.
     (:wat::test::assert-eq (:wat::core::> ratio 1.5) true)))

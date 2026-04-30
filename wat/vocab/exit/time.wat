@@ -21,8 +21,8 @@
     (t :trading::types::Candle::Time)
     -> :wat::holon::Holons)
   (:wat::core::let*
-    (((hour        :f64) (:trading::types::Candle::Time/hour        t))
-     ((day-of-week :f64) (:trading::types::Candle::Time/day-of-week t)))
+    (((hour        :wat::core::f64) (:trading::types::Candle::Time/hour        t))
+     ((day-of-week :wat::core::f64) (:trading::types::Candle::Time/day-of-week t)))
     (:wat::core::vec :wat::holon::HolonAST
       (:trading::vocab::shared::named-bind "hour"
         (:trading::vocab::shared::circ hour        24.0))

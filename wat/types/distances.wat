@@ -16,8 +16,8 @@
 (:wat::load-file! "./newtypes.wat")
 
 (:wat::core::struct :trading::types::Distances
-  (trail :f64)
-  (stop  :f64))
+  (trail :wat::core::f64)
+  (stop  :wat::core::f64))
 
 (:wat::core::struct :trading::types::Levels
   (trail-stop  :trading::types::Price)

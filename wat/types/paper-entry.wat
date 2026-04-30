@@ -9,8 +9,8 @@
 ;; Field-type deltas from archive:
 ;;
 ;; - paper-id, age, entry-candle: archive uses `usize`; wat uses
-;;   `:i64` per pivot.wat's existing convention (PhaseRecord's
-;;   candle indices are `:i64`).
+;;   `:wat::core::i64` per pivot.wat's existing convention (PhaseRecord's
+;;   candle indices are `:wat::core::i64`).
 ;;
 ;; - composed-thought, market-thought, position-thought: archive
 ;;   uses `holon::kernel::vector::Vector`; wat uses
@@ -37,18 +37,18 @@
 (:wat::load-file! "./distances.wat")
 
 (:wat::core::struct :trading::types::PaperEntry
-  (paper-id          :i64)
+  (paper-id          :wat::core::i64)
   (composed-thought  :wat::holon::HolonAST)
   (market-thought    :wat::holon::HolonAST)
   (position-thought  :wat::holon::HolonAST)
   (prediction        :trading::types::Direction)
   (entry-price       :trading::types::Price)
   (distances         :trading::types::Distances)
-  (extreme           :f64)
+  (extreme           :wat::core::f64)
   (trail-level       :trading::types::Price)
   (stop-level        :trading::types::Price)
-  (signaled          :bool)
-  (resolved          :bool)
-  (age               :i64)
-  (entry-candle      :i64)
+  (signaled          :wat::core::bool)
+  (resolved          :wat::core::bool)
+  (age               :wat::core::i64)
+  (entry-candle      :wat::core::i64)
   (price-history     :Vec<f64>))

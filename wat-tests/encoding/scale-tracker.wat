@@ -14,8 +14,8 @@
    (:wat::core::define
      (:test::repeat-update
        (t :trading::encoding::ScaleTracker)
-       (v :f64)
-       (n :i64)
+       (v :wat::core::f64)
+       (n :wat::core::i64)
        -> :trading::encoding::ScaleTracker)
      (:wat::core::if (:wat::core::<= n 0)
                      -> :trading::encoding::ScaleTracker
@@ -111,9 +111,9 @@
 ;; bucket-width = 0.015625.
 (:deftest :trading::test::encoding::scale-tracker::test-bucket-width-matches-scale-times-noise-floor
   (:wat::core::let*
-    (((bw-at-1 :f64) (:trading::encoding::ScaleTracker::bucket-width 1.0))
-     ((bw-at-half :f64) (:trading::encoding::ScaleTracker::bucket-width 0.5))
-     ((nf :f64) (:wat::config::noise-floor)))
+    (((bw-at-1 :wat::core::f64) (:trading::encoding::ScaleTracker::bucket-width 1.0))
+     ((bw-at-half :wat::core::f64) (:trading::encoding::ScaleTracker::bucket-width 0.5))
+     ((nf :wat::core::f64) (:wat::config::noise-floor)))
     (:wat::test::assert-eq
       bw-at-1
       nf)))
@@ -126,10 +126,10 @@
 ;; hand-calibration to a specific d.
 (:deftest :trading::test::encoding::scale-tracker::test-values-in-same-bucket-snap-identical
   (:wat::core::let*
-    (((bw :f64) (:trading::encoding::ScaleTracker::bucket-width 1.0))
-     ((within :f64) (:wat::core::* 0.25 bw))
-     ((a :f64) (:trading::encoding::ScaleTracker::bucket 0.50 1.0))
-     ((b :f64)
+    (((bw :wat::core::f64) (:trading::encoding::ScaleTracker::bucket-width 1.0))
+     ((within :wat::core::f64) (:wat::core::* 0.25 bw))
+     ((a :wat::core::f64) (:trading::encoding::ScaleTracker::bucket 0.50 1.0))
+     ((b :wat::core::f64)
        (:trading::encoding::ScaleTracker::bucket
          (:wat::core::+ 0.50 within) 1.0)))
     (:wat::test::assert-eq a b)))
@@ -138,13 +138,13 @@
 ;; Use 5 × bucket-width — clearly across multiple buckets at any d.
 (:deftest :trading::test::encoding::scale-tracker::test-values-across-buckets-differ
   (:wat::core::let*
-    (((bw :f64) (:trading::encoding::ScaleTracker::bucket-width 1.0))
-     ((across :f64) (:wat::core::* 5.0 bw))
-     ((a :f64) (:trading::encoding::ScaleTracker::bucket 0.50 1.0))
-     ((b :f64)
+    (((bw :wat::core::f64) (:trading::encoding::ScaleTracker::bucket-width 1.0))
+     ((across :wat::core::f64) (:wat::core::* 5.0 bw))
+     ((a :wat::core::f64) (:trading::encoding::ScaleTracker::bucket 0.50 1.0))
+     ((b :wat::core::f64)
        (:trading::encoding::ScaleTracker::bucket
          (:wat::core::+ 0.50 across) 1.0))
-     ((different :bool)
+     ((different :wat::core::bool)
       (:wat::core::not (:wat::core::= a b))))
     (:wat::test::assert-eq different true)))
 
@@ -153,8 +153,8 @@
 ;; stability under repeated lookup.
 (:deftest :trading::test::encoding::scale-tracker::test-bucket-idempotent
   (:wat::core::let*
-    (((once :f64) (:trading::encoding::ScaleTracker::bucket 0.51 1.0))
-     ((twice :f64) (:trading::encoding::ScaleTracker::bucket once 1.0)))
+    (((once :wat::core::f64) (:trading::encoding::ScaleTracker::bucket 0.51 1.0))
+     ((twice :wat::core::f64) (:trading::encoding::ScaleTracker::bucket once 1.0)))
     (:wat::test::assert-eq once twice)))
 
 ;; Zero-scale fallback — Option B. When scale is 0, bucket-width is 0,
@@ -163,5 +163,5 @@
 ;; trackers with zero EMA).
 (:deftest :trading::test::encoding::scale-tracker::test-bucket-zero-scale-returns-value
   (:wat::core::let*
-    (((result :f64) (:trading::encoding::ScaleTracker::bucket 0.42 0.0)))
+    (((result :wat::core::f64) (:trading::encoding::ScaleTracker::bucket 0.42 0.0)))
     (:wat::test::assert-eq result 0.42)))

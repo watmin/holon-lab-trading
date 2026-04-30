@@ -64,10 +64,10 @@
 ;; ─── Protocol — Event + Response enums ──────────────────────────
 
 (:wat::core::enum :trading::treasury::Service::Event
-  (Tick (candle :i64) (price :f64))
-  (SubmitPaper (from-asset :String) (to-asset :String) (price :f64))
-  (SubmitReal  (from-asset :String) (to-asset :String) (price :f64))
-  (SubmitExit  (paper-id :i64) (current-price :f64))
+  (Tick (candle :wat::core::i64) (price :wat::core::f64))
+  (SubmitPaper (from-asset :wat::core::String) (to-asset :wat::core::String) (price :wat::core::f64))
+  (SubmitReal  (from-asset :wat::core::String) (to-asset :wat::core::String) (price :wat::core::f64))
+  (SubmitExit  (paper-id :wat::core::i64) (current-price :wat::core::f64))
   (BatchGetPaperStates (paper-ids :Vec<i64>)))
 
 (:wat::core::enum :trading::treasury::Service::Response
@@ -136,9 +136,9 @@
 ;; SQL parsers read back the typed fields.
 
 (:wat::core::struct :trading::treasury::TickSnapshot
-  (candle        :i64)
-  (price         :f64)
-  (active-papers :i64))
+  (candle        :wat::core::i64)
+  (price         :wat::core::f64)
+  (active-papers :wat::core::i64))
 
 
 ;; ─── handle-tick — open scope, time the work, log the snapshot ──
@@ -146,8 +146,8 @@
 (:wat::core::define
   (:trading::treasury::Service/handle-tick
     (treasury :trading::treasury::Treasury)
-    (candle :i64)
-    (price :f64)
+    (candle :wat::core::i64)
+    (price :wat::core::f64)
     (scope :wat::telemetry::WorkUnit::Scope<trading::treasury::Treasury>)
     (wlog  :wat::telemetry::WorkUnitLog)
     -> :trading::treasury::Treasury)
@@ -170,7 +170,7 @@
                 (:trading::treasury::Treasury::check-deadlines treasury candle price))))
            ((t' :trading::treasury::Treasury) (:wat::core::first tup))
            ((_verdicts :trading::treasury::Verdicts) (:wat::core::second tup))
-           ((active :i64) (:trading::treasury::Treasury::active-paper-count t'))
+           ((active :wat::core::i64) (:trading::treasury::Treasury::active-paper-count t'))
            ((snap :trading::treasury::TickSnapshot)
             (:trading::treasury::TickSnapshot/new candle price active))
            ((_obs :())
@@ -186,7 +186,7 @@
     (treasury :trading::treasury::Treasury)
     (event :trading::treasury::Service::Event)
     (resp-tx :trading::treasury::Service::RespTx)
-    (broker-idx :i64)
+    (broker-idx :wat::core::i64)
     (scope :wat::telemetry::WorkUnit::Scope<trading::treasury::Treasury>)
     (wlog  :wat::telemetry::WorkUnitLog)
     -> :trading::treasury::Treasury)
@@ -240,7 +240,7 @@
                       (((states :trading::treasury::Service::PaperStateEntries)
                         (:wat::core::map paper-ids
                           (:wat::core::lambda
-                            ((id :i64) -> :trading::treasury::Service::PaperStateEntry)
+                            ((id :wat::core::i64) -> :trading::treasury::Service::PaperStateEntry)
                             (:wat::core::tuple id
                               (:wat::core::match
                                 (:wat::core::get
@@ -276,7 +276,7 @@
     (:wat::core::let*
       (((chosen :(i64,Option<trading::treasury::Service::Event>))
         (:wat::kernel::select rxs))
-       ((idx :i64) (:wat::core::first chosen))
+       ((idx :wat::core::i64) (:wat::core::first chosen))
        ((maybe :Option<trading::treasury::Service::Event>)
         (:wat::core::second chosen)))
       (:wat::core::match maybe -> :()
@@ -297,9 +297,9 @@
                     (_ treasury)))
                 ((:trading::treasury::Service::Slot::Broker resp-tx)
                   (:wat::core::let*
-                    (((broker-idx :i64)
+                    (((broker-idx :wat::core::i64)
                       (:wat::core::match (:wat::core::get broker-indices idx)
-                        -> :i64
+                        -> :wat::core::i64
                         ((Some i) i)
                         (:None -1))))
                     (:trading::treasury::Service/handle-broker-request
@@ -319,8 +319,8 @@
 
 (:wat::core::define
   (:trading::treasury::Service/loop-entry
-    (entry-fee :f64)
-    (exit-fee :f64)
+    (entry-fee :wat::core::f64)
+    (exit-fee :wat::core::f64)
     (initial-balances :trading::treasury::Balances)
     (tick-rx :trading::treasury::Service::EventRx)
     (broker-rxs :Vec<trading::treasury::Service::EventRx>)
@@ -354,10 +354,10 @@
       (:wat::core::concat
         (:wat::core::vec :trading::treasury::Service::Slot tick-slot)
         broker-slots))
-     ((n :i64) (:wat::core::length broker-rxs))
+     ((n :wat::core::i64) (:wat::core::length broker-rxs))
      ((broker-indices :Vec<i64>)
       (:wat::core::concat
-        (:wat::core::vec :i64 -1)
+        (:wat::core::vec :wat::core::i64 -1)
         (:wat::core::range 0 n))))
     (:trading::treasury::Service/loop
       treasury rxs slots broker-indices scope wlog)))
@@ -368,7 +368,7 @@
 (:wat::core::define
   (:trading::treasury::Service/submit-paper
     (handle :trading::treasury::Service::BrokerHandle)
-    (from-asset :String) (to-asset :String) (price :f64)
+    (from-asset :wat::core::String) (to-asset :wat::core::String) (price :wat::core::f64)
     -> :Option<trading::treasury::Receipt>)
   (:wat::core::let*
     (((req-tx :trading::treasury::Service::EventTx) (:wat::core::first handle))
@@ -384,7 +384,7 @@
 (:wat::core::define
   (:trading::treasury::Service/submit-real
     (handle :trading::treasury::Service::BrokerHandle)
-    (from-asset :String) (to-asset :String) (price :f64)
+    (from-asset :wat::core::String) (to-asset :wat::core::String) (price :wat::core::f64)
     -> :Option<trading::treasury::Receipt>)
   (:wat::core::let*
     (((req-tx :trading::treasury::Service::EventTx) (:wat::core::first handle))
@@ -400,7 +400,7 @@
 (:wat::core::define
   (:trading::treasury::Service/submit-exit
     (handle :trading::treasury::Service::BrokerHandle)
-    (paper-id :i64) (current-price :f64)
+    (paper-id :wat::core::i64) (current-price :wat::core::f64)
     -> :Option<trading::treasury::Verdict>)
   (:wat::core::let*
     (((req-tx :trading::treasury::Service::EventTx) (:wat::core::first handle))
@@ -435,10 +435,10 @@
 (:wat::core::define
   (:trading::treasury::Service
     (sqlite-handle :wat::telemetry::Service::Handle<wat::telemetry::Event>)
-    (entry-fee :f64)
-    (exit-fee :f64)
+    (entry-fee :wat::core::f64)
+    (exit-fee :wat::core::f64)
     (initial-balances :trading::treasury::Balances)
-    (broker-count :i64)
+    (broker-count :wat::core::i64)
     -> :trading::treasury::Service::Spawn)
   (:wat::core::let*
     (((tick-pair :trading::treasury::Service::EventChannel)
@@ -452,7 +452,7 @@
      ((req-pairs :Vec<trading::treasury::Service::EventChannel>)
       (:wat::core::map (:wat::core::range 0 broker-count)
         (:wat::core::lambda
-          ((_i :i64) -> :trading::treasury::Service::EventChannel)
+          ((_i :wat::core::i64) -> :trading::treasury::Service::EventChannel)
           (:wat::kernel::make-bounded-queue
             :trading::treasury::Service::Event 1))))
      ((req-txs :Vec<trading::treasury::Service::EventTx>)
@@ -471,7 +471,7 @@
      ((resp-pairs :Vec<trading::treasury::Service::RespChannel>)
       (:wat::core::map (:wat::core::range 0 broker-count)
         (:wat::core::lambda
-          ((_i :i64) -> :trading::treasury::Service::RespChannel)
+          ((_i :wat::core::i64) -> :trading::treasury::Service::RespChannel)
           (:wat::kernel::make-bounded-queue
             :trading::treasury::Service::Response 1))))
      ((resp-txs :Vec<trading::treasury::Service::RespTx>)
@@ -490,7 +490,7 @@
      ((handles :Vec<trading::treasury::Service::BrokerHandle>)
       (:wat::core::map (:wat::core::range 0 broker-count)
         (:wat::core::lambda
-          ((i :i64) -> :trading::treasury::Service::BrokerHandle)
+          ((i :wat::core::i64) -> :trading::treasury::Service::BrokerHandle)
           (:wat::core::tuple
             (:wat::core::match (:wat::core::get req-txs i)
               -> :trading::treasury::Service::EventTx

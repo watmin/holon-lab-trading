@@ -14,11 +14,11 @@
 ;; collection name reads cleanly at every callsite.
 
 (:wat::core::struct :trading::types::PortfolioSnapshot
-  (avg-age         :f64)
-  (avg-tp          :f64)
-  (avg-unrealized  :f64)
-  (grace-rate      :f64)
-  (active-count    :f64))
+  (avg-age         :wat::core::f64)
+  (avg-tp          :wat::core::f64)
+  (avg-unrealized  :wat::core::f64)
+  (grace-rate      :wat::core::f64)
+  (active-count    :wat::core::f64))
 
 (:wat::core::typealias
   :trading::types::PortfolioSnapshots

@@ -16,12 +16,12 @@
 
 (:wat::core::define
   (:trading::encoding::round-to-2
-    (v :f64)
-    -> :f64)
+    (v :wat::core::f64)
+    -> :wat::core::f64)
   (:wat::core::f64::round v 2))
 
 (:wat::core::define
   (:trading::encoding::round-to-4
-    (v :f64)
-    -> :f64)
+    (v :wat::core::f64)
+    -> :wat::core::f64)
   (:wat::core::f64::round v 4))

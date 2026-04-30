@@ -42,11 +42,11 @@
     (t :trading::types::Candle::Time)
     -> :wat::holon::Holons)
   (:wat::core::let*
-    (((minute        :f64) (:trading::types::Candle::Time/minute        t))
-     ((hour          :f64) (:trading::types::Candle::Time/hour          t))
-     ((day-of-week   :f64) (:trading::types::Candle::Time/day-of-week   t))
-     ((day-of-month  :f64) (:trading::types::Candle::Time/day-of-month  t))
-     ((month-of-year :f64) (:trading::types::Candle::Time/month-of-year t)))
+    (((minute        :wat::core::f64) (:trading::types::Candle::Time/minute        t))
+     ((hour          :wat::core::f64) (:trading::types::Candle::Time/hour          t))
+     ((day-of-week   :wat::core::f64) (:trading::types::Candle::Time/day-of-week   t))
+     ((day-of-month  :wat::core::f64) (:trading::types::Candle::Time/day-of-month  t))
+     ((month-of-year :wat::core::f64) (:trading::types::Candle::Time/month-of-year t)))
     (:wat::core::vec :wat::holon::HolonAST
       (:trading::vocab::shared::named-bind "minute"
         (:trading::vocab::shared::circ minute        60.0))
@@ -70,11 +70,11 @@
     (t :trading::types::Candle::Time)
     -> :wat::holon::Holons)
   (:wat::core::let*
-    (((minute        :f64) (:trading::types::Candle::Time/minute        t))
-     ((hour          :f64) (:trading::types::Candle::Time/hour          t))
-     ((day-of-week   :f64) (:trading::types::Candle::Time/day-of-week   t))
-     ((day-of-month  :f64) (:trading::types::Candle::Time/day-of-month  t))
-     ((month-of-year :f64) (:trading::types::Candle::Time/month-of-year t))
+    (((minute        :wat::core::f64) (:trading::types::Candle::Time/minute        t))
+     ((hour          :wat::core::f64) (:trading::types::Candle::Time/hour          t))
+     ((day-of-week   :wat::core::f64) (:trading::types::Candle::Time/day-of-week   t))
+     ((day-of-month  :wat::core::f64) (:trading::types::Candle::Time/day-of-month  t))
+     ((month-of-year :wat::core::f64) (:trading::types::Candle::Time/month-of-year t))
 
      ((minute-bind :wat::holon::HolonAST)
       (:trading::vocab::shared::named-bind "minute"

@@ -67,7 +67,7 @@
    ;; representation as the cache key. Same as proof 005's
    ;; Registry pattern.
    (:wat::core::define
-     (:exp::form-key (form :wat::holon::HolonAST) -> :String)
+     (:exp::form-key (form :wat::holon::HolonAST) -> :wat::core::String)
      (:wat::core::Bytes::to-hex
        (:wat::holon::vector-bytes (:wat::holon::encode form))))
 
@@ -144,12 +144,12 @@
 
    ;; ─── Helper predicates ──────────────────────────────────
    (:wat::core::define
-     (:exp::is-some (o :Option<wat::holon::HolonAST>) -> :bool)
-     (:wat::core::match o -> :bool ((Some _) true) (:None false)))
+     (:exp::is-some (o :Option<wat::holon::HolonAST>) -> :wat::core::bool)
+     (:wat::core::match o -> :wat::core::bool ((Some _) true) (:None false)))
 
    (:wat::core::define
-     (:exp::is-none (o :Option<wat::holon::HolonAST>) -> :bool)
-     (:wat::core::match o -> :bool ((Some _) false) (:None true)))
+     (:exp::is-none (o :Option<wat::holon::HolonAST>) -> :wat::core::bool)
+     (:wat::core::match o -> :wat::core::bool ((Some _) false) (:None true)))
 
 
    ;; ─── Test fixtures: a 3-step expansion chain ────────────
@@ -255,13 +255,13 @@
       (:exp::record-next state-1 (:exp::form-1) (:exp::form-2-terminal)))
 
      ;; All next pointers known.
-     ((next-0 :bool) (:exp::is-some (:exp::lookup-next state-2 (:exp::form-0))))
-     ((next-1 :bool) (:exp::is-some (:exp::lookup-next state-2 (:exp::form-1))))
+     ((next-0 :wat::core::bool) (:exp::is-some (:exp::lookup-next state-2 (:exp::form-0))))
+     ((next-1 :wat::core::bool) (:exp::is-some (:exp::lookup-next state-2 (:exp::form-1))))
 
      ;; No terminals yet.
-     ((term-0 :bool) (:exp::is-none (:exp::lookup-terminal state-2 (:exp::form-0))))
-     ((term-1 :bool) (:exp::is-none (:exp::lookup-terminal state-2 (:exp::form-1))))
-     ((term-2 :bool) (:exp::is-none (:exp::lookup-terminal state-2 (:exp::form-2-terminal))))
+     ((term-0 :wat::core::bool) (:exp::is-none (:exp::lookup-terminal state-2 (:exp::form-0))))
+     ((term-1 :wat::core::bool) (:exp::is-none (:exp::lookup-terminal state-2 (:exp::form-1))))
+     ((term-2 :wat::core::bool) (:exp::is-none (:exp::lookup-terminal state-2 (:exp::form-2-terminal))))
 
      ((_n0 :()) (:wat::test::assert-eq next-0 true))
      ((_n1 :()) (:wat::test::assert-eq next-1 true))
@@ -293,13 +293,13 @@
       (:exp::record-terminal state-2 (:exp::form-2-terminal) (:exp::form-2-terminal)))
 
      ;; Leaf has terminal.
-     ((leaf-has-terminal :bool)
+     ((leaf-has-terminal :wat::core::bool)
       (:exp::is-some (:exp::lookup-terminal state-3 (:exp::form-2-terminal))))
 
      ;; Interior of chain still doesn't.
-     ((interior-1-has-terminal :bool)
+     ((interior-1-has-terminal :wat::core::bool)
       (:exp::is-some (:exp::lookup-terminal state-3 (:exp::form-1))))
-     ((interior-0-has-terminal :bool)
+     ((interior-0-has-terminal :wat::core::bool)
       (:exp::is-some (:exp::lookup-terminal state-3 (:exp::form-0))))
 
      ((_l :()) (:wat::test::assert-eq leaf-has-terminal true))
@@ -337,13 +337,13 @@
       (:exp::record-terminal state-4 (:exp::form-0) (:exp::form-2-terminal)))
 
      ;; ALL forms have terminal recorded now.
-     ((t0 :bool) (:exp::is-some (:exp::lookup-terminal state-5 (:exp::form-0))))
-     ((t1 :bool) (:exp::is-some (:exp::lookup-terminal state-5 (:exp::form-1))))
-     ((t2 :bool) (:exp::is-some (:exp::lookup-terminal state-5 (:exp::form-2-terminal))))
+     ((t0 :wat::core::bool) (:exp::is-some (:exp::lookup-terminal state-5 (:exp::form-0))))
+     ((t1 :wat::core::bool) (:exp::is-some (:exp::lookup-terminal state-5 (:exp::form-1))))
+     ((t2 :wat::core::bool) (:exp::is-some (:exp::lookup-terminal state-5 (:exp::form-2-terminal))))
 
      ;; Next pointers also still recorded (orthogonal cache state).
-     ((n0 :bool) (:exp::is-some (:exp::lookup-next state-5 (:exp::form-0))))
-     ((n1 :bool) (:exp::is-some (:exp::lookup-next state-5 (:exp::form-1))))
+     ((n0 :wat::core::bool) (:exp::is-some (:exp::lookup-next state-5 (:exp::form-0))))
+     ((n1 :wat::core::bool) (:exp::is-some (:exp::lookup-next state-5 (:exp::form-1))))
 
      ((_t0 :()) (:wat::test::assert-eq t0 true))
      ((_t1 :()) (:wat::test::assert-eq t1 true))
@@ -390,18 +390,18 @@
      ((b-terminal :Option<wat::holon::HolonAST>)
       (:exp::lookup-terminal s-b-3 (:exp::other-form-0)))
 
-     ((a-correct :bool)
-       (:wat::core::match a-terminal -> :bool
+     ((a-correct :wat::core::bool)
+       (:wat::core::match a-terminal -> :wat::core::bool
          ((Some t) (:wat::holon::coincident? t (:exp::form-2-terminal)))
          (:None false)))
-     ((b-correct :bool)
-       (:wat::core::match b-terminal -> :bool
+     ((b-correct :wat::core::bool)
+       (:wat::core::match b-terminal -> :wat::core::bool
          ((Some t) (:wat::holon::coincident? t (:exp::other-form-2-terminal)))
          (:None false)))
 
      ;; Cross-check: form-0's terminal isn't 9; other-form-0's terminal isn't 25.
-     ((a-not-b :bool)
-       (:wat::core::match a-terminal -> :bool
+     ((a-not-b :wat::core::bool)
+       (:wat::core::match a-terminal -> :wat::core::bool
          ((Some t) (:wat::core::not (:wat::holon::coincident? t (:exp::other-form-2-terminal))))
          (:None false)))
 

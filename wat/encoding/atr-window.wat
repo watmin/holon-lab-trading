@@ -30,21 +30,21 @@
 
 (:wat::core::struct :trading::encoding::AtrWindow
   (values   :Vec<f64>)
-  (capacity :i64))
+  (capacity :wat::core::i64))
 
 
 ;; Named constant — 1 week of 5-minute candles. 7 × 24 × 12 = 2016.
 (:wat::core::define
-  (:trading::encoding::AtrWindow::WEEK -> :i64)
+  (:trading::encoding::AtrWindow::WEEK -> :wat::core::i64)
   2016)
 
 
 ;; Fresh window — empty Vec, given capacity.
 (:wat::core::define
   (:trading::encoding::AtrWindow::fresh
-    (capacity :i64)
+    (capacity :wat::core::i64)
     -> :trading::encoding::AtrWindow)
-  (:trading::encoding::AtrWindow/new (:wat::core::vec :f64) capacity))
+  (:trading::encoding::AtrWindow/new (:wat::core::vec :wat::core::f64) capacity))
 
 
 ;; Push — append `value` to the buffer. If length now exceeds
@@ -52,13 +52,13 @@
 (:wat::core::define
   (:trading::encoding::AtrWindow::push
     (window :trading::encoding::AtrWindow)
-    (value :f64)
+    (value :wat::core::f64)
     -> :trading::encoding::AtrWindow)
   (:wat::core::let*
-    (((cap :i64) (:trading::encoding::AtrWindow/capacity window))
+    (((cap :wat::core::i64) (:trading::encoding::AtrWindow/capacity window))
      ((appended :Vec<f64>)
       (:wat::core::conj (:trading::encoding::AtrWindow/values window) value))
-     ((len :i64) (:wat::core::length appended))
+     ((len :wat::core::i64) (:wat::core::length appended))
      ((trimmed :Vec<f64>)
       (:wat::core::if (:wat::core::> len cap) -> :Vec<f64>
         (:wat::core::drop appended (:wat::core::- len cap))
@@ -75,33 +75,33 @@
     -> :Option<f64>)
   (:wat::core::let*
     (((vs :Vec<f64>) (:trading::encoding::AtrWindow/values window))
-     ((n :i64) (:wat::core::length vs)))
+     ((n :wat::core::i64) (:wat::core::length vs)))
     (:wat::core::if (:wat::core::= n 0) -> :Option<f64>
       :None
       (:wat::core::let*
         (((sorted :Vec<f64>)
           (:wat::core::sort-by vs
-            (:wat::core::lambda ((a :f64) (b :f64) -> :bool)
+            (:wat::core::lambda ((a :wat::core::f64) (b :wat::core::f64) -> :wat::core::bool)
               (:wat::core::< a b))))
-         ((mid :i64) (:wat::core::/ n 2))
+         ((mid :wat::core::i64) (:wat::core::/ n 2))
          ;; Even-length test: 2*(n/2) == n. Odd: 2*(n/2) == n-1.
-         ((odd? :bool)
+         ((odd? :wat::core::bool)
           (:wat::core::= (:wat::core::* (:wat::core::/ n 2) 2) (:wat::core::- n 1)))
          ;; All :get hits below are in-range by construction (n > 0
          ;; checked above; mid ∈ [0, n)). The :None arms are
          ;; unreachable; sentinel 0.0 satisfies the type checker.
-         ((m :f64)
-          (:wat::core::if odd? -> :f64
-            (:wat::core::match (:wat::core::get sorted mid) -> :f64
+         ((m :wat::core::f64)
+          (:wat::core::if odd? -> :wat::core::f64
+            (:wat::core::match (:wat::core::get sorted mid) -> :wat::core::f64
               ((Some v) v)
               (:None 0.0))
             (:wat::core::let*
-              (((lo :f64)
-                (:wat::core::match (:wat::core::get sorted (:wat::core::- mid 1)) -> :f64
+              (((lo :wat::core::f64)
+                (:wat::core::match (:wat::core::get sorted (:wat::core::- mid 1)) -> :wat::core::f64
                   ((Some v) v)
                   (:None 0.0)))
-               ((hi :f64)
-                (:wat::core::match (:wat::core::get sorted mid) -> :f64
+               ((hi :wat::core::f64)
+                (:wat::core::match (:wat::core::get sorted mid) -> :wat::core::f64
                   ((Some v) v)
                   (:None 0.0))))
               (:wat::core::/ (:wat::core::+ lo hi) 2.0)))))
@@ -113,7 +113,7 @@
 (:wat::core::define
   (:trading::encoding::AtrWindow::full?
     (window :trading::encoding::AtrWindow)
-    -> :bool)
+    -> :wat::core::bool)
   (:wat::core::>=
     (:wat::core::length (:trading::encoding::AtrWindow/values window))
     (:trading::encoding::AtrWindow/capacity window)))

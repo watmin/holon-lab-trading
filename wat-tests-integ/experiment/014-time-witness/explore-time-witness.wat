@@ -72,10 +72,10 @@
    (:wat::core::define
      (:exp::verify-binding (r :exp::Receipt)
                            (candidate :wat::holon::HolonAST)
-                           -> :bool)
+                           -> :wat::core::bool)
      (:wat::core::match
        (:wat::holon::bytes-vector (:exp::Receipt/bytes r))
-       -> :bool
+       -> :wat::core::bool
        ((Some v) (:wat::holon::coincident? candidate v))
        (:None false)))
 
@@ -87,7 +87,7 @@
    ;; Bitcoin every ~10min, etc. For demo we precompute synthetic
    ;; rounds; the verification mechanism is unchanged.
    (:wat::core::struct :exp::Beacon
-     (name :String)
+     (name :wat::core::String)
      (rounds :HashMap<i64,String>))
 
 
@@ -97,9 +97,9 @@
    ;; for triangulation). Each must verify independently against
    ;; its named beacon.
    (:wat::core::struct :exp::TimeWitness
-     (beacon :String)     ;; must match :exp::Beacon::name
-     (round :i64)
-     (witness :String))
+     (beacon :wat::core::String)     ;; must match :exp::Beacon::name
+     (round :wat::core::i64)
+     (witness :wat::core::String))
 
 
    ;; ─── TimedReceipt — Receipt + time claims ─────────────────
@@ -111,9 +111,9 @@
 
    ;; ─── Verdict — the soundness gate's output ───────────────
    (:wat::core::struct :exp::TimeVerdict
-     (binding-sound :bool)
-     (time-sound :bool)
-     (decision :String))   ;; "approve" | "reject-binding" | "reject-time" | "no-claim"
+     (binding-sound :wat::core::bool)
+     (time-sound :wat::core::bool)
+     (decision :wat::core::String))   ;; "approve" | "reject-binding" | "reject-time" | "no-claim"
 
 
    ;; ─── Verify a single time witness against a beacon list ──
@@ -126,16 +126,16 @@
      (:exp::verify-witness
        (w :exp::TimeWitness)
        (beacons :Vec<exp::Beacon>)
-       -> :bool)
+       -> :wat::core::bool)
      (:wat::core::foldl beacons false
-       (:wat::core::lambda ((acc :bool) (b :exp::Beacon) -> :bool)
+       (:wat::core::lambda ((acc :wat::core::bool) (b :exp::Beacon) -> :wat::core::bool)
          (:wat::core::if
            (:wat::core::= (:exp::Beacon/name b) (:exp::TimeWitness/beacon w))
-           -> :bool
+           -> :wat::core::bool
            ;; Beacon name matched — look up the round.
            (:wat::core::match
              (:wat::core::get (:exp::Beacon/rounds b) (:exp::TimeWitness/round w))
-             -> :bool
+             -> :wat::core::bool
              ((Some published) (:wat::core::= published (:exp::TimeWitness/witness w)))
              (:None false))
            ;; Different beacon; carry the accumulator forward.
@@ -151,12 +151,12 @@
      (:exp::verify-all-witnesses
        (witnesses :Vec<exp::TimeWitness>)
        (beacons :Vec<exp::Beacon>)
-       -> :bool)
+       -> :wat::core::bool)
      (:wat::core::if (:wat::core::= (:wat::core::length witnesses) 0)
-       -> :bool
+       -> :wat::core::bool
        false   ;; no witnesses to verify → time-sound false (handled in verdict)
        (:wat::core::foldl witnesses true
-         (:wat::core::lambda ((acc :bool) (w :exp::TimeWitness) -> :bool)
+         (:wat::core::lambda ((acc :wat::core::bool) (w :exp::TimeWitness) -> :wat::core::bool)
            (:wat::core::and acc (:exp::verify-witness w beacons))))))
 
 
@@ -176,13 +176,13 @@
        (((r :exp::Receipt)
          (:exp::Receipt/new (:exp::TimedReceipt/bytes tr)
                             (:exp::TimedReceipt/form tr)))
-        ((binding-ok :bool) (:exp::verify-binding r expected-form))
+        ((binding-ok :wat::core::bool) (:exp::verify-binding r expected-form))
         ((witnesses :Vec<exp::TimeWitness>) (:exp::TimedReceipt/witnesses tr))
-        ((empty :bool) (:wat::core::= (:wat::core::length witnesses) 0))
-        ((time-ok :bool) (:exp::verify-all-witnesses witnesses beacons))
+        ((empty :wat::core::bool) (:wat::core::= (:wat::core::length witnesses) 0))
+        ((time-ok :wat::core::bool) (:exp::verify-all-witnesses witnesses beacons))
 
-        ((decision :String)
-          (:wat::core::cond -> :String
+        ((decision :wat::core::String)
+          (:wat::core::cond -> :wat::core::String
             ((:wat::core::not binding-ok) "reject-binding")
             (empty "no-claim")
             ((:wat::core::not time-ok) "reject-time")

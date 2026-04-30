@@ -31,18 +31,18 @@
 (:wat::core::enum :trading::types::Prediction
   (Discrete
     (scores :Vec<(String,f64)>)
-    (conviction :f64))
+    (conviction :wat::core::f64))
   (Continuous
-    (value :f64)
-    (experience :f64)))
+    (value :wat::core::f64)
+    (experience :wat::core::f64)))
 
 ;; Scalar encoding — how continuous values get projected into
 ;; vectors. Log is unit (no parameters); Linear + Circular carry
 ;; their scale / period.
 (:wat::core::enum :trading::types::ScalarEncoding
   :Log
-  (Linear (scale :f64))
-  (Circular (period :f64)))
+  (Linear (scale :wat::core::f64))
+  (Circular (period :wat::core::f64)))
 
 ;; Market observer lens — which vocabulary modules an observer
 ;; attends to. Three schools (Dow / Pring / Wyckoff), 11 lenses

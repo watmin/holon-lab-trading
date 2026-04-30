@@ -28,9 +28,9 @@
 
 (:wat::core::define
   (:trading::vocab::market::divergence::maybe-scaled-linear
-    (should-emit? :bool)
-    (name :String)
-    (value :f64)
+    (should-emit? :wat::core::bool)
+    (name :wat::core::String)
+    (value :wat::core::f64)
     (holons :wat::holon::Holons)
     (scales :trading::encoding::Scales)
     -> :trading::encoding::VocabEmission)
@@ -56,18 +56,18 @@
     (scales :trading::encoding::Scales)
     -> :trading::encoding::VocabEmission)
   (:wat::core::let*
-    (((bull :f64)
+    (((bull :wat::core::f64)
       (:trading::types::Candle::Divergence/rsi-divergence-bull d))
-     ((bear :f64)
+     ((bear :wat::core::f64)
       (:trading::types::Candle::Divergence/rsi-divergence-bear d))
-     ((bull-ok?   :bool) (:wat::core::> bull 0.0))
-     ((bear-ok?   :bool) (:wat::core::> bear 0.0))
+     ((bull-ok?   :wat::core::bool) (:wat::core::> bull 0.0))
+     ((bear-ok?   :wat::core::bool) (:wat::core::> bear 0.0))
      ;; spread-ok is OR — any non-zero divergence emits the spread atom
-     ((spread-ok? :bool) (:wat::core::or bull-ok? bear-ok?))
+     ((spread-ok? :wat::core::bool) (:wat::core::or bull-ok? bear-ok?))
 
-     ((bull-v :f64)   (:trading::encoding::round-to-2 bull))
-     ((bear-v :f64)   (:trading::encoding::round-to-2 bear))
-     ((spread-v :f64) (:trading::encoding::round-to-2
+     ((bull-v :wat::core::f64)   (:trading::encoding::round-to-2 bull))
+     ((bear-v :wat::core::f64)   (:trading::encoding::round-to-2 bear))
+     ((spread-v :wat::core::f64) (:trading::encoding::round-to-2
                         (:wat::core::- bull bear)))
 
      ;; Thread (holons, scales) through three maybe-emit steps.

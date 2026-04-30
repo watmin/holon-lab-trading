@@ -24,8 +24,8 @@
 ;;   :trading::encoding::ScaleTracker::bucket value scale -> f64   (arc 012)
 
 (:wat::core::struct :trading::encoding::ScaleTracker
-  (ema-abs :f64)
-  (count   :i64))
+  (ema-abs :wat::core::f64)
+  (count   :wat::core::i64))
 
 ;; :trading::encoding::Scales — arc 004. Typealias for the
 ;; per-indicator-name ScaleTracker registry. scaled-linear and
@@ -39,13 +39,13 @@
 ;; Named constant — coverage multiplier. 2.0 ≈ 89% for a roughly
 ;; Gaussian distribution. Archive's `SCALE_COVERAGE`.
 (:wat::core::define
-  (:trading::encoding::ScaleTracker::COVERAGE -> :f64)
+  (:trading::encoding::ScaleTracker::COVERAGE -> :wat::core::f64)
   2.0)
 
 ;; Floor on scale to keep Linear encoding well-defined before
 ;; enough observations have accumulated. Archive's `.max(0.001)`.
 (:wat::core::define
-  (:trading::encoding::ScaleTracker::FLOOR -> :f64)
+  (:trading::encoding::ScaleTracker::FLOOR -> :wat::core::f64)
   0.001)
 
 ;; Fresh tracker — zero observations, zero EMA.
@@ -59,24 +59,24 @@
 (:wat::core::define
   (:trading::encoding::ScaleTracker::update
     (tracker :trading::encoding::ScaleTracker)
-    (value :f64)
+    (value :wat::core::f64)
     -> :trading::encoding::ScaleTracker)
   (:wat::core::let*
-    (((new-count :i64)
+    (((new-count :wat::core::i64)
       (:wat::core::+ (:trading::encoding::ScaleTracker/count tracker) 1))
-     ((denom :i64)
-      (:wat::core::if (:wat::core::>= new-count 100) -> :i64
+     ((denom :wat::core::i64)
+      (:wat::core::if (:wat::core::>= new-count 100) -> :wat::core::i64
         new-count
         100))
-     ((alpha :f64)
+     ((alpha :wat::core::f64)
       (:wat::core::/ 1.0 (:wat::core::i64::to-f64 denom)))
-     ((abs-value :f64)
-      (:wat::core::if (:wat::core::>= value 0.0) -> :f64
+     ((abs-value :wat::core::f64)
+      (:wat::core::if (:wat::core::>= value 0.0) -> :wat::core::f64
         value
         (:wat::core::- 0.0 value)))
-     ((prev-ema :f64)
+     ((prev-ema :wat::core::f64)
       (:trading::encoding::ScaleTracker/ema-abs tracker))
-     ((new-ema :f64)
+     ((new-ema :wat::core::f64)
       (:wat::core::+
         (:wat::core::* (:wat::core::- 1.0 alpha) prev-ema)
         (:wat::core::* alpha abs-value))))
@@ -95,14 +95,14 @@
 (:wat::core::define
   (:trading::encoding::ScaleTracker::scale
     (tracker :trading::encoding::ScaleTracker)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::let*
-    (((raw :f64)
+    (((raw :wat::core::f64)
       (:wat::core::*
         (:trading::encoding::ScaleTracker::COVERAGE)
         (:trading::encoding::ScaleTracker/ema-abs tracker)))
-     ((floored :f64)
-      (:wat::core::if (:wat::core::>= raw (:trading::encoding::ScaleTracker::FLOOR)) -> :f64
+     ((floored :wat::core::f64)
+      (:wat::core::if (:wat::core::>= raw (:trading::encoding::ScaleTracker::FLOOR)) -> :wat::core::f64
         raw
         (:trading::encoding::ScaleTracker::FLOOR))))
     (:wat::core::f64::round floored 2)))
@@ -116,8 +116,8 @@
 ;; represent true equivalences.
 (:wat::core::define
   (:trading::encoding::ScaleTracker::bucket-width
-    (scale :f64)
-    -> :f64)
+    (scale :wat::core::f64)
+    -> :wat::core::f64)
   (:wat::core::* scale (:wat::config::noise-floor)))
 
 ;; bucket — round `value` to the nearest multiple of bucket-width.
@@ -141,15 +141,15 @@
 ;; as a separate scale-formula bug; arc 012 does not fix it here.
 (:wat::core::define
   (:trading::encoding::ScaleTracker::bucket
-    (value :f64)
-    (scale :f64)
-    -> :f64)
+    (value :wat::core::f64)
+    (scale :wat::core::f64)
+    -> :wat::core::f64)
   (:wat::core::let*
-    (((bw :f64) (:trading::encoding::ScaleTracker::bucket-width scale))
-     ((degenerate :bool)
+    (((bw :wat::core::f64) (:trading::encoding::ScaleTracker::bucket-width scale))
+     ((degenerate :wat::core::bool)
       (:wat::core::<= bw 0.0)))
-    (:wat::core::if degenerate -> :f64
+    (:wat::core::if degenerate -> :wat::core::f64
       value
       (:wat::core::let*
-        (((idx :f64) (:wat::core::f64::round (:wat::core::/ value bw) 0)))
+        (((idx :wat::core::f64) (:wat::core::f64::round (:wat::core::/ value bw) 0)))
         (:wat::core::* idx bw)))))

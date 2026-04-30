@@ -25,9 +25,9 @@
   (:wat::core::let*
     (((label :wat::holon::HolonAST)
       (:trading::sim::paper-label 0.04 0.03))   ; near grace-up
-     ((to-grace-up :f64)
+     ((to-grace-up :wat::core::f64)
       (:wat::holon::cosine label (:trading::sim::corner-grace-up)))
-     ((to-violence-dn :f64)
+     ((to-violence-dn :wat::core::f64)
       (:wat::holon::cosine label (:trading::sim::corner-violence-dn))))
     (:wat::test::assert-eq (:wat::core::> to-grace-up to-violence-dn) true)))
 
@@ -41,11 +41,11 @@
 
 (:deftest :trading::test::sim::labels::test-shared-axis-cosines-higher
   (:wat::core::let*
-    (((same-outcome :f64)
+    (((same-outcome :wat::core::f64)
       (:wat::holon::cosine
         (:trading::sim::corner-grace-up)
         (:trading::sim::corner-grace-dn)))
-     ((diagonal :f64)
+     ((diagonal :wat::core::f64)
       (:wat::holon::cosine
         (:trading::sim::corner-grace-up)
         (:trading::sim::corner-violence-dn))))
@@ -65,7 +65,7 @@
 
 (:deftest :trading::test::sim::labels::test-basis-atoms-distinct
   (:wat::core::let*
-    (((cos-axes :f64)
+    (((cos-axes :wat::core::f64)
       (:wat::holon::cosine
         (:trading::sim::outcome-axis)
         (:trading::sim::direction-axis))))

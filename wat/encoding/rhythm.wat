@@ -29,12 +29,12 @@
 
 ;; Budget helper — sqrt(dims) floored to i64.
 (:wat::core::define
-  (:trading::encoding::rhythm::budget -> :i64)
+  (:trading::encoding::rhythm::budget -> :wat::core::i64)
   (:wat::core::match
     (:wat::core::f64::to-i64
       (:wat::core::* 1.0
         (:wat::core::i64::to-f64 (:wat::config::dim-count))))
-    -> :i64
+    -> :wat::core::i64
     ;; f64::to-i64 returns Option; on Some use it, on None fall back
     ;; (unreachable at any reasonable dims).
     ((Some n) (:trading::encoding::rhythm::isqrt n))
@@ -44,19 +44,19 @@
 ;; i64 arithmetic (no f64::sqrt primitive in wat). Called rarely
 ;; (once per indicator_rhythm call); small cost.
 (:wat::core::define
-  (:trading::encoding::rhythm::isqrt (n :i64) -> :i64)
-  (:wat::core::if (:wat::core::<= n 1) -> :i64
+  (:trading::encoding::rhythm::isqrt (n :wat::core::i64) -> :wat::core::i64)
+  (:wat::core::if (:wat::core::<= n 1) -> :wat::core::i64
     n
     (:trading::encoding::rhythm::isqrt-loop n (:wat::core::/ n 2))))
 
 (:wat::core::define
-  (:trading::encoding::rhythm::isqrt-loop (n :i64) (x :i64) -> :i64)
+  (:trading::encoding::rhythm::isqrt-loop (n :wat::core::i64) (x :wat::core::i64) -> :wat::core::i64)
   (:wat::core::let*
-    (((x-next :i64)
+    (((x-next :wat::core::i64)
       (:wat::core::/
         (:wat::core::+ x (:wat::core::/ n x))
         2)))
-    (:wat::core::if (:wat::core::>= x-next x) -> :i64
+    (:wat::core::if (:wat::core::>= x-next x) -> :wat::core::i64
       x
       (:trading::encoding::rhythm::isqrt-loop n x-next))))
 
@@ -64,21 +64,21 @@
 
 (:wat::core::define
   (:trading::encoding::rhythm::value-fact
-    (value :f64)
-    (vmin :f64)
-    (vmax :f64)
+    (value :wat::core::f64)
+    (vmin :wat::core::f64)
+    (vmax :wat::core::f64)
     -> :wat::holon::HolonAST)
   (:wat::holon::Thermometer value vmin vmax))
 
 (:wat::core::define
   (:trading::encoding::rhythm::delta-fact
-    (value :f64)
-    (prev :f64)
-    (delta-range :f64)
+    (value :wat::core::f64)
+    (prev :wat::core::f64)
+    (delta-range :wat::core::f64)
     -> :wat::holon::BundleResult)
   (:wat::core::let*
-    (((delta :f64) (:wat::core::- value prev))
-     ((neg-range :f64) (:wat::core::- 0.0 delta-range)))
+    (((delta :wat::core::f64) (:wat::core::- value prev))
+     ((neg-range :wat::core::f64) (:wat::core::- 0.0 delta-range)))
     (Ok
       (:wat::holon::Bind
         (:wat::holon::Atom "delta")
@@ -89,15 +89,15 @@
 ;; Bundle does.
 (:wat::core::define
   (:trading::encoding::rhythm::build-fact
-    (i :i64)
+    (i :wat::core::i64)
     (values :Vec<f64>)
-    (vmin :f64)
-    (vmax :f64)
-    (delta-range :f64)
+    (vmin :wat::core::f64)
+    (vmax :wat::core::f64)
+    (delta-range :wat::core::f64)
     -> :wat::holon::BundleResult)
   (:wat::core::let*
-    (((value :f64)
-      (:wat::core::match (:wat::core::get values i) -> :f64
+    (((value :wat::core::f64)
+      (:wat::core::match (:wat::core::get values i) -> :wat::core::f64
         ((Some v) v)
         (:None    0.0)))
      ((v-fact :wat::holon::HolonAST)
@@ -106,9 +106,9 @@
                     -> :wat::holon::BundleResult
       (Ok v-fact)
       (:wat::core::let*
-        (((prev :f64)
+        (((prev :wat::core::f64)
           (:wat::core::match
-            (:wat::core::get values (:wat::core::- i 1)) -> :f64
+            (:wat::core::get values (:wat::core::- i 1)) -> :wat::core::f64
             ((Some v) v)
             (:None    0.0)))
          ((d-fact :wat::holon::BundleResult)
@@ -123,9 +123,9 @@
 (:wat::core::define
   (:trading::encoding::rhythm::build-holons
     (values :Vec<f64>)
-    (vmin :f64)
-    (vmax :f64)
-    (delta-range :f64)
+    (vmin :wat::core::f64)
+    (vmax :wat::core::f64)
+    (delta-range :wat::core::f64)
     -> :Result<wat::holon::Holons,wat::holon::CapacityExceeded>)
   (:trading::encoding::rhythm::build-holons-loop
     values vmin vmax delta-range 0
@@ -135,11 +135,11 @@
 (:wat::core::define
   (:trading::encoding::rhythm::build-holons-loop
     (values :Vec<f64>)
-    (vmin :f64)
-    (vmax :f64)
-    (delta-range :f64)
-    (i :i64)
-    (n :i64)
+    (vmin :wat::core::f64)
+    (vmax :wat::core::f64)
+    (delta-range :wat::core::f64)
+    (i :wat::core::i64)
+    (n :wat::core::i64)
     (acc :wat::holon::Holons)
     -> :Result<wat::holon::Holons,wat::holon::CapacityExceeded>)
   (:wat::core::if (:wat::core::>= i n)
@@ -162,8 +162,8 @@
     (holons :wat::holon::Holons)
     -> :wat::holon::Holons)
   (:wat::core::let*
-    (((n :i64) (:wat::core::length holons))
-     ((last-start :i64) (:wat::core::- n 3)))
+    (((n :wat::core::i64) (:wat::core::length holons))
+     ((last-start :wat::core::i64) (:wat::core::- n 3)))
     (:wat::core::if (:wat::core::< last-start 0) -> :wat::holon::Holons
       (:wat::core::vec :wat::holon::HolonAST)
       (:trading::encoding::rhythm::build-trigrams-loop
@@ -173,8 +173,8 @@
 (:wat::core::define
   (:trading::encoding::rhythm::build-trigrams-loop
     (holons :wat::holon::Holons)
-    (i :i64)
-    (last-start :i64)
+    (i :wat::core::i64)
+    (last-start :wat::core::i64)
     (acc :wat::holon::Holons)
     -> :wat::holon::Holons)
   (:wat::core::if (:wat::core::> i last-start) -> :wat::holon::Holons
@@ -209,8 +209,8 @@
     (trigrams :wat::holon::Holons)
     -> :wat::holon::Holons)
   (:wat::core::let*
-    (((n :i64) (:wat::core::length trigrams))
-     ((last-start :i64) (:wat::core::- n 2)))
+    (((n :wat::core::i64) (:wat::core::length trigrams))
+     ((last-start :wat::core::i64) (:wat::core::- n 2)))
     (:wat::core::if (:wat::core::< last-start 0) -> :wat::holon::Holons
       (:wat::core::vec :wat::holon::HolonAST)
       (:trading::encoding::rhythm::build-pairs-loop
@@ -220,8 +220,8 @@
 (:wat::core::define
   (:trading::encoding::rhythm::build-pairs-loop
     (trigrams :wat::holon::Holons)
-    (i :i64)
-    (last-start :i64)
+    (i :wat::core::i64)
+    (last-start :wat::core::i64)
     (acc :wat::holon::Holons)
     -> :wat::holon::Holons)
   (:wat::core::if (:wat::core::> i last-start) -> :wat::holon::Holons
@@ -246,10 +246,10 @@
 (:wat::core::define
   (:trading::encoding::rhythm::trim-tail<T>
     (xs :Vec<T>)
-    (n :i64)
+    (n :wat::core::i64)
     -> :Vec<T>)
   (:wat::core::let*
-    (((len :i64) (:wat::core::length xs)))
+    (((len :wat::core::i64) (:wat::core::length xs)))
     (:wat::core::if (:wat::core::<= len n) -> :Vec<T>
       xs
       (:wat::core::drop xs (:wat::core::- len n)))))
@@ -258,19 +258,19 @@
 
 (:wat::core::define
   (:trading::encoding::rhythm::indicator-rhythm
-    (name :String)
+    (name :wat::core::String)
     (values :Vec<f64>)
-    (vmin :f64)
-    (vmax :f64)
-    (delta-range :f64)
+    (vmin :wat::core::f64)
+    (vmax :wat::core::f64)
+    (delta-range :wat::core::f64)
     -> :wat::holon::BundleResult)
   (:wat::core::let*
-    (((budget :i64) (:trading::encoding::rhythm::budget))
-     ((max-holons :i64) (:wat::core::+ budget 3))
+    (((budget :wat::core::i64) (:trading::encoding::rhythm::budget))
+     ((max-holons :wat::core::i64) (:wat::core::+ budget 3))
      ;; Step 1: trim input to cap AST size
      ((trimmed :Vec<f64>)
       (:trading::encoding::rhythm::trim-tail values max-holons))
-     ((len :i64) (:wat::core::length trimmed)))
+     ((len :wat::core::i64) (:wat::core::length trimmed)))
     (:wat::core::if (:wat::core::< len 4)
                     -> :wat::holon::BundleResult
       ;; Short-window fallback. Per arc 057's quote-all-the-way-down,

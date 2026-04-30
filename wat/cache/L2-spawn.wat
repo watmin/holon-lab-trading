@@ -38,8 +38,8 @@
 ;; (nullary call returning the struct) for the no-reporting case.
 (:wat::core::define
   (:trading::cache::L2/spawn<G>
-    (count :i64)
-    (cap :i64)
+    (count :wat::core::i64)
+    (cap :wat::core::i64)
     (reporter :wat::holon::lru::HologramCacheService::Reporter)
     (metrics-cadence :wat::holon::lru::HologramCacheService::MetricsCadence<G>)
     -> :trading::cache::L2)

@@ -54,9 +54,9 @@
         (:trading::sim::always-up-thinker)
         (:trading::sim::cosine-vs-corners-predictor)
         cfg))
-     ((papers :i64)   (:trading::sim::Aggregate/papers agg))
-     ((grace :i64)    (:trading::sim::Aggregate/grace-count agg))
-     ((violence :i64) (:trading::sim::Aggregate/violence-count agg))
+     ((papers :wat::core::i64)   (:trading::sim::Aggregate/papers agg))
+     ((grace :wat::core::i64)    (:trading::sim::Aggregate/grace-count agg))
+     ((violence :wat::core::i64) (:trading::sim::Aggregate/violence-count agg))
      ;; Conservation: every resolved paper is exactly one of Grace
      ;; or Violence. Structural guarantee from the helpers; this
      ;; confirms it on real data.
@@ -92,9 +92,9 @@
         (:trading::sim::sma-cross-thinker)
         (:trading::sim::cosine-vs-corners-predictor)
         cfg))
-     ((papers :i64)   (:trading::sim::Aggregate/papers agg))
-     ((grace :i64)    (:trading::sim::Aggregate/grace-count agg))
-     ((violence :i64) (:trading::sim::Aggregate/violence-count agg))
+     ((papers :wat::core::i64)   (:trading::sim::Aggregate/papers agg))
+     ((grace :wat::core::i64)    (:trading::sim::Aggregate/grace-count agg))
+     ((violence :wat::core::i64) (:trading::sim::Aggregate/violence-count agg))
      ((u1 :()) (:wat::test::assert-eq
                  (:wat::core::= papers (:wat::core::+ grace violence))
                  true))

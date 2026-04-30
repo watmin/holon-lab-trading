@@ -10,7 +10,7 @@
   ((:wat::load-file! "wat/vocab/market/timeframe.wat")
    (:wat::core::define
      (:test::fresh-ohlcv
-       (o :f64) (c :f64)
+       (o :wat::core::f64) (c :wat::core::f64)
        -> :trading::types::Ohlcv)
      (:wat::core::let*
        (((btc :trading::types::Asset)
@@ -21,7 +21,7 @@
          btc btc "" o 0.0 0.0 c 0.0)))
    (:wat::core::define
      (:test::fresh-timeframe
-       (body-1h :f64) (ret-1h :f64)
+       (body-1h :wat::core::f64) (ret-1h :wat::core::f64)
        -> :trading::types::Candle::Timeframe)
      ;; 5-arg: tf-1h-ret, tf-1h-body, tf-4h-ret, tf-4h-body, tf-agreement.
      (:trading::types::Candle::Timeframe/new
@@ -63,13 +63,13 @@
         (:None (:wat::holon::Atom "unreachable"))))
 
      ;; body-1h = 0.5 → round-to-2 = 0.5
-     ((rounded :f64) (:trading::encoding::round-to-2 0.5))
+     ((rounded :wat::core::f64) (:trading::encoding::round-to-2 0.5))
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) rounded))
-     ((scale :f64)
+     ((scale :wat::core::f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::- 0.0 scale))
+     ((neg-scale :wat::core::f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "tf-1h-trend")
@@ -96,13 +96,13 @@
         ((Some h) h)
         (:None (:wat::holon::Atom "unreachable"))))
 
-     ((rounded :f64) (:trading::encoding::round-to-4 0.0237))
+     ((rounded :wat::core::f64) (:trading::encoding::round-to-4 0.0237))
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) rounded))
-     ((scale :f64)
+     ((scale :wat::core::f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::- 0.0 scale))
+     ((neg-scale :wat::core::f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "tf-1h-ret")
@@ -132,18 +132,18 @@
         (:None (:wat::holon::Atom "unreachable"))))
 
      ;; Recompute the expected value symmetrically.
-     ((five-m-ret :f64)
+     ((five-m-ret :wat::core::f64)
       (:wat::core::/
         (:wat::core::- 105.0 100.0) 105.0))
-     ((align :f64)
+     ((align :wat::core::f64)
       (:trading::encoding::round-to-4
         (:wat::core::* 1.0 five-m-ret)))
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) align))
-     ((scale :f64)
+     ((scale :wat::core::f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::- 0.0 scale))
+     ((neg-scale :wat::core::f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "tf-5m-1h-align")

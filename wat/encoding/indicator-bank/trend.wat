@@ -17,17 +17,17 @@
 ;; Auto-generated accessors per field. Explicit:
 ;;   :trading::encoding::MacdState::fresh fast slow signal -> MacdState
 ;;   :trading::encoding::MacdState::update state close -> MacdState
-;;   :trading::encoding::MacdState::macd-value state -> :f64
-;;   :trading::encoding::MacdState::signal-value state -> :f64
-;;   :trading::encoding::MacdState::hist-value state -> :f64
-;;   :trading::encoding::MacdState::ready? state -> :bool
+;;   :trading::encoding::MacdState::macd-value state -> :wat::core::f64
+;;   :trading::encoding::MacdState::signal-value state -> :wat::core::f64
+;;   :trading::encoding::MacdState::hist-value state -> :wat::core::f64
+;;   :trading::encoding::MacdState::ready? state -> :wat::core::bool
 ;;
 ;;   :trading::encoding::DmiState::fresh period -> DmiState
 ;;   :trading::encoding::DmiState::update state high low close -> DmiState
-;;   :trading::encoding::DmiState::plus-di state -> :f64
-;;   :trading::encoding::DmiState::minus-di state -> :f64
-;;   :trading::encoding::DmiState::adx state -> :f64
-;;   :trading::encoding::DmiState::ready? state -> :bool
+;;   :trading::encoding::DmiState::plus-di state -> :wat::core::f64
+;;   :trading::encoding::DmiState::minus-di state -> :wat::core::f64
+;;   :trading::encoding::DmiState::adx state -> :wat::core::f64
+;;   :trading::encoding::DmiState::ready? state -> :wat::core::bool
 
 (:wat::load-file! "primitives.wat")
 
@@ -42,9 +42,9 @@
 
 (:wat::core::define
   (:trading::encoding::MacdState::fresh
-    (fast :i64)
-    (slow :i64)
-    (signal :i64)
+    (fast :wat::core::i64)
+    (slow :wat::core::i64)
+    (signal :wat::core::i64)
     -> :trading::encoding::MacdState)
   (:trading::encoding::MacdState/new
     (:trading::encoding::EmaState::fresh fast)
@@ -55,7 +55,7 @@
 (:wat::core::define
   (:trading::encoding::MacdState::update
     (state :trading::encoding::MacdState)
-    (close :f64)
+    (close :wat::core::f64)
     -> :trading::encoding::MacdState)
   (:wat::core::let*
     (((new-fast :trading::encoding::EmaState)
@@ -66,11 +66,11 @@
       (:trading::encoding::EmaState::update
         (:trading::encoding::MacdState/slow-ema state)
         close))
-     ((both-ready? :bool)
+     ((both-ready? :wat::core::bool)
       (:wat::core::and
         (:trading::encoding::EmaState::ready? new-fast)
         (:trading::encoding::EmaState::ready? new-slow)))
-     ((macd-val :f64)
+     ((macd-val :wat::core::f64)
       (:wat::core::-
         (:trading::encoding::EmaState/value new-fast)
         (:trading::encoding::EmaState/value new-slow)))
@@ -86,7 +86,7 @@
 (:wat::core::define
   (:trading::encoding::MacdState::macd-value
     (state :trading::encoding::MacdState)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::-
     (:trading::encoding::EmaState/value
       (:trading::encoding::MacdState/fast-ema state))
@@ -97,7 +97,7 @@
 (:wat::core::define
   (:trading::encoding::MacdState::signal-value
     (state :trading::encoding::MacdState)
-    -> :f64)
+    -> :wat::core::f64)
   (:trading::encoding::EmaState/value
     (:trading::encoding::MacdState/signal-ema state)))
 
@@ -105,7 +105,7 @@
 (:wat::core::define
   (:trading::encoding::MacdState::hist-value
     (state :trading::encoding::MacdState)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::-
     (:trading::encoding::MacdState::macd-value state)
     (:trading::encoding::MacdState::signal-value state)))
@@ -114,7 +114,7 @@
 (:wat::core::define
   (:trading::encoding::MacdState::ready?
     (state :trading::encoding::MacdState)
-    -> :bool)
+    -> :wat::core::bool)
   (:wat::core::and
     (:trading::encoding::EmaState::ready?
       (:trading::encoding::MacdState/slow-ema state))
@@ -129,15 +129,15 @@
   (minus-smoother :trading::encoding::WilderState)
   (tr-smoother    :trading::encoding::WilderState)
   (adx-smoother   :trading::encoding::WilderState)
-  (prev-high      :f64)
-  (prev-low       :f64)
-  (prev-close     :f64)
-  (started        :bool))
+  (prev-high      :wat::core::f64)
+  (prev-low       :wat::core::f64)
+  (prev-close     :wat::core::f64)
+  (started        :wat::core::bool))
 
 
 (:wat::core::define
   (:trading::encoding::DmiState::fresh
-    (period :i64)
+    (period :wat::core::i64)
     -> :trading::encoding::DmiState)
   (:trading::encoding::DmiState/new
     (:trading::encoding::WilderState::fresh period)
@@ -153,15 +153,15 @@
 (:wat::core::define
   (:trading::encoding::DmiState::update
     (state :trading::encoding::DmiState)
-    (high :f64)
-    (low :f64)
-    (close :f64)
+    (high :wat::core::f64)
+    (low :wat::core::f64)
+    (close :wat::core::f64)
     -> :trading::encoding::DmiState)
   (:wat::core::let*
-    (((started :bool) (:trading::encoding::DmiState/started state))
-     ((prev-high :f64) (:trading::encoding::DmiState/prev-high state))
-     ((prev-low :f64) (:trading::encoding::DmiState/prev-low state))
-     ((prev-close :f64) (:trading::encoding::DmiState/prev-close state))
+    (((started :wat::core::bool) (:trading::encoding::DmiState/started state))
+     ((prev-high :wat::core::f64) (:trading::encoding::DmiState/prev-high state))
+     ((prev-low :wat::core::f64) (:trading::encoding::DmiState/prev-low state))
+     ((prev-close :wat::core::f64) (:trading::encoding::DmiState/prev-close state))
      ((plus-sm :trading::encoding::WilderState)
       (:trading::encoding::DmiState/plus-smoother state))
      ((minus-sm :trading::encoding::WilderState)
@@ -171,32 +171,32 @@
      ((adx-sm :trading::encoding::WilderState)
       (:trading::encoding::DmiState/adx-smoother state))
      ;; First-call branch: no prev — skip the smoother updates.
-     ((up-move :f64)
-      (:wat::core::if started -> :f64
+     ((up-move :wat::core::f64)
+      (:wat::core::if started -> :wat::core::f64
         (:wat::core::- high prev-high)
         0.0))
-     ((down-move :f64)
-      (:wat::core::if started -> :f64
+     ((down-move :wat::core::f64)
+      (:wat::core::if started -> :wat::core::f64
         (:wat::core::- prev-low low)
         0.0))
-     ((plus-dm :f64)
+     ((plus-dm :wat::core::f64)
       (:wat::core::if (:wat::core::and
                         (:wat::core::> up-move down-move)
-                        (:wat::core::> up-move 0.0)) -> :f64
+                        (:wat::core::> up-move 0.0)) -> :wat::core::f64
         up-move
         0.0))
-     ((minus-dm :f64)
+     ((minus-dm :wat::core::f64)
       (:wat::core::if (:wat::core::and
                         (:wat::core::> down-move up-move)
-                        (:wat::core::> down-move 0.0)) -> :f64
+                        (:wat::core::> down-move 0.0)) -> :wat::core::f64
         down-move
         0.0))
-     ((tr :f64)
-      (:wat::core::if started -> :f64
+     ((tr :wat::core::f64)
+      (:wat::core::if started -> :wat::core::f64
         (:wat::core::let*
-          (((hl :f64) (:wat::core::- high low))
-           ((hc :f64) (:wat::core::f64::abs (:wat::core::- high prev-close)))
-           ((lc :f64) (:wat::core::f64::abs (:wat::core::- low prev-close))))
+          (((hl :wat::core::f64) (:wat::core::- high low))
+           ((hc :wat::core::f64) (:wat::core::f64::abs (:wat::core::- high prev-close)))
+           ((lc :wat::core::f64) (:wat::core::f64::abs (:wat::core::- low prev-close))))
           (:wat::core::f64::max (:wat::core::f64::max hl hc) lc))
         0.0))
      ((new-plus-sm :trading::encoding::WilderState)
@@ -212,30 +212,30 @@
         (:trading::encoding::WilderState::update tr-sm tr)
         tr-sm))
      ;; ADX update: only after tr-smoother is ready and DI sum is non-zero.
-     ((tr-ready? :bool) (:trading::encoding::WilderState::ready? new-tr-sm))
-     ((smoothed-tr :f64) (:trading::encoding::WilderState/value new-tr-sm))
-     ((tr-positive? :bool)
+     ((tr-ready? :wat::core::bool) (:trading::encoding::WilderState::ready? new-tr-sm))
+     ((smoothed-tr :wat::core::f64) (:trading::encoding::WilderState/value new-tr-sm))
+     ((tr-positive? :wat::core::bool)
       (:wat::core::and tr-ready? (:wat::core::> smoothed-tr 0.0)))
-     ((plus-di-current :f64)
-      (:wat::core::if tr-positive? -> :f64
+     ((plus-di-current :wat::core::f64)
+      (:wat::core::if tr-positive? -> :wat::core::f64
         (:wat::core::/
           (:wat::core::* 100.0 (:trading::encoding::WilderState/value new-plus-sm))
           smoothed-tr)
         0.0))
-     ((minus-di-current :f64)
-      (:wat::core::if tr-positive? -> :f64
+     ((minus-di-current :wat::core::f64)
+      (:wat::core::if tr-positive? -> :wat::core::f64
         (:wat::core::/
           (:wat::core::* 100.0 (:trading::encoding::WilderState/value new-minus-sm))
           smoothed-tr)
         0.0))
-     ((di-sum :f64) (:wat::core::+ plus-di-current minus-di-current))
-     ((dx :f64)
-      (:wat::core::if (:wat::core::and tr-positive? (:wat::core::> di-sum 0.0)) -> :f64
+     ((di-sum :wat::core::f64) (:wat::core::+ plus-di-current minus-di-current))
+     ((dx :wat::core::f64)
+      (:wat::core::if (:wat::core::and tr-positive? (:wat::core::> di-sum 0.0)) -> :wat::core::f64
         (:wat::core::/
           (:wat::core::* 100.0 (:wat::core::f64::abs (:wat::core::- plus-di-current minus-di-current)))
           di-sum)
         0.0))
-     ((dx-firing? :bool)
+     ((dx-firing? :wat::core::bool)
       (:wat::core::and tr-positive? (:wat::core::> di-sum 0.0)))
      ((new-adx-sm :trading::encoding::WilderState)
       (:wat::core::if dx-firing? -> :trading::encoding::WilderState
@@ -249,12 +249,12 @@
 (:wat::core::define
   (:trading::encoding::DmiState::plus-di
     (state :trading::encoding::DmiState)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::let*
-    (((tr :f64)
+    (((tr :wat::core::f64)
       (:trading::encoding::WilderState/value
         (:trading::encoding::DmiState/tr-smoother state))))
-    (:wat::core::if (:wat::core::= tr 0.0) -> :f64
+    (:wat::core::if (:wat::core::= tr 0.0) -> :wat::core::f64
       0.0
       (:wat::core::/
         (:wat::core::* 100.0
@@ -266,12 +266,12 @@
 (:wat::core::define
   (:trading::encoding::DmiState::minus-di
     (state :trading::encoding::DmiState)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::let*
-    (((tr :f64)
+    (((tr :wat::core::f64)
       (:trading::encoding::WilderState/value
         (:trading::encoding::DmiState/tr-smoother state))))
-    (:wat::core::if (:wat::core::= tr 0.0) -> :f64
+    (:wat::core::if (:wat::core::= tr 0.0) -> :wat::core::f64
       0.0
       (:wat::core::/
         (:wat::core::* 100.0
@@ -283,7 +283,7 @@
 (:wat::core::define
   (:trading::encoding::DmiState::adx
     (state :trading::encoding::DmiState)
-    -> :f64)
+    -> :wat::core::f64)
   (:trading::encoding::WilderState/value
     (:trading::encoding::DmiState/adx-smoother state)))
 
@@ -291,6 +291,6 @@
 (:wat::core::define
   (:trading::encoding::DmiState::ready?
     (state :trading::encoding::DmiState)
-    -> :bool)
+    -> :wat::core::bool)
   (:trading::encoding::WilderState::ready?
     (:trading::encoding::DmiState/adx-smoother state)))

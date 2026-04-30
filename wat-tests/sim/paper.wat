@@ -11,7 +11,7 @@
 
    (:wat::core::define
      (:test::ohlcv
-       (open :f64) (high :f64) (low :f64) (close :f64) (volume :f64)
+       (open :wat::core::f64) (high :wat::core::f64) (low :wat::core::f64) (close :wat::core::f64) (volume :wat::core::f64)
        -> :trading::types::Ohlcv)
      (:trading::types::Ohlcv/new
        (:trading::types::Asset/new "BTC")
@@ -68,7 +68,7 @@
        (cfg :trading::sim::Config)
        (th :trading::sim::Thinker)
        (pr :trading::sim::Predictor)
-       (n :i64)
+       (n :wat::core::i64)
        -> :trading::sim::SimState)
      (:wat::core::if (:wat::core::<= n 0)
                      -> :trading::sim::SimState
@@ -95,8 +95,8 @@
       (:trading::sim::SimState::fresh))
      ((paper :Option<trading::sim::Paper>)
       (:trading::sim::SimState/open-paper state))
-     ((is-none? :bool)
-      (:wat::core::match paper -> :bool
+     ((is-none? :wat::core::bool)
+      (:wat::core::match paper -> :wat::core::bool
         ((Some _) false)
         (:None true))))
     (:wat::test::assert-eq is-none? true)))
@@ -134,8 +134,8 @@
         (:test::predictor-open-up)))
      ((paper :Option<trading::sim::Paper>)
       (:trading::sim::SimState/open-paper state))
-     ((is-some? :bool)
-      (:wat::core::match paper -> :bool
+     ((is-some? :wat::core::bool)
+      (:wat::core::match paper -> :wat::core::bool
         ((Some _) true)
         (:None false))))
     (:wat::test::assert-eq is-some? true)))
@@ -151,10 +151,10 @@
         (:test::predictor-open-up)))
      ((paper :Option<trading::sim::Paper>)
       (:trading::sim::SimState/open-paper state))
-     ((is-up? :bool)
-      (:wat::core::match paper -> :bool
+     ((is-up? :wat::core::bool)
+      (:wat::core::match paper -> :wat::core::bool
         ((Some p)
-          (:wat::core::match (:trading::sim::Paper/direction p) -> :bool
+          (:wat::core::match (:trading::sim::Paper/direction p) -> :wat::core::bool
             (:trading::sim::Direction::Up true)
             (_ false)))
         (:None false))))
@@ -186,7 +186,7 @@
         6))
      ((agg :trading::sim::Aggregate)
       (:trading::sim::SimState/aggregate state-final))
-     ((violence-count :i64)
+     ((violence-count :wat::core::i64)
       (:trading::sim::Aggregate/violence-count agg)))
     (:wat::test::assert-eq violence-count 1)))
 
@@ -213,7 +213,7 @@
         6))
      ((agg :trading::sim::Aggregate)
       (:trading::sim::SimState/aggregate state-final))
-     ((paper-count :i64)
+     ((paper-count :wat::core::i64)
       (:trading::sim::Aggregate/papers agg)))
     (:wat::test::assert-eq paper-count 1)))
 
@@ -290,8 +290,8 @@
      ;; (still active, no resolution yet within 5 candles at dl=288).
      ;; The seam test: SimState/open-paper differs.
      ;; Construct dummy Ohlcv-only state to compare:
-     ((agg-papers-hold :i64) (:trading::sim::Aggregate/papers agg-hold))
-     ((agg-papers-open :i64) (:trading::sim::Aggregate/papers agg-open)))
+     ((agg-papers-hold :wat::core::i64) (:trading::sim::Aggregate/papers agg-hold))
+     ((agg-papers-open :wat::core::i64) (:trading::sim::Aggregate/papers agg-open)))
     ;; Both 0 (neither resolved); but the SimState's open-paper differs
     ;; (already covered by test-open-up-creates-paper). This test
     ;; confirms predictor swap does NOT crash and the simulator
@@ -318,7 +318,7 @@
         (:test::placeholder-surface) 288
         :trading::sim::PositionState::Active
         (:wat::core::vec :trading::sim::TriggerEvent)))
-     ((eligible? :bool)
+     ((eligible? :wat::core::bool)
       (:trading::sim::evaluate-grace-eligible?
         paper
         true
@@ -338,7 +338,7 @@
         (:test::placeholder-surface) 288
         :trading::sim::PositionState::Active
         (:wat::core::vec :trading::sim::TriggerEvent)))
-     ((eligible? :bool)
+     ((eligible? :wat::core::bool)
       (:trading::sim::evaluate-grace-eligible?
         paper
         true
@@ -359,7 +359,7 @@
         :trading::sim::PositionState::Active
         (:wat::core::vec :trading::sim::TriggerEvent)))
      ;; min-residue is 0.01 in test::config; pass 0.005 — gate-3 must fail.
-     ((eligible? :bool)
+     ((eligible? :wat::core::bool)
       (:trading::sim::evaluate-grace-eligible?
         paper
         true
@@ -375,7 +375,7 @@
 (:deftest :trading::test::sim::paper::test-label-trail-grace-back-fill
   (:wat::core::let*
     (((te :fn(i64)->trading::sim::TriggerEvent)
-      (:wat::core::lambda ((i :i64) -> :trading::sim::TriggerEvent)
+      (:wat::core::lambda ((i :wat::core::i64) -> :trading::sim::TriggerEvent)
         (:trading::sim::TriggerEvent/new
           i :trading::types::PhaseLabel::Peak
           :trading::sim::Decision::NotEvaluated
@@ -386,18 +386,18 @@
      ((labeled :trading::sim::LabeledTriggers)
       (:trading::sim::label-trail-grace trail 3))
      ((label-of :fn(i64)->trading::sim::TriggerLabel)
-      (:wat::core::lambda ((i :i64) -> :trading::sim::TriggerLabel)
+      (:wat::core::lambda ((i :wat::core::i64) -> :trading::sim::TriggerLabel)
         (:wat::core::match (:wat::core::get labeled i) -> :trading::sim::TriggerLabel
           ((Some lt) (:trading::sim::LabeledTrigger/label lt))
           (:None :trading::sim::TriggerLabel::Unknown))))
      ((is-hold? :fn(trading::sim::TriggerLabel)->bool)
-      (:wat::core::lambda ((l :trading::sim::TriggerLabel) -> :bool)
-        (:wat::core::match l -> :bool
+      (:wat::core::lambda ((l :trading::sim::TriggerLabel) -> :wat::core::bool)
+        (:wat::core::match l -> :wat::core::bool
           (:trading::sim::TriggerLabel::Hold true)
           (_ false))))
      ((is-exit? :fn(trading::sim::TriggerLabel)->bool)
-      (:wat::core::lambda ((l :trading::sim::TriggerLabel) -> :bool)
-        (:wat::core::match l -> :bool
+      (:wat::core::lambda ((l :trading::sim::TriggerLabel) -> :wat::core::bool)
+        (:wat::core::match l -> :wat::core::bool
           (:trading::sim::TriggerLabel::Exit true)
           (_ false))))
      ((u1 :()) (:wat::test::assert-eq (is-hold? (label-of 0)) true))
@@ -411,7 +411,7 @@
 (:deftest :trading::test::sim::paper::test-label-trail-violence-all-exit
   (:wat::core::let*
     (((te :fn(i64)->trading::sim::TriggerEvent)
-      (:wat::core::lambda ((i :i64) -> :trading::sim::TriggerEvent)
+      (:wat::core::lambda ((i :wat::core::i64) -> :trading::sim::TriggerEvent)
         (:trading::sim::TriggerEvent/new
           i :trading::types::PhaseLabel::Peak
           :trading::sim::Decision::NotEvaluated
@@ -422,13 +422,13 @@
      ((labeled :trading::sim::LabeledTriggers)
       (:trading::sim::label-trail-violence trail))
      ((label-of :fn(i64)->trading::sim::TriggerLabel)
-      (:wat::core::lambda ((i :i64) -> :trading::sim::TriggerLabel)
+      (:wat::core::lambda ((i :wat::core::i64) -> :trading::sim::TriggerLabel)
         (:wat::core::match (:wat::core::get labeled i) -> :trading::sim::TriggerLabel
           ((Some lt) (:trading::sim::LabeledTrigger/label lt))
           (:None :trading::sim::TriggerLabel::Unknown))))
      ((is-exit? :fn(trading::sim::TriggerLabel)->bool)
-      (:wat::core::lambda ((l :trading::sim::TriggerLabel) -> :bool)
-        (:wat::core::match l -> :bool
+      (:wat::core::lambda ((l :trading::sim::TriggerLabel) -> :wat::core::bool)
+        (:wat::core::match l -> :wat::core::bool
           (:trading::sim::TriggerLabel::Exit true)
           (_ false))))
      ((u1 :()) (:wat::test::assert-eq (is-exit? (label-of 0)) true))
@@ -461,10 +461,10 @@
       (:trading::sim::effective-action
         (:trading::sim::Action::Open :trading::sim::Direction::Up)
         :None))
-     ((is-open-up? :bool)
-      (:wat::core::match eff -> :bool
+     ((is-open-up? :wat::core::bool)
+      (:wat::core::match eff -> :wat::core::bool
         ((:trading::sim::Action::Open d)
-          (:wat::core::match d -> :bool
+          (:wat::core::match d -> :wat::core::bool
             (:trading::sim::Direction::Up true)
             (:trading::sim::Direction::Down false)))
         (_ false))))
@@ -484,8 +484,8 @@
       (:trading::sim::effective-action
         (:trading::sim::Action::Open :trading::sim::Direction::Up)
         (Some paper)))
-     ((is-hold? :bool)
-      (:wat::core::match eff -> :bool
+     ((is-hold? :wat::core::bool)
+      (:wat::core::match eff -> :wat::core::bool
         (:trading::sim::Action::Hold true)
         (_ false))))
     (:wat::test::assert-eq is-hold? true)))
@@ -504,8 +504,8 @@
       (:trading::sim::effective-action
         (:trading::sim::Action::Open :trading::sim::Direction::Down)
         (Some paper)))
-     ((is-exit? :bool)
-      (:wat::core::match eff -> :bool
+     ((is-exit? :wat::core::bool)
+      (:wat::core::match eff -> :wat::core::bool
         (:trading::sim::Action::Exit true)
         (_ false))))
     (:wat::test::assert-eq is-exit? true)))

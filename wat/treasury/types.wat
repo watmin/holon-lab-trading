@@ -39,7 +39,7 @@
 
 (:wat::core::enum :trading::treasury::PositionState
   :Active
-  (Grace (residue :f64))
+  (Grace (residue :wat::core::f64))
   :Violence)
 
 
@@ -60,15 +60,15 @@
 ;; state — PositionState.
 
 (:wat::core::struct :trading::treasury::Paper
-  (paper-id       :i64)
-  (owner          :i64)
-  (from-asset     :String)
-  (to-asset       :String)
-  (amount         :f64)
-  (units-acquired :f64)
-  (entry-price    :f64)
-  (entry-candle   :i64)
-  (deadline       :i64)
+  (paper-id       :wat::core::i64)
+  (owner          :wat::core::i64)
+  (from-asset     :wat::core::String)
+  (to-asset       :wat::core::String)
+  (amount         :wat::core::f64)
+  (units-acquired :wat::core::f64)
+  (entry-price    :wat::core::f64)
+  (entry-candle   :wat::core::i64)
+  (deadline       :wat::core::i64)
   (state          :trading::treasury::PositionState))
 
 
@@ -89,15 +89,15 @@
 ;; proven record (009+).
 
 (:wat::core::struct :trading::treasury::Real
-  (position-id    :i64)
-  (owner          :i64)
-  (from-asset     :String)
-  (to-asset       :String)
-  (amount         :f64)
-  (units-acquired :f64)
-  (entry-price    :f64)
-  (entry-candle   :i64)
-  (deadline       :i64)
+  (position-id    :wat::core::i64)
+  (owner          :wat::core::i64)
+  (from-asset     :wat::core::String)
+  (to-asset       :wat::core::String)
+  (amount         :wat::core::f64)
+  (units-acquired :wat::core::f64)
+  (entry-price    :wat::core::f64)
+  (entry-candle   :wat::core::i64)
+  (deadline       :wat::core::i64)
   (state          :trading::treasury::PositionState))
 
 
@@ -109,15 +109,15 @@
 ;; submit-real requests.
 
 (:wat::core::struct :trading::treasury::Receipt
-  (position-id    :i64)
-  (owner          :i64)
-  (from-asset     :String)
-  (to-asset       :String)
-  (amount         :f64)
-  (units-acquired :f64)
-  (entry-price    :f64)
-  (entry-candle   :i64)
-  (deadline       :i64))
+  (position-id    :wat::core::i64)
+  (owner          :wat::core::i64)
+  (from-asset     :wat::core::String)
+  (to-asset       :wat::core::String)
+  (amount         :wat::core::f64)
+  (units-acquired :wat::core::f64)
+  (entry-price    :wat::core::f64)
+  (entry-candle   :wat::core::i64)
+  (deadline       :wat::core::i64))
 
 
 ;; ─── ProposerRecord — the proposer's track record (the gate) ─────
@@ -134,17 +134,17 @@
 
 (:wat::core::struct :trading::treasury::ProposerRecord
   ;; Paper track record — proof of thoughts (read by gate predicate)
-  (paper-submitted     :i64)
-  (paper-survived      :i64)   ; Grace count
-  (paper-failed        :i64)   ; Violence count
-  (paper-grace-residue :f64)   ; sum of all Grace residues
+  (paper-submitted     :wat::core::i64)
+  (paper-survived      :wat::core::i64)   ; Grace count
+  (paper-failed        :wat::core::i64)   ; Violence count
+  (paper-grace-residue :wat::core::f64)   ; sum of all Grace residues
 
   ;; Real track record — proof of execution (after the gate opens)
-  (real-submitted      :i64)
-  (real-survived       :i64)
-  (real-failed         :i64)
-  (real-grace-residue  :f64)
-  (real-violence-loss  :f64))
+  (real-submitted      :wat::core::i64)
+  (real-survived       :wat::core::i64)
+  (real-failed         :wat::core::i64)
+  (real-grace-residue  :wat::core::f64)
+  (real-violence-loss  :wat::core::f64))
 
 
 ;; ─── Verdict — Treasury's response when a position resolves ──────
@@ -155,8 +155,8 @@
 ;; the broker tracks which is which from its receipt).
 
 (:wat::core::enum :trading::treasury::Verdict
-  (Grace (position-id :i64) (residue :f64))
-  (Violence (position-id :i64)))
+  (Grace (position-id :wat::core::i64) (residue :wat::core::f64))
+  (Violence (position-id :wat::core::i64)))
 
 
 ;; ─── Plural typealiases — caller-friendly named generics ─────────
@@ -211,10 +211,10 @@
   (balances            :trading::treasury::Balances)
 
   ;; Monotonic id counters — separate spaces for paper vs real.
-  (next-paper-id       :i64)
-  (next-real-id        :i64)
+  (next-paper-id       :wat::core::i64)
+  (next-real-id        :wat::core::i64)
 
   ;; Fee rates as fractions (e.g. 0.0035 = 0.35%). Same value used
   ;; on both sides per archive convention; future arc may split.
-  (entry-fee           :f64)
-  (exit-fee            :f64))
+  (entry-fee           :wat::core::f64)
+  (exit-fee            :wat::core::f64))

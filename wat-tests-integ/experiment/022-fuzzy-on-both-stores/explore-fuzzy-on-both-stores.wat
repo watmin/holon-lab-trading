@@ -220,12 +220,12 @@
    ;; count = 1.
    (:wat::core::define
      (:exp::count-visit
-       (acc :i64)
+       (acc :wat::core::i64)
        (form :wat::WatAST)
        (step :wat::eval::StepResult)
        -> :wat::eval::WalkStep<i64>)
      (:wat::core::let*
-       (((next-acc :i64) (:wat::core::i64::+ acc 1)))
+       (((next-acc :wat::core::i64) (:wat::core::i64::+ acc 1)))
        (:wat::eval::WalkStep::Continue next-acc)))
 
    ;; Thin wrapper: lifts the HolonAST input to WatAST, calls walk,
@@ -247,12 +247,12 @@
 
    ;; ─── Helpers ──────────────────────────────────────────
    (:wat::core::define
-     (:exp::is-some-h (o :Option<wat::holon::HolonAST>) -> :bool)
-     (:wat::core::match o -> :bool ((Some _) true) (:None false)))
+     (:exp::is-some-h (o :Option<wat::holon::HolonAST>) -> :wat::core::bool)
+     (:wat::core::match o -> :wat::core::bool ((Some _) true) (:None false)))
 
    (:wat::core::define
-     (:exp::is-none-h (o :Option<wat::holon::HolonAST>) -> :bool)
-     (:wat::core::match o -> :bool ((Some _) false) (:None true)))
+     (:exp::is-none-h (o :Option<wat::holon::HolonAST>) -> :wat::core::bool)
+     (:wat::core::match o -> :wat::core::bool ((Some _) false) (:None true)))
 
 ))
 
@@ -326,7 +326,7 @@
     (:wat::core::match walk-result -> :()
       ((Ok pair)
         (:wat::core::let*
-          (((count :i64) (:wat::core::second pair)))
+          (((count :wat::core::i64) (:wat::core::second pair)))
           (:wat::test::assert-eq count 1)))
       ((Err _e) (:wat::test::assert-eq :walk-ok :walk-err)))))
 
@@ -444,7 +444,7 @@
 
      ((c-key :wat::holon::HolonAST) (:exp::thought-rsi-30))
 
-     ((term-miss :bool)
+     ((term-miss :wat::core::bool)
        (:exp::is-none-h
          (:exp::cache-lookup (:exp::L1Tier/terminal-cache tier) c-key))))
     (:wat::test::assert-eq term-miss true)))
@@ -469,9 +469,9 @@
      ((c1 :exp::CoordinateCache)
        (:wat::core::foldl (:wat::core::range 1 21) c0
          (:wat::core::lambda
-           ((acc :exp::CoordinateCache) (i :i64) -> :exp::CoordinateCache)
+           ((acc :exp::CoordinateCache) (i :wat::core::i64) -> :exp::CoordinateCache)
            (:wat::core::let*
-             (((v :f64)
+             (((v :wat::core::f64)
                (:wat::core::i64::to-f64 (:wat::core::i64::* i 5)))
               ((form-h :wat::holon::HolonAST)
                 (:wat::holon::Bind

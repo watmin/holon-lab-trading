@@ -138,14 +138,14 @@
            (:wat::core::let*
              (((candidate-form :wat::holon::HolonAST)
                 (:exp::CacheEntry/form entry))
-              ((candidate-cos :f64)
+              ((candidate-cos :wat::core::f64)
                 (:wat::holon::cosine query candidate-form)))
              (:wat::core::match best
                -> :Option<wat::holon::HolonAST>
                (:None (Some (:exp::CacheEntry/terminal entry)))
                ((Some _t)
                  (:wat::core::let*
-                   (((current-best-cos :f64)
+                   (((current-best-cos :wat::core::f64)
                      (:exp::cache-best-cos-of cache query best)))
                    (:wat::core::if
                      (:wat::core::f64::> candidate-cos current-best-cos)
@@ -162,20 +162,20 @@
        (cache :exp::PopulationCache)
        (query :wat::holon::HolonAST)
        (best  :Option<wat::holon::HolonAST>)
-       -> :f64)
-     (:wat::core::match best -> :f64
+       -> :wat::core::f64)
+     (:wat::core::match best -> :wat::core::f64
        (:None -1.0)
        ((Some t)
          (:wat::core::foldl
            (:exp::PopulationCache/entries cache)
            -1.0
            (:wat::core::lambda
-             ((acc   :f64)
+             ((acc   :wat::core::f64)
               (entry :exp::CacheEntry)
-              -> :f64)
+              -> :wat::core::f64)
              (:wat::core::if
                (:wat::holon::coincident? t (:exp::CacheEntry/terminal entry))
-               -> :f64
+               -> :wat::core::f64
                (:wat::core::f64::max acc
                  (:wat::holon::cosine query
                    (:exp::CacheEntry/form entry)))
@@ -184,7 +184,7 @@
 
    ;; ─── Trader-shape thoughts (RSI in cell 70 at varied positions) ───
    (:wat::core::define
-     (:exp::thought (rsi :f64) -> :wat::holon::HolonAST)
+     (:exp::thought (rsi :wat::core::f64) -> :wat::holon::HolonAST)
      (:wat::holon::Bind
        (:wat::holon::Atom "rsi-thought")
        (:wat::holon::Thermometer rsi 0.0 100.0)))
@@ -202,12 +202,12 @@
 
    ;; ─── Helpers ──────────────────────────────────────────
    (:wat::core::define
-     (:exp::is-some-h (o :Option<wat::holon::HolonAST>) -> :bool)
-     (:wat::core::match o -> :bool ((Some _) true) (:None false)))
+     (:exp::is-some-h (o :Option<wat::holon::HolonAST>) -> :wat::core::bool)
+     (:wat::core::match o -> :wat::core::bool ((Some _) true) (:None false)))
 
    (:wat::core::define
-     (:exp::is-none-h (o :Option<wat::holon::HolonAST>) -> :bool)
-     (:wat::core::match o -> :bool ((Some _) false) (:None true)))))
+     (:exp::is-none-h (o :Option<wat::holon::HolonAST>) -> :wat::core::bool)
+     (:wat::core::match o -> :wat::core::bool ((Some _) false) (:None true)))))
 
 
 ;; ════════════════════════════════════════════════════════════════

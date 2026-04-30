@@ -78,7 +78,7 @@
    ;; encoded form is what carries locality; the call form (with
    ;; the raw f64) does not.
    (:wat::core::define
-     (:my::indicator (n :f64) -> :wat::holon::HolonAST)
+     (:my::indicator (n :wat::core::f64) -> :wat::holon::HolonAST)
      (:wat::holon::Bind
        (:wat::holon::Atom "indicator")
        (:wat::holon::Thermometer n -100.0 100.0)))
@@ -198,7 +198,7 @@
    ;;   Bind(Atom("indicator"), Thermometer{n,-100,100})
    ;; Built directly here for assertion against the walker's terminal.
    (:wat::core::define
-     (:exp::expected-post-beta (n :f64) -> :wat::holon::HolonAST)
+     (:exp::expected-post-beta (n :wat::core::f64) -> :wat::holon::HolonAST)
      (:wat::holon::Bind
        (:wat::holon::Atom "indicator")
        (:wat::holon::Thermometer n -100.0 100.0)))))
@@ -253,7 +253,7 @@
      ;; B's terminal should be coincident with A's expected
      ;; (the 1.95-flavored Bind), demonstrating the fuzzy short-cut.
      ((a-expected :wat::holon::HolonAST) (:exp::expected-post-beta 1.95))
-     ((fuzzy-shared :bool) (:wat::holon::coincident? b-terminal a-expected)))
+     ((fuzzy-shared :wat::core::bool) (:wat::holon::coincident? b-terminal a-expected)))
     (:wat::test::assert-eq fuzzy-shared true)))
 
 
@@ -285,8 +285,8 @@
      ((a-expected :wat::holon::HolonAST) (:exp::expected-post-beta 1.95))
 
      ;; C got its OWN terminal, not A's.
-     ((c-correct :bool) (:wat::holon::coincident? c-terminal c-expected))
-     ((c-not-A :bool)
+     ((c-correct :wat::core::bool) (:wat::holon::coincident? c-terminal c-expected))
+     ((c-not-A :wat::core::bool)
        (:wat::core::not (:wat::holon::coincident? c-terminal a-expected)))
 
      ((_c :()) (:wat::test::assert-eq c-correct true)))
@@ -334,7 +334,7 @@
      ((pre-beta-2-05 :wat::holon::HolonAST)
       (:wat::holon::from-watast
         (:wat::core::quote (:my::indicator 2.05))))
-     ((coincide :bool)
+     ((coincide :wat::core::bool)
       (:wat::holon::coincident? pre-beta-1-95 pre-beta-2-05)))
     (:wat::test::assert-eq coincide false)))
 
@@ -377,7 +377,7 @@
       (:exp::walk-fuzzy (:wat::core::quote (:my::indicator 3.05)) populated-cache))
      ((near-terminal :wat::holon::HolonAST) (:wat::core::first r-near))
      ((expected-3-0 :wat::holon::HolonAST) (:exp::expected-post-beta 3.0))
-     ((near-hits-3-0 :bool)
+     ((near-hits-3-0 :wat::core::bool)
        (:wat::holon::coincident? near-terminal expected-3-0))
 
      ;; Walker at 5.0 — between 3.0 and 6.0; outside both
@@ -386,7 +386,7 @@
       (:exp::walk-fuzzy (:wat::core::quote (:my::indicator 5.0)) populated-cache))
      ((between-terminal :wat::holon::HolonAST) (:wat::core::first r-between))
      ((expected-5-0 :wat::holon::HolonAST) (:exp::expected-post-beta 5.0))
-     ((between-correct :bool)
+     ((between-correct :wat::core::bool)
        (:wat::holon::coincident? between-terminal expected-5-0))
 
      ((_n :()) (:wat::test::assert-eq near-hits-3-0 true)))

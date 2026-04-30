@@ -14,8 +14,8 @@
       (:trading::encoding::AtrWindow::fresh 4))
      ((m :Option<f64>)
       (:trading::encoding::AtrWindow::median w))
-     ((sentinel :f64)
-      (:wat::core::match m -> :f64
+     ((sentinel :wat::core::f64)
+      (:wat::core::match m -> :wat::core::f64
         ((Some _) -1.0)
         (:None 999.0))))
     (:wat::test::assert-eq sentinel 999.0)))
@@ -35,8 +35,8 @@
       (:trading::encoding::AtrWindow::push w2 2.0))
      ((m :Option<f64>)
       (:trading::encoding::AtrWindow::median w3))
-     ((mv :f64)
-      (:wat::core::match m -> :f64
+     ((mv :wat::core::f64)
+      (:wat::core::match m -> :wat::core::f64
         ((Some v) v)
         (:None -1.0))))
     (:wat::test::assert-eq mv 2.0)))
@@ -58,8 +58,8 @@
       (:trading::encoding::AtrWindow::push w3 3.0))
      ((m :Option<f64>)
       (:trading::encoding::AtrWindow::median w4))
-     ((mv :f64)
-      (:wat::core::match m -> :f64
+     ((mv :wat::core::f64)
+      (:wat::core::match m -> :wat::core::f64
         ((Some v) v)
         (:None -1.0))))
     (:wat::test::assert-eq mv 2.5)))
@@ -79,12 +79,12 @@
       (:trading::encoding::AtrWindow::push w2 3.0))
      ((w4 :trading::encoding::AtrWindow)
       (:trading::encoding::AtrWindow::push w3 4.0))
-     ((len :i64)
+     ((len :wat::core::i64)
       (:wat::core::length (:trading::encoding::AtrWindow/values w4)))
      ((m :Option<f64>)
       (:trading::encoding::AtrWindow::median w4))
-     ((mv :f64)
-      (:wat::core::match m -> :f64
+     ((mv :wat::core::f64)
+      (:wat::core::match m -> :wat::core::f64
         ((Some v) v)
         (:None -1.0))))
     (:wat::core::let*
@@ -97,17 +97,17 @@
   (:wat::core::let*
     (((w0 :trading::encoding::AtrWindow)
       (:trading::encoding::AtrWindow::fresh 3))
-     ((empty? :bool)
+     ((empty? :wat::core::bool)
       (:trading::encoding::AtrWindow::full? w0))
      ((w1 :trading::encoding::AtrWindow)
       (:trading::encoding::AtrWindow::push w0 1.0))
      ((w2 :trading::encoding::AtrWindow)
       (:trading::encoding::AtrWindow::push w1 2.0))
-     ((not-yet? :bool)
+     ((not-yet? :wat::core::bool)
       (:trading::encoding::AtrWindow::full? w2))
      ((w3 :trading::encoding::AtrWindow)
       (:trading::encoding::AtrWindow::push w2 3.0))
-     ((full? :bool)
+     ((full? :wat::core::bool)
       (:trading::encoding::AtrWindow::full? w3)))
     (:wat::core::let*
       (((u1 :()) (:wat::test::assert-eq empty? false))

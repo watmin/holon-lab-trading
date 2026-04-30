@@ -24,12 +24,12 @@
 ;; carry-along), `:wat::std::math::ln`, polymorphic arithmetic.
 ;;
 ;; Explicit:
-;;   :trading::encoding::compute-hurst                :Vec<f64> -> :f64
-;;   :trading::encoding::compute-autocorrelation-lag1 :Vec<f64> -> :f64
+;;   :trading::encoding::compute-hurst                :Vec<f64> -> :wat::core::f64
+;;   :trading::encoding::compute-autocorrelation-lag1 :Vec<f64> -> :wat::core::f64
 ;;
 ;;   :trading::encoding::VwapState::fresh           -> VwapState
 ;;   :trading::encoding::VwapState::update state close volume -> VwapState
-;;   :trading::encoding::VwapState::distance state close -> :f64
+;;   :trading::encoding::VwapState::distance state close -> :wat::core::f64
 
 (:wat::load-file! "primitives.wat")
 
@@ -52,21 +52,21 @@
     (closes :Vec<f64>)
     -> :Vec<f64>)
   (:wat::core::let*
-    (((n :i64) (:wat::core::length closes)))
+    (((n :wat::core::i64) (:wat::core::length closes)))
     (:wat::core::if (:wat::core::< n 2) -> :Vec<f64>
-      (:wat::core::vec :f64)
+      (:wat::core::vec :wat::core::f64)
       (:wat::core::map
         (:wat::core::range 0 (:wat::core::- n 1))
-        (:wat::core::lambda ((i :i64) -> :f64)
+        (:wat::core::lambda ((i :wat::core::i64) -> :wat::core::f64)
           (:wat::core::let*
-            (((cur :f64)
-              (:wat::core::match (:wat::core::get closes i) -> :f64
+            (((cur :wat::core::f64)
+              (:wat::core::match (:wat::core::get closes i) -> :wat::core::f64
                 ((Some v) v) (:None 0.0)))
-             ((nxt :f64)
+             ((nxt :wat::core::f64)
               (:wat::core::match
-                (:wat::core::get closes (:wat::core::+ i 1)) -> :f64
+                (:wat::core::get closes (:wat::core::+ i 1)) -> :wat::core::f64
                 ((Some v) v) (:None 0.0))))
-            (:wat::core::if (:wat::core::= cur 0.0) -> :f64
+            (:wat::core::if (:wat::core::= cur 0.0) -> :wat::core::f64
               0.0
               (:wat::core::/ (:wat::core::- nxt cur) cur))))))))
 
@@ -78,18 +78,18 @@
 (:wat::core::define
   (:trading::encoding::persistence::cum-deviations
     (xs :Vec<f64>)
-    (mu :f64)
+    (mu :wat::core::f64)
     -> :Vec<f64>)
   (:wat::core::first
     (:wat::core::foldl xs
-      (:wat::core::tuple (:wat::core::vec :f64) 0.0)
+      (:wat::core::tuple (:wat::core::vec :wat::core::f64) 0.0)
       (:wat::core::lambda
-        ((acc :(Vec<f64>,f64)) (x :f64)
+        ((acc :(Vec<f64>,f64)) (x :wat::core::f64)
          -> :(Vec<f64>,f64))
         (:wat::core::let*
           (((vec :Vec<f64>) (:wat::core::first acc))
-           ((running :f64) (:wat::core::second acc))
-           ((new-running :f64) (:wat::core::+ running (:wat::core::- x mu))))
+           ((running :wat::core::f64) (:wat::core::second acc))
+           ((new-running :wat::core::f64) (:wat::core::+ running (:wat::core::- x mu))))
           (:wat::core::tuple
             (:wat::core::conj vec new-running)
             new-running))))))
@@ -100,45 +100,45 @@
 (:wat::core::define
   (:trading::encoding::compute-hurst
     (closes :Vec<f64>)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::let*
-    (((n :i64) (:wat::core::length closes)))
-    (:wat::core::if (:wat::core::< n 8) -> :f64
+    (((n :wat::core::i64) (:wat::core::length closes)))
+    (:wat::core::if (:wat::core::< n 8) -> :wat::core::f64
       0.5
       (:wat::core::let*
         (((returns :Vec<f64>)
           (:trading::encoding::persistence::returns closes))
-         ((rn :i64) (:wat::core::length returns))
-         ((rn-f64 :f64) (:wat::core::i64::to-f64 rn))
+         ((rn :wat::core::i64) (:wat::core::length returns))
+         ((rn-f64 :wat::core::f64) (:wat::core::i64::to-f64 rn))
          ;; mu / variance via the substrate's :wat::std::stat::*.
          ;; Empty arm unreachable: outer gate already caught n < 8 →
          ;; rn >= 7, returns Vec is non-empty.
-         ((mu :f64)
-          (:wat::core::match (:wat::std::stat::mean returns) -> :f64
+         ((mu :wat::core::f64)
+          (:wat::core::match (:wat::std::stat::mean returns) -> :wat::core::f64
             ((Some v) v) (:None 0.0)))
          ((cum-dev :Vec<f64>)
           (:trading::encoding::persistence::cum-deviations returns mu))
          ;; Range of cum-dev. min/max return Option<f64>; at this
          ;; gate we know n >= 8 → rn >= 7 → cum-dev nonempty. Sentinels
          ;; unreachable.
-         ((cd-max :f64)
+         ((cd-max :wat::core::f64)
           (:wat::core::match
-            (:wat::core::f64::max-of cum-dev) -> :f64
+            (:wat::core::f64::max-of cum-dev) -> :wat::core::f64
             ((Some v) v) (:None 0.0)))
-         ((cd-min :f64)
+         ((cd-min :wat::core::f64)
           (:wat::core::match
-            (:wat::core::f64::min-of cum-dev) -> :f64
+            (:wat::core::f64::min-of cum-dev) -> :wat::core::f64
             ((Some v) v) (:None 0.0)))
-         ((r :f64) (:wat::core::- cd-max cd-min))
+         ((r :wat::core::f64) (:wat::core::- cd-max cd-min))
          ;; Stddev of returns (population) via substrate.
-         ((s :f64)
-          (:wat::core::match (:wat::std::stat::stddev returns) -> :f64
+         ((s :wat::core::f64)
+          (:wat::core::match (:wat::std::stat::stddev returns) -> :wat::core::f64
             ((Some v) v) (:None 0.0))))
-        (:wat::core::if (:wat::core::= s 0.0) -> :f64
+        (:wat::core::if (:wat::core::= s 0.0) -> :wat::core::f64
           0.5
           (:wat::core::let*
-            (((rs :f64) (:wat::core::/ r s)))
-            (:wat::core::if (:wat::core::<= rs 0.0) -> :f64
+            (((rs :wat::core::f64) (:wat::core::/ r s)))
+            (:wat::core::if (:wat::core::<= rs 0.0) -> :wat::core::f64
               0.5
               (:wat::core::/
                 (:wat::std::math::ln rs)
@@ -150,42 +150,42 @@
 (:wat::core::define
   (:trading::encoding::compute-autocorrelation-lag1
     (xs :Vec<f64>)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::let*
-    (((n :i64) (:wat::core::length xs)))
-    (:wat::core::if (:wat::core::< n 3) -> :f64
+    (((n :wat::core::i64) (:wat::core::length xs)))
+    (:wat::core::if (:wat::core::< n 3) -> :wat::core::f64
       0.0
       (:wat::core::let*
         (;; Empty arms unreachable: outer gate caught n < 3.
-         ((mu :f64)
-          (:wat::core::match (:wat::std::stat::mean xs) -> :f64
+         ((mu :wat::core::f64)
+          (:wat::core::match (:wat::std::stat::mean xs) -> :wat::core::f64
             ((Some v) v) (:None 0.0)))
-         ((var :f64)
-          (:wat::core::match (:wat::std::stat::variance xs) -> :f64
+         ((var :wat::core::f64)
+          (:wat::core::match (:wat::std::stat::variance xs) -> :wat::core::f64
             ((Some v) v) (:None 0.0))))
-        (:wat::core::if (:wat::core::= var 0.0) -> :f64
+        (:wat::core::if (:wat::core::= var 0.0) -> :wat::core::f64
           0.0
           (:wat::core::let*
             (;; cov = sum over i in 0..n-1 of (xs[i] - mu)*(xs[i+1] - mu),
              ;; divided by (n-1).
-             ((cov-sum :f64)
+             ((cov-sum :wat::core::f64)
               (:wat::core::foldl
                 (:wat::core::range 0 (:wat::core::- n 1))
                 0.0
-                (:wat::core::lambda ((acc :f64) (i :i64) -> :f64)
+                (:wat::core::lambda ((acc :wat::core::f64) (i :wat::core::i64) -> :wat::core::f64)
                   (:wat::core::let*
-                    (((xi :f64)
-                      (:wat::core::match (:wat::core::get xs i) -> :f64
+                    (((xi :wat::core::f64)
+                      (:wat::core::match (:wat::core::get xs i) -> :wat::core::f64
                         ((Some v) v) (:None 0.0)))
-                     ((xj :f64)
+                     ((xj :wat::core::f64)
                       (:wat::core::match
-                        (:wat::core::get xs (:wat::core::+ i 1)) -> :f64
+                        (:wat::core::get xs (:wat::core::+ i 1)) -> :wat::core::f64
                         ((Some v) v) (:None 0.0))))
                     (:wat::core::+ acc
                       (:wat::core::*
                         (:wat::core::- xi mu)
                         (:wat::core::- xj mu)))))))
-             ((cov :f64)
+             ((cov :wat::core::f64)
               (:wat::core::/ cov-sum
                 (:wat::core::i64::to-f64 (:wat::core::- n 1)))))
             (:wat::core::/ cov var)))))))
@@ -194,8 +194,8 @@
 ;; ─── VWAP distance ────────────────────────────────────────────────
 
 (:wat::core::struct :trading::encoding::VwapState
-  (cum-pv  :f64)   ;; cumulative price·volume
-  (cum-vol :f64))  ;; cumulative volume
+  (cum-pv  :wat::core::f64)   ;; cumulative price·volume
+  (cum-vol :wat::core::f64))  ;; cumulative volume
 
 
 (:wat::core::define
@@ -207,8 +207,8 @@
 (:wat::core::define
   (:trading::encoding::VwapState::update
     (state :trading::encoding::VwapState)
-    (close :f64)
-    (volume :f64)
+    (close :wat::core::f64)
+    (volume :wat::core::f64)
     -> :trading::encoding::VwapState)
   (:trading::encoding::VwapState/new
     (:wat::core::+
@@ -224,15 +224,15 @@
 (:wat::core::define
   (:trading::encoding::VwapState::distance
     (state :trading::encoding::VwapState)
-    (close :f64)
-    -> :f64)
+    (close :wat::core::f64)
+    -> :wat::core::f64)
   (:wat::core::let*
-    (((cum-vol :f64) (:trading::encoding::VwapState/cum-vol state))
-     ((cum-pv :f64) (:trading::encoding::VwapState/cum-pv state)))
-    (:wat::core::if (:wat::core::= cum-vol 0.0) -> :f64
+    (((cum-vol :wat::core::f64) (:trading::encoding::VwapState/cum-vol state))
+     ((cum-pv :wat::core::f64) (:trading::encoding::VwapState/cum-pv state)))
+    (:wat::core::if (:wat::core::= cum-vol 0.0) -> :wat::core::f64
       0.0
-      (:wat::core::if (:wat::core::= close 0.0) -> :f64
+      (:wat::core::if (:wat::core::= close 0.0) -> :wat::core::f64
         0.0
         (:wat::core::let*
-          (((vwap :f64) (:wat::core::/ cum-pv cum-vol)))
+          (((vwap :wat::core::f64) (:wat::core::/ cum-pv cum-vol)))
           (:wat::core::/ (:wat::core::- close vwap) close))))))

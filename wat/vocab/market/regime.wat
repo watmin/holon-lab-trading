@@ -38,38 +38,38 @@
     -> :trading::encoding::VocabEmission)
   (:wat::core::let*
     ;; Normalize + round the eight atom values.
-    (((kama-er :f64)
+    (((kama-er :wat::core::f64)
       (:trading::encoding::round-to-2
         (:trading::types::Candle::Regime/kama-er r)))
-     ((choppiness :f64)
+     ((choppiness :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::/
           (:trading::types::Candle::Regime/choppiness r) 100.0)))
-     ((dfa-alpha :f64)
+     ((dfa-alpha :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::/
           (:trading::types::Candle::Regime/dfa-alpha r) 2.0)))
 
      ;; variance-ratio — one-sided floor at 0.001 via substrate
      ;; f64::max (wat-rs arc 046), then round.
-     ((vr-raw :f64)
+     ((vr-raw :wat::core::f64)
       (:trading::types::Candle::Regime/variance-ratio r))
-     ((variance-ratio :f64)
+     ((variance-ratio :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::f64::max vr-raw 0.001)))
 
-     ((entropy-rate :f64)
+     ((entropy-rate :wat::core::f64)
       (:trading::encoding::round-to-2
         (:trading::types::Candle::Regime/entropy-rate r)))
-     ((aroon-up :f64)
+     ((aroon-up :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::/
           (:trading::types::Candle::Regime/aroon-up r) 100.0)))
-     ((aroon-down :f64)
+     ((aroon-down :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::/
           (:trading::types::Candle::Regime/aroon-down r) 100.0)))
-     ((fractal-dim :f64)
+     ((fractal-dim :wat::core::f64)
       (:trading::encoding::round-to-2
         (:wat::core::-
           (:trading::types::Candle::Regime/fractal-dim r) 1.0)))

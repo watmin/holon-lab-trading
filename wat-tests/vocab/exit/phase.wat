@@ -10,7 +10,7 @@
      (:test::fresh-phase
        (label :trading::types::PhaseLabel)
        (direction :trading::types::PhaseDirection)
-       (duration :i64)
+       (duration :wat::core::i64)
        -> :trading::types::Candle::Phase)
      (:trading::types::Candle::Phase/new
        label direction duration
@@ -20,8 +20,8 @@
      (:test::fresh-record
        (label :trading::types::PhaseLabel)
        (direction :trading::types::PhaseDirection)
-       (duration :i64)
-       (close-min :f64) (close-max :f64) (close-avg :f64)
+       (duration :wat::core::i64)
+       (close-min :wat::core::f64) (close-max :wat::core::f64) (close-avg :wat::core::f64)
        -> :trading::types::PhaseRecord)
      (:trading::types::PhaseRecord/new
        label direction 0 0 duration

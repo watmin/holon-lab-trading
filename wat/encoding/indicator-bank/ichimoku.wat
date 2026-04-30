@@ -17,14 +17,14 @@
 ;; Auto-generated accessors per field. Explicit:
 ;;   :trading::encoding::IchimokuState::fresh -> IchimokuState
 ;;   :trading::encoding::IchimokuState::update state high low -> IchimokuState
-;;   :trading::encoding::IchimokuState::tenkan       state -> :f64
-;;   :trading::encoding::IchimokuState::kijun        state -> :f64
-;;   :trading::encoding::IchimokuState::senkou-a     state -> :f64
-;;   :trading::encoding::IchimokuState::senkou-b     state -> :f64
-;;   :trading::encoding::IchimokuState::cloud-top    state -> :f64
-;;   :trading::encoding::IchimokuState::cloud-bottom state -> :f64
-;;   :trading::encoding::IchimokuState::tk-cross-delta state -> :f64
-;;   :trading::encoding::IchimokuState::ready?       state -> :bool
+;;   :trading::encoding::IchimokuState::tenkan       state -> :wat::core::f64
+;;   :trading::encoding::IchimokuState::kijun        state -> :wat::core::f64
+;;   :trading::encoding::IchimokuState::senkou-a     state -> :wat::core::f64
+;;   :trading::encoding::IchimokuState::senkou-b     state -> :wat::core::f64
+;;   :trading::encoding::IchimokuState::cloud-top    state -> :wat::core::f64
+;;   :trading::encoding::IchimokuState::cloud-bottom state -> :wat::core::f64
+;;   :trading::encoding::IchimokuState::tk-cross-delta state -> :wat::core::f64
+;;   :trading::encoding::IchimokuState::ready?       state -> :wat::core::bool
 
 (:wat::load-file! "primitives.wat")
 
@@ -36,8 +36,8 @@
   (low-26       :trading::encoding::RingBuffer)
   (high-52      :trading::encoding::RingBuffer)
   (low-52       :trading::encoding::RingBuffer)
-  (prev-tenkan  :f64)
-  (prev-kijun   :f64))
+  (prev-tenkan  :wat::core::f64)
+  (prev-kijun   :wat::core::f64))
 
 
 (:wat::core::define
@@ -61,15 +61,15 @@
   (:trading::encoding::ichimoku::midpoint
     (high-buf :trading::encoding::RingBuffer)
     (low-buf :trading::encoding::RingBuffer)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::let*
-    (((highest :f64)
+    (((highest :wat::core::f64)
       (:wat::core::match
-        (:trading::encoding::RingBuffer::max high-buf) -> :f64
+        (:trading::encoding::RingBuffer::max high-buf) -> :wat::core::f64
         ((Some v) v) (:None 0.0)))
-     ((lowest :f64)
+     ((lowest :wat::core::f64)
       (:wat::core::match
-        (:trading::encoding::RingBuffer::min low-buf) -> :f64
+        (:trading::encoding::RingBuffer::min low-buf) -> :wat::core::f64
         ((Some v) v) (:None 0.0))))
     (:wat::core::/ (:wat::core::+ highest lowest) 2.0)))
 
@@ -77,7 +77,7 @@
 (:wat::core::define
   (:trading::encoding::IchimokuState::tenkan
     (state :trading::encoding::IchimokuState)
-    -> :f64)
+    -> :wat::core::f64)
   (:trading::encoding::ichimoku::midpoint
     (:trading::encoding::IchimokuState/high-9 state)
     (:trading::encoding::IchimokuState/low-9 state)))
@@ -86,7 +86,7 @@
 (:wat::core::define
   (:trading::encoding::IchimokuState::kijun
     (state :trading::encoding::IchimokuState)
-    -> :f64)
+    -> :wat::core::f64)
   (:trading::encoding::ichimoku::midpoint
     (:trading::encoding::IchimokuState/high-26 state)
     (:trading::encoding::IchimokuState/low-26 state)))
@@ -95,7 +95,7 @@
 (:wat::core::define
   (:trading::encoding::IchimokuState::senkou-a
     (state :trading::encoding::IchimokuState)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::/
     (:wat::core::+
       (:trading::encoding::IchimokuState::tenkan state)
@@ -106,7 +106,7 @@
 (:wat::core::define
   (:trading::encoding::IchimokuState::senkou-b
     (state :trading::encoding::IchimokuState)
-    -> :f64)
+    -> :wat::core::f64)
   (:trading::encoding::ichimoku::midpoint
     (:trading::encoding::IchimokuState/high-52 state)
     (:trading::encoding::IchimokuState/low-52 state)))
@@ -115,7 +115,7 @@
 (:wat::core::define
   (:trading::encoding::IchimokuState::cloud-top
     (state :trading::encoding::IchimokuState)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::f64::max
     (:trading::encoding::IchimokuState::senkou-a state)
     (:trading::encoding::IchimokuState::senkou-b state)))
@@ -124,7 +124,7 @@
 (:wat::core::define
   (:trading::encoding::IchimokuState::cloud-bottom
     (state :trading::encoding::IchimokuState)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::f64::min
     (:trading::encoding::IchimokuState::senkou-a state)
     (:trading::encoding::IchimokuState::senkou-b state)))
@@ -135,12 +135,12 @@
 (:wat::core::define
   (:trading::encoding::IchimokuState::tk-cross-delta
     (state :trading::encoding::IchimokuState)
-    -> :f64)
+    -> :wat::core::f64)
   (:wat::core::let*
-    (((tenkan :f64) (:trading::encoding::IchimokuState::tenkan state))
-     ((kijun :f64) (:trading::encoding::IchimokuState::kijun state))
-     ((tk-spread :f64) (:wat::core::- tenkan kijun))
-     ((prev-spread :f64)
+    (((tenkan :wat::core::f64) (:trading::encoding::IchimokuState::tenkan state))
+     ((kijun :wat::core::f64) (:trading::encoding::IchimokuState::kijun state))
+     ((tk-spread :wat::core::f64) (:wat::core::- tenkan kijun))
+     ((prev-spread :wat::core::f64)
       (:wat::core::-
         (:trading::encoding::IchimokuState/prev-tenkan state)
         (:trading::encoding::IchimokuState/prev-kijun state))))
@@ -150,15 +150,15 @@
 (:wat::core::define
   (:trading::encoding::IchimokuState::update
     (state :trading::encoding::IchimokuState)
-    (high :f64)
-    (low :f64)
+    (high :wat::core::f64)
+    (low :wat::core::f64)
     -> :trading::encoding::IchimokuState)
   (:wat::core::let*
     (;; Capture current tenkan/kijun BEFORE pushing this candle's
      ;; high/low so they become the "prev" for next tick's
      ;; tk-cross-delta.
-     ((tenkan :f64) (:trading::encoding::IchimokuState::tenkan state))
-     ((kijun :f64) (:trading::encoding::IchimokuState::kijun state)))
+     ((tenkan :wat::core::f64) (:trading::encoding::IchimokuState::tenkan state))
+     ((kijun :wat::core::f64) (:trading::encoding::IchimokuState::kijun state)))
     (:trading::encoding::IchimokuState/new
       (:trading::encoding::RingBuffer::push
         (:trading::encoding::IchimokuState/high-9 state) high)
@@ -180,6 +180,6 @@
 (:wat::core::define
   (:trading::encoding::IchimokuState::ready?
     (state :trading::encoding::IchimokuState)
-    -> :bool)
+    -> :wat::core::bool)
   (:trading::encoding::RingBuffer::full?
     (:trading::encoding::IchimokuState/high-52 state)))

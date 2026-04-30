@@ -77,7 +77,7 @@
        -> :())
      (:wat::core::foldl
        (:wat::core::range 0 30) ()
-       (:wat::core::lambda ((acc :()) (i :i64) -> :())
+       (:wat::core::lambda ((acc :()) (i :wat::core::i64) -> :())
          (:wat::core::if (:wat::core::< i 20) -> :()
            ;; Puts 0..19 — unique leaf keys. Strict send via
            ;; `:wat::std::option::expect` (arc 107) — if cache-req-tx
@@ -148,7 +148,7 @@
          (:wat::holon::lru::HologramCacheService::MetricsCadence/new
            0
            (:wat::core::lambda
-             ((n :i64) (_s :wat::holon::lru::HologramCacheService::Stats)
+             ((n :wat::core::i64) (_s :wat::holon::lru::HologramCacheService::Stats)
               -> :(i64,bool))
              (:wat::core::if (:wat::core::>= n 9) -> :(i64,bool)
                (:wat::core::tuple 0 true)
@@ -198,9 +198,9 @@
   (:wat::core::let*
     (;; Outer — rundb driver lives until the end.
      ((now :wat::time::Instant) (:wat::time::now))
-     ((epoch-str :String)
+     ((epoch-str :wat::core::String)
       (:wat::core::i64::to-string (:wat::time::epoch-seconds now)))
-     ((db-path :String)
+     ((db-path :wat::core::String)
       (:wat::core::string::concat "runs/proof-004-" epoch-str ".db"))
      ((rundb-spawn :wat::telemetry::Service::Spawn<wat::telemetry::Event>)
       (:trading::telemetry::Sqlite/spawn db-path 1

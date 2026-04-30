@@ -10,7 +10,7 @@
    ;; Fresh Ohlcv builder for tests.
    (:wat::core::define
      (:test::ohlcv
-       (open :f64) (high :f64) (low :f64) (close :f64) (volume :f64)
+       (open :wat::core::f64) (high :wat::core::f64) (low :wat::core::f64) (close :wat::core::f64) (volume :wat::core::f64)
        -> :trading::types::Ohlcv)
      (:trading::types::Ohlcv/new
        (:trading::types::Asset/new "BTC")
@@ -23,7 +23,7 @@
      (:test::feed
        (bank :trading::encoding::IndicatorBank)
        (oh :trading::types::Ohlcv)
-       (n :i64)
+       (n :wat::core::i64)
        -> :trading::encoding::IndicatorBank)
      (:wat::core::if (:wat::core::<= n 0)
                      -> :trading::encoding::IndicatorBank
@@ -90,14 +90,14 @@
       (:test::ohlcv 100.0 100.0 100.0 100.0 50.0))
      ((bank20 :trading::encoding::IndicatorBank)
       (:test::feed bank0 oh 20))
-     ((sma-from-state :f64)
+     ((sma-from-state :wat::core::f64)
       (:trading::encoding::SmaState::value
         (:trading::encoding::IndicatorBank/sma20 bank20)))
      ;; Tick once more to also produce a Candle reflecting the same state.
      ((result :(trading::encoding::IndicatorBank,trading::types::Candle))
       (:trading::encoding::IndicatorBank::tick bank20 oh))
      ((candle :trading::types::Candle) (:wat::core::second result))
-     ((sma-from-candle :f64)
+     ((sma-from-candle :wat::core::f64)
       (:trading::types::Candle::Trend/sma20
         (:trading::types::Candle/trend candle))))
     (:wat::core::let*
@@ -116,13 +116,13 @@
       (:test::ohlcv 100.0 100.0 100.0 100.0 50.0))
      ((bank20 :trading::encoding::IndicatorBank)
       (:test::feed bank0 oh 20))
-     ((rsi-from-state :f64)
+     ((rsi-from-state :wat::core::f64)
       (:trading::encoding::RsiState::value
         (:trading::encoding::IndicatorBank/rsi bank20)))
      ((result :(trading::encoding::IndicatorBank,trading::types::Candle))
       (:trading::encoding::IndicatorBank::tick bank20 oh))
      ((candle :trading::types::Candle) (:wat::core::second result))
-     ((rsi-from-candle :f64)
+     ((rsi-from-candle :wat::core::f64)
       (:trading::types::Candle::Momentum/rsi
         (:trading::types::Candle/momentum candle))))
     ;; Flat input → RSI = 100 (no losses).
@@ -147,8 +147,8 @@
      ((label :trading::types::PhaseLabel)
       (:trading::types::Candle::Phase/label
         (:trading::types::Candle/phase candle)))
-     ((is-valley? :bool)
-      (:wat::core::match label -> :bool
+     ((is-valley? :wat::core::bool)
+      (:wat::core::match label -> :wat::core::bool
         (:trading::types::PhaseLabel::Valley true)
         (_ false))))
     (:wat::test::assert-eq is-valley? true)))
@@ -165,7 +165,7 @@
       (:test::ohlcv 100.0 100.0 100.0 100.0 50.0))
      ((bank200 :trading::encoding::IndicatorBank)
       (:test::feed bank0 oh 200))
-     ((ready? :bool)
+     ((ready? :wat::core::bool)
       (:trading::encoding::SmaState::ready?
         (:trading::encoding::IndicatorBank/sma200 bank200))))
     (:wat::test::assert-eq ready? true)))

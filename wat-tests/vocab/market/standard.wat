@@ -54,8 +54,8 @@
 
    (:wat::core::define
      (:test::fresh-candle
-       (high :f64) (low :f64) (close :f64)
-       (sma200 :f64) (rsi :f64) (volume-accel :f64) (roc-1 :f64)
+       (high :wat::core::f64) (low :wat::core::f64) (close :wat::core::f64)
+       (sma200 :wat::core::f64) (rsi :wat::core::f64) (volume-accel :wat::core::f64) (roc-1 :wat::core::f64)
        -> :trading::types::Candle)
      (:wat::core::let*
        (((btc :trading::types::Asset) (:test::btc))
@@ -191,16 +191,16 @@
         ((Some h) h)
         (:None (:wat::holon::Atom "unreachable"))))
 
-     ((expected-value :f64)
+     ((expected-value :wat::core::f64)
       (:trading::encoding::round-to-4
         (:wat::core::/
           (:wat::core::- 100.0 110.0) 100.0)))
      ((expected-tracker :trading::encoding::ScaleTracker)
       (:trading::encoding::ScaleTracker::update
         (:trading::encoding::ScaleTracker::fresh) expected-value))
-     ((scale :f64)
+     ((scale :wat::core::f64)
       (:trading::encoding::ScaleTracker::scale expected-tracker))
-     ((neg-scale :f64) (:wat::core::- 0.0 scale))
+     ((neg-scale :wat::core::f64) (:wat::core::- 0.0 scale))
      ((expected :wat::holon::HolonAST)
       (:wat::holon::Bind
         (:wat::holon::Atom "dist-from-high")
