@@ -72,9 +72,11 @@
 
              ((k :wat::holon::HolonAST) (:wat::holon::leaf "k"))
              ((v :wat::holon::HolonAST) (:wat::holon::leaf "v"))
-             ((_p :wat::kernel::Sent)
-              (:wat::kernel::send cache-req-tx
-                (:wat::holon::lru::HologramCacheService::Request::Put k v))))
+             ((_p :())
+              (:wat::core::result::expect -> :()
+                (:wat::kernel::send cache-req-tx
+                  (:wat::holon::lru::HologramCacheService::Request::Put k v))
+                "step-D: send Put: driver died?")))
             ()))
 
          ((_cache-join :()) (:wat::kernel::join cache-driver)))

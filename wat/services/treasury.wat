@@ -256,7 +256,10 @@
                         (:wat::core::vec :trading::treasury::Service::PaperStateEntry))))))))
            ((t' :trading::treasury::Treasury) (:wat::core::first result))
            ((resp :trading::treasury::Service::Response) (:wat::core::second result))
-           ((_send :Option<()>) (:wat::kernel::send resp-tx resp)))
+           ((_send :())
+            (:wat::core::result::expect -> :()
+              (:wat::kernel::send resp-tx resp)
+              "treasury/handle-broker-request: resp-tx disconnected — broker died?")))
           t')))))
 
 
@@ -274,13 +277,13 @@
   (:wat::core::if (:wat::core::empty? rxs) -> :()
     ()
     (:wat::core::let*
-      (((chosen :(i64,Option<trading::treasury::Service::Event>))
+      (((chosen :wat::kernel::Chosen<trading::treasury::Service::Event>)
         (:wat::kernel::select rxs))
        ((idx :wat::core::i64) (:wat::core::first chosen))
-       ((maybe :Option<trading::treasury::Service::Event>)
+       ((maybe :wat::kernel::CommResult<trading::treasury::Service::Event>)
         (:wat::core::second chosen)))
       (:wat::core::match maybe -> :()
-        ((Some event)
+        ((Ok (Some event))
           (:wat::core::let*
             (((slot :trading::treasury::Service::Slot)
               (:wat::core::match (:wat::core::get slots idx)
@@ -306,13 +309,14 @@
                       treasury event resp-tx broker-idx scope wlog))))))
             (:trading::treasury::Service/loop
               treasury' rxs slots broker-indices scope wlog)))
-        (:None
+        ((Ok :None)
           (:trading::treasury::Service/loop
             treasury
             (:wat::std::list::remove-at rxs idx)
             (:wat::std::list::remove-at slots idx)
             (:wat::std::list::remove-at broker-indices idx)
-            scope wlog))))))
+            scope wlog))
+        ((Err _died) ())))))
 
 
 ;; ─── Driver entry — constructs Treasury + telemetry inside thread ─
@@ -375,11 +379,15 @@
      ((resp-rx :trading::treasury::Service::RespRx) (:wat::core::second handle))
      ((event :trading::treasury::Service::Event)
       (:trading::treasury::Service::Event::SubmitPaper from-asset to-asset price))
-     ((_send :Option<()>) (:wat::kernel::send req-tx event)))
+     ((_send :())
+      (:wat::core::result::expect -> :()
+        (:wat::kernel::send req-tx event)
+        "treasury/submit-paper: req-tx disconnected — driver died?")))
     (:wat::core::match (:wat::kernel::recv resp-rx)
       -> :Option<trading::treasury::Receipt>
-      ((Some (:trading::treasury::Service::Response::PaperIssued r)) (Some r))
-      (_ :None))))
+      ((Ok (Some (:trading::treasury::Service::Response::PaperIssued r))) (Some r))
+      ((Ok _) :None)
+      ((Err _died) :None)))
 
 (:wat::core::define
   (:trading::treasury::Service/submit-real
@@ -391,11 +399,15 @@
      ((resp-rx :trading::treasury::Service::RespRx) (:wat::core::second handle))
      ((event :trading::treasury::Service::Event)
       (:trading::treasury::Service::Event::SubmitReal from-asset to-asset price))
-     ((_send :Option<()>) (:wat::kernel::send req-tx event)))
+     ((_send :())
+      (:wat::core::result::expect -> :()
+        (:wat::kernel::send req-tx event)
+        "treasury/submit-real: req-tx disconnected — driver died?")))
     (:wat::core::match (:wat::kernel::recv resp-rx)
       -> :Option<trading::treasury::Receipt>
-      ((Some (:trading::treasury::Service::Response::RealIssued mr)) mr)
-      (_ :None))))
+      ((Ok (Some (:trading::treasury::Service::Response::RealIssued mr))) mr)
+      ((Ok _) :None)
+      ((Err _died) :None)))
 
 (:wat::core::define
   (:trading::treasury::Service/submit-exit
@@ -407,11 +419,15 @@
      ((resp-rx :trading::treasury::Service::RespRx) (:wat::core::second handle))
      ((event :trading::treasury::Service::Event)
       (:trading::treasury::Service::Event::SubmitExit paper-id current-price))
-     ((_send :Option<()>) (:wat::kernel::send req-tx event)))
+     ((_send :())
+      (:wat::core::result::expect -> :()
+        (:wat::kernel::send req-tx event)
+        "treasury/submit-exit: req-tx disconnected — driver died?")))
     (:wat::core::match (:wat::kernel::recv resp-rx)
       -> :Option<trading::treasury::Verdict>
-      ((Some (:trading::treasury::Service::Response::ExitResolved mv)) mv)
-      (_ :None))))
+      ((Ok (Some (:trading::treasury::Service::Response::ExitResolved mv))) mv)
+      ((Ok _) :None)
+      ((Err _died) :None)))
 
 (:wat::core::define
   (:trading::treasury::Service/batch-get-paper-states
@@ -423,11 +439,15 @@
      ((resp-rx :trading::treasury::Service::RespRx) (:wat::core::second handle))
      ((event :trading::treasury::Service::Event)
       (:trading::treasury::Service::Event::BatchGetPaperStates paper-ids))
-     ((_send :Option<()>) (:wat::kernel::send req-tx event)))
+     ((_send :())
+      (:wat::core::result::expect -> :()
+        (:wat::kernel::send req-tx event)
+        "treasury/batch-get-paper-states: req-tx disconnected — driver died?")))
     (:wat::core::match (:wat::kernel::recv resp-rx)
       -> :trading::treasury::Service::PaperStateEntries
-      ((Some (:trading::treasury::Service::Response::PaperStates states)) states)
-      (_ (:wat::core::vec :trading::treasury::Service::PaperStateEntry)))))
+      ((Ok (Some (:trading::treasury::Service::Response::PaperStates states))) states)
+      ((Ok _) (:wat::core::vec :trading::treasury::Service::PaperStateEntry))
+      ((Err _died) (:wat::core::vec :trading::treasury::Service::PaperStateEntry)))))
 
 
 ;; ─── Setup — spawns the driver, returns Spawn tuple ─────────────

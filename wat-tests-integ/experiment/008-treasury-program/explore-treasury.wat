@@ -126,14 +126,15 @@
        (:wat::core::let*
          (((chosen :wat::kernel::Chosen<exp::Request>) (:wat::kernel::select req-rxs))
           ((idx :wat::core::i64) (:wat::core::first chosen))
-          ((maybe :Option<exp::Request>) (:wat::core::second chosen)))
+          ((maybe :wat::kernel::CommResult<exp::Request>) (:wat::core::second chosen)))
          (:wat::core::match maybe -> :exp::State
-           ((Some req)
+           ((Ok (Some req))
              (:wat::core::let*
                (((next :exp::State) (:exp::Service/handle req state)))
                (:exp::Service/loop req-rxs next)))
-           (:None
-             (:exp::Service/loop (:wat::std::list::remove-at req-rxs idx) state))))))
+           ((Ok :None)
+             (:exp::Service/loop (:wat::std::list::remove-at req-rxs idx) state))
+           ((Err _died) state))))
 
    ;; Per-request dispatch — match the Request variant, do its work,
    ;; return the new state. Lives as a separate define so each variant's
@@ -153,7 +154,9 @@
      (:wat::core::match req -> :exp::State
        ((:exp::Request::Ping reply-tx)
          (:wat::core::let*
-           (((_ack :wat::kernel::Sent) (:wat::kernel::send reply-tx ())))
+           (((_ack :()) (:wat::core::result::expect -> :()
+                          (:wat::kernel::send reply-tx ())
+                          "handle/Ping: reply-tx disconnected")))
            (:exp::State/new
              (:exp::State/tick-count state)
              (:wat::core::+ (:exp::State/ping-count state) 1)
@@ -174,7 +177,9 @@
            (:exp::State/closed-papers state)))
        ((:exp::Request::Snapshot reply-tx)
          (:wat::core::let*
-           (((_send :wat::kernel::Sent) (:wat::kernel::send reply-tx state)))
+           (((_send :()) (:wat::core::result::expect -> :()
+                           (:wat::kernel::send reply-tx state)
+                           "handle/Snapshot: reply-tx disconnected")))
            state))
        ;; T6: OpenPaper — first real Treasury verb.
        ;;   - Mint a new id from next-paper-id (state-as-ID-source)
@@ -187,7 +192,9 @@
             ((paper :exp::Paper) (:exp::Paper/new id amount))
             ((papers' :Vec<exp::Paper>)
              (:wat::core::conj (:exp::State/open-papers state) paper))
-            ((_send :wat::kernel::Sent) (:wat::kernel::send reply-tx id)))
+            ((_send :()) (:wat::core::result::expect -> :()
+                           (:wat::kernel::send reply-tx id)
+                           "handle/OpenPaper: reply-tx disconnected")))
            (:exp::State/new
              (:exp::State/tick-count state)
              (:exp::State/ping-count state)
@@ -221,8 +228,9 @@
                        (:wat::core::not= (:exp::Paper/id p) id))))
                   ((closed' :Vec<exp::Paper>)
                    (:wat::core::conj (:exp::State/closed-papers state) paper))
-                  ((_send :wat::kernel::Sent)
-                   (:wat::kernel::send reply-tx (Some paper))))
+                  ((_send :()) (:wat::core::result::expect -> :()
+                                 (:wat::kernel::send reply-tx (Some paper))
+                                 "handle/ClosePaper: reply-tx disconnected")))
                  (:exp::State/new
                    (:exp::State/tick-count state)
                    (:exp::State/ping-count state)
@@ -232,8 +240,9 @@
                    closed')))
              (:None
                (:wat::core::let*
-                 (((_send :wat::kernel::Sent)
-                   (:wat::kernel::send reply-tx :None)))
+                 (((_send :()) (:wat::core::result::expect -> :()
+                                 (:wat::kernel::send reply-tx :None)
+                                 "handle/ClosePaper(None): reply-tx disconnected")))
                  state)))))))
 
    ;; ─── Service constructor ─────────────────────────────────────
@@ -297,13 +306,16 @@
          ((reply-rx :exp::ReplyRx) (:wat::core::second reply-pair))
 
          ;; Send Ping carrying our reply-tx; driver acks; we recv.
-         ((_send :wat::kernel::Sent)
-          (:wat::kernel::send req-tx (:exp::Request::Ping reply-tx)))
-         ((got :wat::kernel::Sent) (:wat::kernel::recv reply-rx))
+         ((_send :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send req-tx (:exp::Request::Ping reply-tx))
+            "T1: send Ping: driver died?"))
+         ((got :wat::kernel::CommResult<()>) (:wat::kernel::recv reply-rx))
          ((_check :())
           (:wat::core::match got -> :()
-            ((Some _) ())
-            (:None (:wat::test::assert-eq "no-ack" "")))))
+            ((Ok (Some _)) ())
+            ((Ok :None) (:wat::test::assert-eq "no-ack" ""))
+            ((Err _died) (:wat::test::assert-eq "no-ack" "")))))
         ()))
 
      ;; Inner scope exited → req-tx + reply-tx dropped → driver's only
@@ -340,22 +352,29 @@
          ;; Tick first — no reply channel, no recv. Worker silently
          ;; consumes. bounded(1) means this send returns once the
          ;; worker has dequeued.
-         ((_t1 :wat::kernel::Sent)
-          (:wat::kernel::send req-tx (:exp::Request::Tick 100.0)))
+         ((_t1 :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send req-tx (:exp::Request::Tick 100.0))
+            "T2: send Tick1: driver died?"))
 
          ;; Ping — reply round-trip.
-         ((_p :wat::kernel::Sent)
-          (:wat::kernel::send req-tx (:exp::Request::Ping reply-tx)))
-         ((got :wat::kernel::Sent) (:wat::kernel::recv reply-rx))
+         ((_p :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send req-tx (:exp::Request::Ping reply-tx))
+            "T2: send Ping: driver died?"))
+         ((got :wat::kernel::CommResult<()>) (:wat::kernel::recv reply-rx))
          ((_check :())
           (:wat::core::match got -> :()
-            ((Some _) ())
-            (:None (:wat::test::assert-eq "no-ack" ""))))
+            ((Ok (Some _)) ())
+            ((Ok :None) (:wat::test::assert-eq "no-ack" ""))
+            ((Err _died) (:wat::test::assert-eq "no-ack" ""))))
 
          ;; Tick again — proves the dispatch returns to a clean state
          ;; after a reply-bearing variant.
-         ((_t2 :wat::kernel::Sent)
-          (:wat::kernel::send req-tx (:exp::Request::Tick 101.0))))
+         ((_t2 :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send req-tx (:exp::Request::Tick 101.0))
+            "T2: send Tick2: driver died?")))
         ()))
 
      ((_join :exp::State) (:wat::kernel::join driver)))
@@ -390,16 +409,31 @@
          ((reply-rx :exp::ReplyRx) (:wat::core::second reply-pair))
 
          ;; 3 Ticks (fire-and-forget — bumps tick-count each time).
-         ((_t1 :wat::kernel::Sent) (:wat::kernel::send req-tx (:exp::Request::Tick 100.0)))
-         ((_t2 :wat::kernel::Sent) (:wat::kernel::send req-tx (:exp::Request::Tick 101.0)))
-         ((_t3 :wat::kernel::Sent) (:wat::kernel::send req-tx (:exp::Request::Tick 102.0)))
+         ((_t1 :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send req-tx (:exp::Request::Tick 100.0))
+            "T3: send Tick1: driver died?"))
+         ((_t2 :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send req-tx (:exp::Request::Tick 101.0))
+            "T3: send Tick2: driver died?"))
+         ((_t3 :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send req-tx (:exp::Request::Tick 102.0))
+            "T3: send Tick3: driver died?"))
 
          ;; 2 Pings — each acks AND bumps ping-count. Recv ack between
          ;; sends so reply-tx isn't backpressuring.
-         ((_p1 :wat::kernel::Sent) (:wat::kernel::send req-tx (:exp::Request::Ping reply-tx)))
-         ((_a1 :wat::kernel::Sent) (:wat::kernel::recv reply-rx))
-         ((_p2 :wat::kernel::Sent) (:wat::kernel::send req-tx (:exp::Request::Ping reply-tx)))
-         ((_a2 :wat::kernel::Sent) (:wat::kernel::recv reply-rx)))
+         ((_p1 :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send req-tx (:exp::Request::Ping reply-tx))
+            "T3: send Ping1: driver died?"))
+         ((_a1 :wat::kernel::CommResult<()>) (:wat::kernel::recv reply-rx))
+         ((_p2 :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send req-tx (:exp::Request::Ping reply-tx))
+            "T3: send Ping2: driver died?"))
+         ((_a2 :wat::kernel::CommResult<()>) (:wat::kernel::recv reply-rx)))
         ()))
 
      ;; Inner exited; client Senders dropped; loop returned final State.
@@ -467,16 +501,25 @@
           (:wat::core::second snap-pair))
 
          ;; Drive state: 1 Tick + 1 Ping.
-         ((_t1 :wat::kernel::Sent) (:wat::kernel::send req-tx (:exp::Request::Tick 100.0)))
-         ((_p1 :wat::kernel::Sent) (:wat::kernel::send req-tx (:exp::Request::Ping ack-tx)))
-         ((_a1 :wat::kernel::Sent) (:wat::kernel::recv ack-rx))
+         ((_t1 :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send req-tx (:exp::Request::Tick 100.0))
+            "T4a: send Tick1: driver died?"))
+         ((_p1 :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send req-tx (:exp::Request::Ping ack-tx))
+            "T4a: send Ping1: driver died?"))
+         ((_a1 :wat::kernel::CommResult<()>) (:wat::kernel::recv ack-rx))
 
          ;; First Snapshot — expect (tick=1, ping=1).
-         ((_s1 :wat::kernel::Sent) (:wat::kernel::send req-tx (:exp::Request::Snapshot snap-tx)))
-         ((snap1 :Option<exp::State>) (:wat::kernel::recv snap-rx))
+         ((_s1 :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send req-tx (:exp::Request::Snapshot snap-tx))
+            "T4a: send Snapshot1: driver died?"))
+         ((snap1 :wat::kernel::CommResult<exp::State>) (:wat::kernel::recv snap-rx))
          ((_check1 :())
           (:wat::core::match snap1 -> :()
-            ((Some s)
+            ((Ok (Some s))
               (:wat::core::let*
                 (((tc :wat::core::i64) (:exp::State/tick-count s))
                  ((pc :wat::core::i64) (:exp::State/ping-count s))
@@ -487,16 +530,23 @@
                 (:wat::core::if (:wat::core::= pc 1) -> :()
                   ()
                   (:wat::test::assert-eq "snap1 ping != 1" ""))))
-            (:None (:wat::test::assert-eq "no snap1" ""))))
+            ((Ok :None) (:wat::test::assert-eq "no snap1" ""))
+            ((Err _died) (:wat::test::assert-eq "no snap1" ""))))
 
          ;; One more Tick, then Snapshot again — expect (tick=2, ping=1).
          ;; Confirms Snapshot reads LIVE state, not a frozen value.
-         ((_t2 :wat::kernel::Sent) (:wat::kernel::send req-tx (:exp::Request::Tick 101.0)))
-         ((_s2 :wat::kernel::Sent) (:wat::kernel::send req-tx (:exp::Request::Snapshot snap-tx)))
-         ((snap2 :Option<exp::State>) (:wat::kernel::recv snap-rx))
+         ((_t2 :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send req-tx (:exp::Request::Tick 101.0))
+            "T4a: send Tick2: driver died?"))
+         ((_s2 :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send req-tx (:exp::Request::Snapshot snap-tx))
+            "T4a: send Snapshot2: driver died?"))
+         ((snap2 :wat::kernel::CommResult<exp::State>) (:wat::kernel::recv snap-rx))
          ((_check2 :())
           (:wat::core::match snap2 -> :()
-            ((Some s)
+            ((Ok (Some s))
               (:wat::core::let*
                 (((tc :wat::core::i64) (:exp::State/tick-count s))
                  ((pc :wat::core::i64) (:exp::State/ping-count s))
@@ -507,7 +557,8 @@
                 (:wat::core::if (:wat::core::= pc 1) -> :()
                   ()
                   (:wat::test::assert-eq "snap2 ping != 1" ""))))
-            (:None (:wat::test::assert-eq "no snap2" "")))))
+            ((Ok :None) (:wat::test::assert-eq "no snap2" ""))
+            ((Err _died) (:wat::test::assert-eq "no snap2" "")))))
         ()))
 
      ((_join :exp::State) (:wat::kernel::join driver)))
@@ -544,52 +595,67 @@
           (:wat::core::second snap-pair))
 
          ;; Pre-Tick: Snapshot should reveal last-price = :None.
-         ((_g0 :wat::kernel::Sent)
-          (:wat::kernel::send req-tx (:exp::Request::Snapshot snap-tx)))
-         ((snap0 :Option<exp::State>) (:wat::kernel::recv snap-rx))
+         ((_g0 :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send req-tx (:exp::Request::Snapshot snap-tx))
+            "T5: send Snapshot0: driver died?"))
+         ((snap0 :wat::kernel::CommResult<exp::State>) (:wat::kernel::recv snap-rx))
          ((_check0 :())
           (:wat::core::match snap0 -> :()
-            ((Some s)
+            ((Ok (Some s))
               (:wat::core::match (:exp::State/last-price s) -> :()
                 (:None ())
                 ((Some _) (:wat::test::assert-eq "snap0 should be :None" ""))))
-            (:None (:wat::test::assert-eq "no snap0" ""))))
+            ((Ok :None) (:wat::test::assert-eq "no snap0" ""))
+            ((Err _died) (:wat::test::assert-eq "no snap0" ""))))
 
          ;; Tick at 100.0; Snapshot; expect Some 100.0.
-         ((_t1 :wat::kernel::Sent)
-          (:wat::kernel::send req-tx (:exp::Request::Tick 100.0)))
-         ((_g1 :wat::kernel::Sent)
-          (:wat::kernel::send req-tx (:exp::Request::Snapshot snap-tx)))
-         ((snap1 :Option<exp::State>) (:wat::kernel::recv snap-rx))
+         ((_t1 :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send req-tx (:exp::Request::Tick 100.0))
+            "T5: send Tick1: driver died?"))
+         ((_g1 :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send req-tx (:exp::Request::Snapshot snap-tx))
+            "T5: send Snapshot1: driver died?"))
+         ((snap1 :wat::kernel::CommResult<exp::State>) (:wat::kernel::recv snap-rx))
          ((_check1 :())
           (:wat::core::match snap1 -> :()
-            ((Some s)
+            ((Ok (Some s))
               (:wat::core::match (:exp::State/last-price s) -> :()
                 ((Some p)
                   (:wat::core::if (:wat::core::f64::= p 100.0) -> :()
                     ()
                     (:wat::test::assert-eq "snap1 last-price != 100.0" "")))
                 (:None (:wat::test::assert-eq "snap1 last-price is None" ""))))
-            (:None (:wat::test::assert-eq "no snap1" ""))))
+            ((Ok :None) (:wat::test::assert-eq "no snap1" ""))
+            ((Err _died) (:wat::test::assert-eq "no snap1" ""))))
 
          ;; Two more Ticks at 101.0 and 102.0; final Snapshot; expect 102.0.
-         ((_t2 :wat::kernel::Sent)
-          (:wat::kernel::send req-tx (:exp::Request::Tick 101.0)))
-         ((_t3 :wat::kernel::Sent)
-          (:wat::kernel::send req-tx (:exp::Request::Tick 102.0)))
-         ((_g2 :wat::kernel::Sent)
-          (:wat::kernel::send req-tx (:exp::Request::Snapshot snap-tx)))
-         ((snap2 :Option<exp::State>) (:wat::kernel::recv snap-rx))
+         ((_t2 :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send req-tx (:exp::Request::Tick 101.0))
+            "T5: send Tick2: driver died?"))
+         ((_t3 :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send req-tx (:exp::Request::Tick 102.0))
+            "T5: send Tick3: driver died?"))
+         ((_g2 :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send req-tx (:exp::Request::Snapshot snap-tx))
+            "T5: send Snapshot2: driver died?"))
+         ((snap2 :wat::kernel::CommResult<exp::State>) (:wat::kernel::recv snap-rx))
          ((_check2 :())
           (:wat::core::match snap2 -> :()
-            ((Some s)
+            ((Ok (Some s))
               (:wat::core::match (:exp::State/last-price s) -> :()
                 ((Some p)
                   (:wat::core::if (:wat::core::f64::= p 102.0) -> :()
                     ()
                     (:wat::test::assert-eq "snap2 last-price != 102.0" "")))
                 (:None (:wat::test::assert-eq "snap2 last-price is None" ""))))
-            (:None (:wat::test::assert-eq "no snap2" "")))))
+            ((Ok :None) (:wat::test::assert-eq "no snap2" ""))
+            ((Err _died) (:wat::test::assert-eq "no snap2" "")))))
         ()))
 
      ((_join :exp::State) (:wat::kernel::join driver)))
@@ -634,55 +700,66 @@
           (:wat::core::second snap-pair))
 
          ;; Three OpenPaper calls — expect IDs 0, 1, 2 in order.
-         ((_o1 :wat::kernel::Sent)
-          (:wat::kernel::send req-tx (:exp::Request::OpenPaper 100 id-tx)))
-         ((id1 :Option<i64>) (:wat::kernel::recv id-rx))
+         ((_o1 :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send req-tx (:exp::Request::OpenPaper 100 id-tx))
+            "T6: send OpenPaper1: driver died?"))
+         ((id1 :wat::kernel::CommResult<i64>) (:wat::kernel::recv id-rx))
          ((_check1 :())
           (:wat::core::match id1 -> :()
-            ((Some 0) ())
-            ((Some n)
+            ((Ok (Some 0)) ())
+            ((Ok (Some n))
               (:wat::test::assert-eq
                 (:wat::core::string::concat
                   "expected first id 0, got "
                   (:wat::core::i64::to-string n))
                 ""))
-            (:None (:wat::test::assert-eq "no id1" ""))))
+            ((Ok :None) (:wat::test::assert-eq "no id1" ""))
+            ((Err _died) (:wat::test::assert-eq "no id1" ""))))
 
-         ((_o2 :wat::kernel::Sent)
-          (:wat::kernel::send req-tx (:exp::Request::OpenPaper 200 id-tx)))
-         ((id2 :Option<i64>) (:wat::kernel::recv id-rx))
+         ((_o2 :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send req-tx (:exp::Request::OpenPaper 200 id-tx))
+            "T6: send OpenPaper2: driver died?"))
+         ((id2 :wat::kernel::CommResult<i64>) (:wat::kernel::recv id-rx))
          ((_check2 :())
           (:wat::core::match id2 -> :()
-            ((Some 1) ())
-            ((Some n)
+            ((Ok (Some 1)) ())
+            ((Ok (Some n))
               (:wat::test::assert-eq
                 (:wat::core::string::concat
                   "expected second id 1, got "
                   (:wat::core::i64::to-string n))
                 ""))
-            (:None (:wat::test::assert-eq "no id2" ""))))
+            ((Ok :None) (:wat::test::assert-eq "no id2" ""))
+            ((Err _died) (:wat::test::assert-eq "no id2" ""))))
 
-         ((_o3 :wat::kernel::Sent)
-          (:wat::kernel::send req-tx (:exp::Request::OpenPaper 300 id-tx)))
-         ((id3 :Option<i64>) (:wat::kernel::recv id-rx))
+         ((_o3 :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send req-tx (:exp::Request::OpenPaper 300 id-tx))
+            "T6: send OpenPaper3: driver died?"))
+         ((id3 :wat::kernel::CommResult<i64>) (:wat::kernel::recv id-rx))
          ((_check3 :())
           (:wat::core::match id3 -> :()
-            ((Some 2) ())
-            ((Some n)
+            ((Ok (Some 2)) ())
+            ((Ok (Some n))
               (:wat::test::assert-eq
                 (:wat::core::string::concat
                   "expected third id 2, got "
                   (:wat::core::i64::to-string n))
                 ""))
-            (:None (:wat::test::assert-eq "no id3" ""))))
+            ((Ok :None) (:wat::test::assert-eq "no id3" ""))
+            ((Err _died) (:wat::test::assert-eq "no id3" ""))))
 
          ;; Snapshot — verify open-papers length = 3 and next-paper-id = 3.
-         ((_g :wat::kernel::Sent)
-          (:wat::kernel::send req-tx (:exp::Request::Snapshot snap-tx)))
-         ((snap :Option<exp::State>) (:wat::kernel::recv snap-rx))
+         ((_g :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send req-tx (:exp::Request::Snapshot snap-tx))
+            "T6: send Snapshot: driver died?"))
+         ((snap :wat::kernel::CommResult<exp::State>) (:wat::kernel::recv snap-rx))
          ((_check-snap :())
           (:wat::core::match snap -> :()
-            ((Some s)
+            ((Ok (Some s))
               (:wat::core::let*
                 (((papers :Vec<exp::Paper>) (:exp::State/open-papers s))
                  ((len :wat::core::i64) (:wat::core::length papers))
@@ -702,7 +779,8 @@
                       "expected next-paper-id 3, got "
                       (:wat::core::i64::to-string next-id))
                     ""))))
-            (:None (:wat::test::assert-eq "no snap" "")))))
+            ((Ok :None) (:wat::test::assert-eq "no snap" ""))
+            ((Err _died) (:wat::test::assert-eq "no snap" "")))))
         ()))
 
      ((_join :exp::State) (:wat::kernel::join driver)))
@@ -755,27 +833,35 @@
           (:wat::core::second snap-pair))
 
          ;; Open three papers (amounts 100, 200, 300 → ids 0, 1, 2).
-         ((_o1 :wat::kernel::Sent)
-          (:wat::kernel::send req-tx (:exp::Request::OpenPaper 100 id-tx)))
-         ((_id1 :Option<i64>) (:wat::kernel::recv id-rx))
-         ((_o2 :wat::kernel::Sent)
-          (:wat::kernel::send req-tx (:exp::Request::OpenPaper 200 id-tx)))
-         ((_id2 :Option<i64>) (:wat::kernel::recv id-rx))
-         ((_o3 :wat::kernel::Sent)
-          (:wat::kernel::send req-tx (:exp::Request::OpenPaper 300 id-tx)))
-         ((_id3 :Option<i64>) (:wat::kernel::recv id-rx))
+         ((_o1 :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send req-tx (:exp::Request::OpenPaper 100 id-tx))
+            "T7: send OpenPaper1: driver died?"))
+         ((_id1 :wat::kernel::CommResult<i64>) (:wat::kernel::recv id-rx))
+         ((_o2 :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send req-tx (:exp::Request::OpenPaper 200 id-tx))
+            "T7: send OpenPaper2: driver died?"))
+         ((_id2 :wat::kernel::CommResult<i64>) (:wat::kernel::recv id-rx))
+         ((_o3 :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send req-tx (:exp::Request::OpenPaper 300 id-tx))
+            "T7: send OpenPaper3: driver died?"))
+         ((_id3 :wat::kernel::CommResult<i64>) (:wat::kernel::recv id-rx))
 
          ;; Close id=1 — expect Some(Paper id=1 amount=200).
-         ((_c1 :wat::kernel::Sent)
-          (:wat::kernel::send req-tx (:exp::Request::ClosePaper 1 close-tx)))
-         ;; rune:forge(bare-type) — Option<Option<T>> is recv's irreducible
-         ;; shape: outer Option = recv's "channel still open" contract;
+         ((_c1 :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send req-tx (:exp::Request::ClosePaper 1 close-tx))
+            "T7: send ClosePaper1: driver died?"))
+         ;; rune:forge(bare-type) — CommResult<Option<T>> is recv's irreducible
+         ;; shape: outer Result = recv's "channel still open" contract;
          ;; inner Option = ClosePaper's "id matched" domain answer. An
-         ;; alias would conflate two distinct Options.
-         ((closed1 :Option<Option<exp::Paper>>) (:wat::kernel::recv close-rx))
+         ;; alias would conflate two distinct layers.
+         ((closed1 :wat::kernel::CommResult<Option<exp::Paper>>) (:wat::kernel::recv close-rx))
          ((_check-c1 :())
           (:wat::core::match closed1 -> :()
-            ((Some maybe-paper)
+            ((Ok (Some maybe-paper))
               (:wat::core::match maybe-paper -> :()
                 ((Some p)
                   (:wat::core::let*
@@ -789,15 +875,18 @@
                       ()
                       (:wat::test::assert-eq "closed1 amount != 200" ""))))
                 (:None (:wat::test::assert-eq "close1 returned :None — expected Some" ""))))
-            (:None (:wat::test::assert-eq "no close1" ""))))
+            ((Ok :None) (:wat::test::assert-eq "no close1" ""))
+            ((Err _died) (:wat::test::assert-eq "no close1" ""))))
 
          ;; Snapshot — expect open=[id 0, id 2] (length 2), closed=[id 1] (length 1).
-         ((_g1 :wat::kernel::Sent)
-          (:wat::kernel::send req-tx (:exp::Request::Snapshot snap-tx)))
-         ((snap1 :Option<exp::State>) (:wat::kernel::recv snap-rx))
+         ((_g1 :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send req-tx (:exp::Request::Snapshot snap-tx))
+            "T7: send Snapshot1: driver died?"))
+         ((snap1 :wat::kernel::CommResult<exp::State>) (:wat::kernel::recv snap-rx))
          ((_check-snap1 :())
           (:wat::core::match snap1 -> :()
-            ((Some s)
+            ((Ok (Some s))
               (:wat::core::let*
                 (((open-len :wat::core::i64)
                   (:wat::core::length (:exp::State/open-papers s)))
@@ -818,21 +907,25 @@
                       "expected 1 closed paper, got "
                       (:wat::core::i64::to-string closed-len))
                     ""))))
-            (:None (:wat::test::assert-eq "no snap1" ""))))
+            ((Ok :None) (:wat::test::assert-eq "no snap1" ""))
+            ((Err _died) (:wat::test::assert-eq "no snap1" ""))))
 
          ;; Close non-existent id 99 — expect :None.
-         ((_c2 :wat::kernel::Sent)
-          (:wat::kernel::send req-tx (:exp::Request::ClosePaper 99 close-tx)))
-         ;; rune:forge(bare-type) — see closed1 above; recv's outer Option
+         ((_c2 :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send req-tx (:exp::Request::ClosePaper 99 close-tx))
+            "T7: send ClosePaper99: driver died?"))
+         ;; rune:forge(bare-type) — see closed1 above; recv's outer Result
          ;; over PaperReply's inner Option is irreducible.
-         ((closed2 :Option<Option<exp::Paper>>) (:wat::kernel::recv close-rx))
+         ((closed2 :wat::kernel::CommResult<Option<exp::Paper>>) (:wat::kernel::recv close-rx))
          ((_check-c2 :())
           (:wat::core::match closed2 -> :()
-            ((Some maybe-paper)
+            ((Ok (Some maybe-paper))
               (:wat::core::match maybe-paper -> :()
                 ((Some _) (:wat::test::assert-eq "close 99 returned Some — expected :None" ""))
                 (:None ())))
-            (:None (:wat::test::assert-eq "no close2" "")))))
+            ((Ok :None) (:wat::test::assert-eq "no close2" ""))
+            ((Err _died) (:wat::test::assert-eq "no close2" "")))))
         ()))
 
      ((_join :exp::State) (:wat::kernel::join driver)))

@@ -56,9 +56,11 @@
          ;; Send one Put to cache.
          ((k :wat::holon::HolonAST) (:wat::holon::leaf "k"))
          ((v :wat::holon::HolonAST) (:wat::holon::leaf "v"))
-         ((_p :wat::kernel::Sent)
-          (:wat::kernel::send cache-req-tx
-            (:wat::holon::lru::HologramCacheService::Request::Put k v)))
+         ((_p :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send cache-req-tx
+              (:wat::holon::lru::HologramCacheService::Request::Put k v))
+            "step-C: send Put: driver died?"))
 
          ;; Send one batch to rundb (independent — not from a closure).
          ((time-ns :wat::core::i64) (:wat::time::epoch-nanos (:wat::time::now)))

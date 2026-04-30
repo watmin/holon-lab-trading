@@ -34,20 +34,26 @@
          ;; Two Puts then one Get.
          ((k0 :wat::holon::HolonAST) (:wat::holon::leaf "k0"))
          ((v0 :wat::holon::HolonAST) (:wat::holon::leaf "v0"))
-         ((_p0 :wat::kernel::Sent)
-          (:wat::kernel::send cache-req-tx
-            (:wat::holon::lru::HologramCacheService::Request::Put k0 v0)))
+         ((_p0 :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send cache-req-tx
+              (:wat::holon::lru::HologramCacheService::Request::Put k0 v0))
+            "step-B: send Put k0: driver died?"))
 
          ((k1 :wat::holon::HolonAST) (:wat::holon::leaf "k1"))
          ((v1 :wat::holon::HolonAST) (:wat::holon::leaf "v1"))
-         ((_p1 :wat::kernel::Sent)
-          (:wat::kernel::send cache-req-tx
-            (:wat::holon::lru::HologramCacheService::Request::Put k1 v1)))
+         ((_p1 :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send cache-req-tx
+              (:wat::holon::lru::HologramCacheService::Request::Put k1 v1))
+            "step-B: send Put k1: driver died?"))
 
-         ((_g0 :wat::kernel::Sent)
-          (:wat::kernel::send cache-req-tx
-            (:wat::holon::lru::HologramCacheService::Request::Get k0 reply-tx)))
-         ((_reply :Option<Option<wat::holon::HolonAST>>)
+         ((_g0 :())
+          (:wat::core::result::expect -> :()
+            (:wat::kernel::send cache-req-tx
+              (:wat::holon::lru::HologramCacheService::Request::Get k0 reply-tx))
+            "step-B: send Get k0: driver died?"))
+         ((_reply :Result<Option<Option<wat::holon::HolonAST>>,wat::kernel::ThreadDiedError>)
           (:wat::kernel::recv reply-rx)))
         ()))
 

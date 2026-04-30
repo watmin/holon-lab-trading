@@ -66,9 +66,10 @@
        (acc :wat::core::i64)
        -> :wat::core::i64)
      (:wat::core::match (:wat::kernel::recv rx) -> :wat::core::i64
-       ((Some _v)
+       ((Ok (Some _v))
          (:trading::test::experiment::008::handles::count-recv rx (:wat::core::+ acc 1)))
-       (:None acc)))
+       ((Ok :None) acc)
+       ((Err _died) acc)))
 
    ;; Spawn entry — start the count at 0.
    (:wat::core::define
@@ -89,11 +90,14 @@
        (resp-tx :wat::kernel::QueueSender<i64>)
        -> :())
      (:wat::core::match (:wat::kernel::recv req-rx) -> :()
-       ((Some n)
+       ((Ok (Some n))
          (:wat::core::let*
-           (((_ack :wat::kernel::Sent) (:wat::kernel::send resp-tx (:wat::core::* n 2))))
+           (((_ack :()) (:wat::core::result::expect -> :()
+                          (:wat::kernel::send resp-tx (:wat::core::* n 2))
+                          "doubler-loop: resp-tx disconnected — client died?")))
            (:trading::test::experiment::008::handles::doubler-loop req-rx resp-tx)))
-       (:None ())))
+       ((Ok :None) ())
+       ((Err _died) ())))
 
    ;; Step 5 helpers — multi-channel select, count-and-prune.
    ;;
@@ -113,14 +117,15 @@
        (:wat::core::let*
          (((chosen :wat::kernel::Chosen<i64>) (:wat::kernel::select rxs))
           ((idx :wat::core::i64) (:wat::core::first chosen))
-          ((maybe :Option<i64>) (:wat::core::second chosen)))
+          ((maybe :wat::kernel::CommResult<i64>) (:wat::core::second chosen)))
          (:wat::core::match maybe -> :wat::core::i64
-           ((Some _v)
+           ((Ok (Some _v))
              (:trading::test::experiment::008::handles::select-loop-step
                rxs (:wat::core::+ acc 1)))
-           (:None
+           ((Ok :None)
              (:trading::test::experiment::008::handles::select-loop-step
-               (:wat::std::list::remove-at rxs idx) acc))))))
+               (:wat::std::list::remove-at rxs idx) acc))
+           ((Err _died) acc)))))
 
    (:wat::core::define
      (:trading::test::experiment::008::handles::run-selector
@@ -142,13 +147,18 @@
        (telem-tx :wat::kernel::QueueSender<i64>)
        -> :())
      (:wat::core::match (:wat::kernel::recv req-rx) -> :()
-       ((Some n)
+       ((Ok (Some n))
          (:wat::core::let*
-           (((_r :wat::kernel::Sent) (:wat::kernel::send resp-tx (:wat::core::* n 2)))
-            ((_t :wat::kernel::Sent) (:wat::kernel::send telem-tx n)))
+           (((_r :()) (:wat::core::result::expect -> :()
+                         (:wat::kernel::send resp-tx (:wat::core::* n 2))
+                         "telemetry-loop: resp-tx disconnected"))
+            ((_t :()) (:wat::core::result::expect -> :()
+                         (:wat::kernel::send telem-tx n)
+                         "telemetry-loop: telem-tx disconnected")))
            (:trading::test::experiment::008::handles::telemetry-loop
              req-rx resp-tx telem-tx)))
-       (:None ())))
+       ((Ok :None) ())
+       ((Err _died) ())))
 
    ;; Step 7 helpers — fan-in summer over Vec<Receiver>.
    ;;
@@ -166,14 +176,15 @@
        (:wat::core::let*
          (((chosen :wat::kernel::Chosen<i64>) (:wat::kernel::select rxs))
           ((idx :wat::core::i64) (:wat::core::first chosen))
-          ((maybe :Option<i64>) (:wat::core::second chosen)))
+          ((maybe :wat::kernel::CommResult<i64>) (:wat::core::second chosen)))
          (:wat::core::match maybe -> :wat::core::i64
-           ((Some v)
+           ((Ok (Some v))
              (:trading::test::experiment::008::handles::sum-loop-step
                rxs (:wat::core::+ acc v)))
-           (:None
+           ((Ok :None)
              (:trading::test::experiment::008::handles::sum-loop-step
-               (:wat::std::list::remove-at rxs idx) acc))))))
+               (:wat::std::list::remove-at rxs idx) acc))
+           ((Err _died) acc)))))
 
    (:wat::core::define
      (:trading::test::experiment::008::handles::run-summer
@@ -195,14 +206,15 @@
        -> :trading::test::experiment::008::handles::Tally)
      (:wat::core::match (:wat::kernel::recv rx)
        -> :trading::test::experiment::008::handles::Tally
-       ((Some v)
+       ((Ok (Some v))
          (:wat::core::let*
            (((next :trading::test::experiment::008::handles::Tally)
              (:trading::test::experiment::008::handles::Tally/new
                (:wat::core::+ (:trading::test::experiment::008::handles::Tally/count tally) 1)
                (:wat::core::+ (:trading::test::experiment::008::handles::Tally/sum tally) v))))
            (:trading::test::experiment::008::handles::tally-loop rx next)))
-       (:None tally)))
+       ((Ok :None) tally)
+       ((Err _died) tally)))
 
    ;; Spawn entry — start with a fresh-zero Tally.
    (:wat::core::define
@@ -291,9 +303,9 @@
             :trading::test::experiment::008::handles::run-counter rx))
 
          ;; bounded(1) backpressures — each send blocks until worker recv.
-         ((_s1 :wat::kernel::Sent) (:wat::kernel::send tx 10))
-         ((_s2 :wat::kernel::Sent) (:wat::kernel::send tx 20))
-         ((_s3 :wat::kernel::Sent) (:wat::kernel::send tx 30)))
+         ((_s1 :()) (:wat::core::result::expect -> :() (:wat::kernel::send tx 10) "step-3: send 10"))
+         ((_s2 :()) (:wat::core::result::expect -> :() (:wat::kernel::send tx 20) "step-3: send 20"))
+         ((_s3 :()) (:wat::core::result::expect -> :() (:wat::kernel::send tx 30) "step-3: send 30")))
         ;; let* body: yield the ProgramHandle. pair/tx/rx drop right here.
         h)))
     ;; By this point: zero local Senders. Worker's next recv → None.
@@ -337,18 +349,19 @@
             req-rx resp-tx))
 
          ;; Round-trip: send 21, recv 42.
-         ((_s :wat::kernel::Sent) (:wat::kernel::send req-tx 21))
-         ((got :Option<i64>) (:wat::kernel::recv resp-rx))
+         ((_s :()) (:wat::core::result::expect -> :() (:wat::kernel::send req-tx 21) "step-4: send 21"))
+         ((got :wat::kernel::CommResult<i64>) (:wat::kernel::recv resp-rx))
          ((_check :())
           (:wat::core::match got -> :()
-            ((Some 42) ())
-            ((Some n)
+            ((Ok (Some 42)) ())
+            ((Ok (Some n))
               (:wat::test::assert-eq
                 (:wat::core::string::concat
                   "expected 42, got "
                   (:wat::core::i64::to-string n))
                 ""))
-            (:None (:wat::test::assert-eq "no-response" "")))))
+            ((Ok :None) (:wat::test::assert-eq "no-response" ""))
+            ((Err _died) (:wat::test::assert-eq "no-response" "")))))
         h)))
     ;; All Senders/Receivers from inner scope are dropped here.
     ;; Worker's req-rx now disconnected → recv None → returns ().
@@ -393,11 +406,11 @@
 
          ;; 2 on tx1, 3 on tx2 — total 5. bounded(1) keeps backpressure
          ;; honest; worker must keep up.
-         ((_a1 :wat::kernel::Sent) (:wat::kernel::send tx1 1))
-         ((_a2 :wat::kernel::Sent) (:wat::kernel::send tx1 2))
-         ((_b1 :wat::kernel::Sent) (:wat::kernel::send tx2 10))
-         ((_b2 :wat::kernel::Sent) (:wat::kernel::send tx2 20))
-         ((_b3 :wat::kernel::Sent) (:wat::kernel::send tx2 30)))
+         ((_a1 :()) (:wat::core::result::expect -> :() (:wat::kernel::send tx1 1) "step-5: send tx1 1"))
+         ((_a2 :()) (:wat::core::result::expect -> :() (:wat::kernel::send tx1 2) "step-5: send tx1 2"))
+         ((_b1 :()) (:wat::core::result::expect -> :() (:wat::kernel::send tx2 10) "step-5: send tx2 10"))
+         ((_b2 :()) (:wat::core::result::expect -> :() (:wat::kernel::send tx2 20) "step-5: send tx2 20"))
+         ((_b3 :()) (:wat::core::result::expect -> :() (:wat::kernel::send tx2 30) "step-5: send tx2 30")))
         h)))
     (:wat::core::match (:wat::kernel::join-result handle) -> :()
       ((Ok 5) ())
@@ -445,29 +458,31 @@
             :trading::test::experiment::008::handles::telemetry-loop
             req-rx resp-tx telem-tx))
 
-         ((_s :wat::kernel::Sent) (:wat::kernel::send req-tx 21))
-         ((got-resp :Option<i64>) (:wat::kernel::recv resp-rx))
-         ((got-telem :Option<i64>) (:wat::kernel::recv telem-rx))
+         ((_s :()) (:wat::core::result::expect -> :() (:wat::kernel::send req-tx 21) "step-6: send 21"))
+         ((got-resp :wat::kernel::CommResult<i64>) (:wat::kernel::recv resp-rx))
+         ((got-telem :wat::kernel::CommResult<i64>) (:wat::kernel::recv telem-rx))
          ((_check-resp :())
           (:wat::core::match got-resp -> :()
-            ((Some 42) ())
-            ((Some n)
+            ((Ok (Some 42)) ())
+            ((Ok (Some n))
               (:wat::test::assert-eq
                 (:wat::core::string::concat
                   "expected resp 42, got "
                   (:wat::core::i64::to-string n))
                 ""))
-            (:None (:wat::test::assert-eq "no-resp" ""))))
+            ((Ok :None) (:wat::test::assert-eq "no-resp" ""))
+            ((Err _died) (:wat::test::assert-eq "no-resp" ""))))
          ((_check-telem :())
           (:wat::core::match got-telem -> :()
-            ((Some 21) ())
-            ((Some n)
+            ((Ok (Some 21)) ())
+            ((Ok (Some n))
               (:wat::test::assert-eq
                 (:wat::core::string::concat
                   "expected telem 21, got "
                   (:wat::core::i64::to-string n))
                 ""))
-            (:None (:wat::test::assert-eq "no-telem" "")))))
+            ((Ok :None) (:wat::test::assert-eq "no-telem" ""))
+            ((Err _died) (:wat::test::assert-eq "no-telem" "")))))
         h)))
     (:wat::core::match (:wat::kernel::join-result handle) -> :()
       ((Ok _) ())
@@ -529,9 +544,9 @@
          ((_finish :()) (:wat::kernel::HandlePool::finish pool))
 
          ;; Each "client" sends one value. Sum should be 100+200+300 = 600.
-         ((_a :wat::kernel::Sent) (:wat::kernel::send tx-a 100))
-         ((_b :wat::kernel::Sent) (:wat::kernel::send tx-b 200))
-         ((_c :wat::kernel::Sent) (:wat::kernel::send tx-c 300)))
+         ((_a :()) (:wat::core::result::expect -> :() (:wat::kernel::send tx-a 100) "step-7: send 100"))
+         ((_b :()) (:wat::core::result::expect -> :() (:wat::kernel::send tx-b 200) "step-7: send 200"))
+         ((_c :()) (:wat::core::result::expect -> :() (:wat::kernel::send tx-c 300) "step-7: send 300")))
         h)))
     ;; Inner scope exit: pairs, txs, rxs (local clones), pool, tx-a/b/c
     ;; all drop. Worker's three rxs all see disconnect → prune all →
@@ -572,10 +587,10 @@
           (:wat::kernel::spawn
             :trading::test::experiment::008::handles::run-tally rx))
 
-         ((_s1 :wat::kernel::Sent) (:wat::kernel::send tx 5))
-         ((_s2 :wat::kernel::Sent) (:wat::kernel::send tx 10))
-         ((_s3 :wat::kernel::Sent) (:wat::kernel::send tx 15))
-         ((_s4 :wat::kernel::Sent) (:wat::kernel::send tx 20)))
+         ((_s1 :()) (:wat::core::result::expect -> :() (:wat::kernel::send tx 5) "step-8: send 5"))
+         ((_s2 :()) (:wat::core::result::expect -> :() (:wat::kernel::send tx 10) "step-8: send 10"))
+         ((_s3 :()) (:wat::core::result::expect -> :() (:wat::kernel::send tx 15) "step-8: send 15"))
+         ((_s4 :()) (:wat::core::result::expect -> :() (:wat::kernel::send tx 20) "step-8: send 20")))
         h)))
     (:wat::core::match (:wat::kernel::join-result handle) -> :()
       ((Ok tally)
