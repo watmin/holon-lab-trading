@@ -84,17 +84,28 @@
      (OpenPaper  (amount :i64)
                  (reply-tx :wat::kernel::QueueSender<i64>))
      (ClosePaper (id :i64)
-                 (reply-tx :wat::kernel::QueueSender<Option<exp::Paper>>)))
+                 (reply-tx :exp::PaperReplyTx)))
 
    ;; Per-broker request channel typealiases.
    (:wat::core::typealias :exp::ReqTx :wat::kernel::QueueSender<exp::Request>)
    (:wat::core::typealias :exp::ReqRx :wat::kernel::QueueReceiver<exp::Request>)
    (:wat::core::typealias :exp::ReqTxPool :wat::kernel::HandlePool<exp::ReqTx>)
+   (:wat::core::typealias :exp::ReqPairs :Vec<wat::kernel::QueuePair<exp::Request>>)
    ;; Spawn — what the constructor returns. The driver's ProgramHandle
    ;; is parameterized by State (T3 lift): join-result yields the
    ;; final State so callers can read its fields.
    (:wat::core::typealias :exp::Spawn
      :(exp::ReqTxPool,wat::kernel::ProgramHandle<exp::State>))
+
+   ;; ClosePaper's reply channel — domain payload is Option<Paper>
+   ;; (None = no open position with that id). The trio recurs in T7's
+   ;; close flow and in the variant declaration above.
+   (:wat::core::typealias :exp::PaperReplyTx
+     :wat::kernel::QueueSender<Option<exp::Paper>>)
+   (:wat::core::typealias :exp::PaperReplyRx
+     :wat::kernel::QueueReceiver<Option<exp::Paper>>)
+   (:wat::core::typealias :exp::PaperReplyPair
+     :wat::kernel::QueuePair<Option<exp::Paper>>)
 
 
    ;; ─── Service driver loop ─────────────────────────────────────
@@ -234,7 +245,7 @@
    (:wat::core::define
      (:exp::Service (count :i64) -> :exp::Spawn)
      (:wat::core::let*
-       (((pairs :Vec<wat::kernel::QueuePair<exp::Request>>)
+       (((pairs :exp::ReqPairs)
          (:wat::core::map
            (:wat::core::range 0 count)
            (:wat::core::lambda ((_i :i64) -> :wat::kernel::QueuePair<exp::Request>)
@@ -730,12 +741,10 @@
          ((id-rx :wat::kernel::QueueReceiver<i64>) (:wat::core::second id-pair))
 
          ;; ClosePaper reply channel — carries Option<Paper>.
-         ((close-pair :wat::kernel::QueuePair<Option<exp::Paper>>)
+         ((close-pair :exp::PaperReplyPair)
           (:wat::kernel::make-bounded-queue :Option<exp::Paper> 1))
-         ((close-tx :wat::kernel::QueueSender<Option<exp::Paper>>)
-          (:wat::core::first close-pair))
-         ((close-rx :wat::kernel::QueueReceiver<Option<exp::Paper>>)
-          (:wat::core::second close-pair))
+         ((close-tx :exp::PaperReplyTx) (:wat::core::first close-pair))
+         ((close-rx :exp::PaperReplyRx) (:wat::core::second close-pair))
 
          ;; Snapshot channel.
          ((snap-pair :wat::kernel::QueuePair<exp::State>)
@@ -759,6 +768,10 @@
          ;; Close id=1 — expect Some(Paper id=1 amount=200).
          ((_c1 :wat::kernel::Sent)
           (:wat::kernel::send req-tx (:exp::Request::ClosePaper 1 close-tx)))
+         ;; rune:forge(bare-type) — Option<Option<T>> is recv's irreducible
+         ;; shape: outer Option = recv's "channel still open" contract;
+         ;; inner Option = ClosePaper's "id matched" domain answer. An
+         ;; alias would conflate two distinct Options.
          ((closed1 :Option<Option<exp::Paper>>) (:wat::kernel::recv close-rx))
          ((_check-c1 :())
           (:wat::core::match closed1 -> :()
@@ -810,6 +823,8 @@
          ;; Close non-existent id 99 — expect :None.
          ((_c2 :wat::kernel::Sent)
           (:wat::kernel::send req-tx (:exp::Request::ClosePaper 99 close-tx)))
+         ;; rune:forge(bare-type) — see closed1 above; recv's outer Option
+         ;; over PaperReply's inner Option is irreducible.
          ((closed2 :Option<Option<exp::Paper>>) (:wat::kernel::recv close-rx))
          ((_check-c2 :())
           (:wat::core::match closed2 -> :()

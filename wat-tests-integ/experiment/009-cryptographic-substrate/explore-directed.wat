@@ -45,33 +45,24 @@
 
    ;; Round-trip an atom-stored form back to its evaluated i64 value.
    ;;
-   ;; SUBSTRATE NOTE — corrected 2026-04-26 via arcs 065 + 066:
+   ;; SUBSTRATE NOTE — corrected 2026-04-29 via arc 102:
    ;;
    ;;   - arc 065 split polymorphic Atom into honest constructors.
-   ;;     Forms (quoted lists) now use `:wat::holon::from-watast`,
-   ;;     which makes the structural-lowering move explicit at the
-   ;;     call site. (Atom kept polymorphic for back-compat.)
-   ;;   - arc 066 made eval-ast! actually return Result<HolonAST,
-   ;;     EvalError> per its scheme. The (Ok h) arm now binds h to
-   ;;     a true HolonAST (e.g. HolonAST::I64(278) for our forms);
-   ;;     atom-value extracts the i64.
+   ;;     Forms (quoted lists) use `:wat::holon::from-watast`, making
+   ;;     the structural-lowering move explicit at the call site.
+   ;;   - arc 102 made eval-ast! polymorphic in its return scheme:
+   ;;     `:wat::WatAST -> :Result<:T, :wat::core::EvalError>`. For a
+   ;;     form whose terminal value is i64, the Ok arm binds the bare
+   ;;     i64 directly — no atom-value extraction needed.
    ;;
-   ;; The chain: HolonAST → to-watast → eval-ast! → Ok(HolonAST::I64) →
-   ;; atom-value → i64. Each step honest about its inputs and outputs.
-   ;;
-   ;; Pre-arc-065/066 history: the old helper called atom-value on the
-   ;; quoted-form HolonAST (which was a Bundle, not an Atom-wrap), so
-   ;; it errored; eval-ast!'s wrap_as_eval_result caught the error;
-   ;; the helper's (Err _) → -1 fired silently. T1 and T2 were passing
-   ;; accidentally because both sides of value-a == value-b were -1.
-   ;; T11 broke the accidental-pass because its expected value (278)
-   ;; wasn't -1, which surfaced the bug.
+   ;; The chain: HolonAST → to-watast → eval-ast! → Ok(i64) → i64.
+   ;; Each step honest about its inputs and outputs.
    (:wat::core::define
      (:exp::form->i64 (form :wat::holon::HolonAST) -> :i64)
      (:wat::core::match
        (:wat::eval-ast! (:wat::holon::to-watast form))
        -> :i64
-       ((Ok h) (:wat::core::atom-value h))
+       ((Ok v) v)
        ((Err _) -1)))))
 
 

@@ -32,6 +32,19 @@
      (count :i64)
      (sum   :i64))
 
+   ;; Channel-shape aliases per chapter 76 / arc 077 — name nested
+   ;; generic instantiations at the consumer. Each shape recurs at
+   ;; multiple call sites below; the alias makes the wire shape one
+   ;; word at every reference.
+   (:wat::core::typealias :trading::test::experiment::008::handles::Rxs
+     :Vec<wat::kernel::QueueReceiver<i64>>)
+   (:wat::core::typealias :trading::test::experiment::008::handles::Txs
+     :Vec<wat::kernel::QueueSender<i64>>)
+   (:wat::core::typealias :trading::test::experiment::008::handles::Pairs
+     :Vec<wat::kernel::QueuePair<i64>>)
+   (:wat::core::typealias :trading::test::experiment::008::handles::TxPool
+     :wat::kernel::HandlePool<wat::kernel::QueueSender<i64>>)
+
    ;; Step 1 helper — trivial fn that returns a known constant.
    (:wat::core::define
      (:trading::test::experiment::008::handles::return-42 -> :i64) 42)
@@ -92,7 +105,7 @@
    ;; loop and shut down cleanly under scope-based close.
    (:wat::core::define
      (:trading::test::experiment::008::handles::select-loop-step
-       (rxs :Vec<wat::kernel::QueueReceiver<i64>>)
+       (rxs :trading::test::experiment::008::handles::Rxs)
        (acc :i64)
        -> :i64)
      (:wat::core::if (:wat::core::empty? rxs) -> :i64
@@ -111,7 +124,7 @@
 
    (:wat::core::define
      (:trading::test::experiment::008::handles::run-selector
-       (rxs :Vec<wat::kernel::QueueReceiver<i64>>)
+       (rxs :trading::test::experiment::008::handles::Rxs)
        -> :i64)
      (:trading::test::experiment::008::handles::select-loop-step rxs 0))
 
@@ -145,7 +158,7 @@
    ;; shape will reuse this exact loop with a richer payload type.
    (:wat::core::define
      (:trading::test::experiment::008::handles::sum-loop-step
-       (rxs :Vec<wat::kernel::QueueReceiver<i64>>)
+       (rxs :trading::test::experiment::008::handles::Rxs)
        (acc :i64)
        -> :i64)
      (:wat::core::if (:wat::core::empty? rxs) -> :i64
@@ -164,7 +177,7 @@
 
    (:wat::core::define
      (:trading::test::experiment::008::handles::run-summer
-       (rxs :Vec<wat::kernel::QueueReceiver<i64>>)
+       (rxs :trading::test::experiment::008::handles::Rxs)
        -> :i64)
      (:trading::test::experiment::008::handles::sum-loop-step rxs 0))
 
@@ -238,7 +251,11 @@
       (:wat::kernel::spawn :trading::test::experiment::008::handles::boom)))
     (:wat::core::match (:wat::kernel::join-result handle) -> :()
       ((Ok _) (:wat::test::assert-eq "expected-panic-not-ok" ""))
-      ((Err (:wat::kernel::ThreadDiedError::Panic msg))
+      ;; Arc 105 widened ThreadDiedError::Panic from 1 field to 2:
+      ;;   { message :String, failure :Option<wat::kernel::Failure> }
+      ;; We assert on the message; the Failure field is structured
+      ;; assertion-payload data we don't need at this site.
+      ((Err (:wat::kernel::ThreadDiedError::Panic msg _failure))
         (:wat::test::assert-eq msg "intentional panic"))
       ((Err _) (:wat::test::assert-eq "wrong-error-variant" "")))))
 
@@ -365,7 +382,7 @@
          ((tx2 :wat::kernel::QueueSender<i64>) (:wat::core::first p2))
          ((rx2 :wat::kernel::QueueReceiver<i64>) (:wat::core::second p2))
 
-         ((rxs :Vec<wat::kernel::QueueReceiver<i64>>)
+         ((rxs :trading::test::experiment::008::handles::Rxs)
           (:wat::core::conj
             (:wat::core::conj (:wat::core::vec :wat::kernel::QueueReceiver<i64>) rx1)
             rx2))
@@ -477,19 +494,19 @@
       (:wat::core::let*
         (;; Build 3 channels. Vec<QueuePair> is the natural carrier;
          ;; map peels senders into one Vec, receivers into another.
-         ((pairs :Vec<wat::kernel::QueuePair<i64>>)
+         ((pairs :trading::test::experiment::008::handles::Pairs)
           (:wat::core::map
             (:wat::core::range 0 3)
             (:wat::core::lambda ((_i :i64) -> :wat::kernel::QueuePair<i64>)
               (:wat::kernel::make-bounded-queue :i64 1))))
 
-         ((txs :Vec<wat::kernel::QueueSender<i64>>)
+         ((txs :trading::test::experiment::008::handles::Txs)
           (:wat::core::map pairs
             (:wat::core::lambda ((p :wat::kernel::QueuePair<i64>)
                                  -> :wat::kernel::QueueSender<i64>)
               (:wat::core::first p))))
 
-         ((rxs :Vec<wat::kernel::QueueReceiver<i64>>)
+         ((rxs :trading::test::experiment::008::handles::Rxs)
           (:wat::core::map pairs
             (:wat::core::lambda ((p :wat::kernel::QueuePair<i64>)
                                  -> :wat::kernel::QueueReceiver<i64>)
@@ -497,7 +514,7 @@
 
          ;; Pool the senders. The handle pool is the explicit
          ;; bookkeeping — pop returns one, finish() panics on orphans.
-         ((pool :wat::kernel::HandlePool<wat::kernel::QueueSender<i64>>)
+         ((pool :trading::test::experiment::008::handles::TxPool)
           (:wat::kernel::HandlePool::new "step-7-summer" txs))
 
          ;; Spawn the summer with the receivers Vec.
