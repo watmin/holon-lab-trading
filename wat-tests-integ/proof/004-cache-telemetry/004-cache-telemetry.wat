@@ -96,7 +96,7 @@
                  (:wat::core::string::concat
                    "v-" (:wat::core::i64::to-string i))))
               ((_ :())
-               (:wat::std::option::expect
+               (:wat::core::option::expect -> :()
                  (:wat::kernel::send cache-req-tx
                    (:wat::holon::lru::HologramCacheService::Request::Put k v))
                  "drive-requests Put: cache-req-tx disconnected — cache thread died?")))
@@ -113,13 +113,13 @@
                    "k-" (:wat::core::i64::to-string
                          (:wat::core::- i 20)))))
               ((_ :())
-               (:wat::std::option::expect
+               (:wat::core::option::expect -> :()
                  (:wat::kernel::send cache-req-tx
                    (:wat::holon::lru::HologramCacheService::Request::Get
                      k reply-tx))
                  "drive-requests Get: cache-req-tx disconnected — cache thread died?"))
               ((_reply :Option<wat::holon::HolonAST>)
-               (:wat::std::option::expect
+               (:wat::core::option::expect -> :Option<wat::holon::HolonAST>
                  (:wat::kernel::recv reply-rx)
                  "drive-requests Get: reply-rx disconnected — cache thread didn't reply")))
              ())))))
