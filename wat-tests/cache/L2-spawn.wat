@@ -58,16 +58,14 @@
          ((vt :wat::holon::HolonAST) (:wat::holon::leaf :term-val))
 
          ;; cache-next: Put + Get
-         ((_pn :wat::kernel::Sent)
-          (:wat::kernel::send next-tx
-            (:wat::holon::lru::HologramCacheService::Request::Put kn vn)))
-         ((_gn :wat::kernel::Sent)
-          (:wat::kernel::send next-tx
-            (:wat::holon::lru::HologramCacheService::Request::Get kn reply-tx-n)))
-         ((reply-n :Option<Option<wat::holon::HolonAST>>)
-          (:wat::kernel::recv reply-rx-n))
+         ((_pn :())
+          (:wat::core::option::expect -> :() (:wat::kernel::send next-tx
+            (:wat::holon::lru::HologramCacheService::Request::Put kn vn)) "test send _pn: peer disconnected"))
+         ((_gn :())
+          (:wat::core::option::expect -> :() (:wat::kernel::send next-tx
+            (:wat::holon::lru::HologramCacheService::Request::Get kn reply-tx-n)) "test send _gn: peer disconnected"))
          ((_check-n :())
-          (:wat::core::match reply-n -> :()
+          (:wat::core::match (:wat::kernel::recv reply-rx-n) -> :()
             ((Some inner)
               (:wat::core::match inner -> :()
                 ((Some _val) ())
@@ -75,16 +73,14 @@
             (:None (:wat::test::assert-eq "next-no-reply" ""))))
 
          ;; cache-terminal: Put + Get
-         ((_pt :wat::kernel::Sent)
-          (:wat::kernel::send terminal-tx
-            (:wat::holon::lru::HologramCacheService::Request::Put kt vt)))
-         ((_gt :wat::kernel::Sent)
-          (:wat::kernel::send terminal-tx
-            (:wat::holon::lru::HologramCacheService::Request::Get kt reply-tx-t)))
-         ((reply-t :Option<Option<wat::holon::HolonAST>>)
-          (:wat::kernel::recv reply-rx-t))
+         ((_pt :())
+          (:wat::core::option::expect -> :() (:wat::kernel::send terminal-tx
+            (:wat::holon::lru::HologramCacheService::Request::Put kt vt)) "test send _pt: peer disconnected"))
+         ((_gt :())
+          (:wat::core::option::expect -> :() (:wat::kernel::send terminal-tx
+            (:wat::holon::lru::HologramCacheService::Request::Get kt reply-tx-t)) "test send _gt: peer disconnected"))
          ((_check-t :())
-          (:wat::core::match reply-t -> :()
+          (:wat::core::match (:wat::kernel::recv reply-rx-t) -> :()
             ((Some inner)
               (:wat::core::match inner -> :()
                 ((Some _val) ())
@@ -142,18 +138,16 @@
          ((v :wat::holon::HolonAST) (:wat::holon::leaf :next-payload))
 
          ;; Put k → v ONLY on cache-next.
-         ((_p :wat::kernel::Sent)
-          (:wat::kernel::send next-tx
-            (:wat::holon::lru::HologramCacheService::Request::Put k v)))
+         ((_p :())
+          (:wat::core::option::expect -> :() (:wat::kernel::send next-tx
+            (:wat::holon::lru::HologramCacheService::Request::Put k v)) "test send _p: peer disconnected"))
          ;; Get k from cache-TERMINAL — should miss; key was never
          ;; put on this cache.
-         ((_g :wat::kernel::Sent)
-          (:wat::kernel::send terminal-tx
-            (:wat::holon::lru::HologramCacheService::Request::Get k reply-tx)))
-         ((reply :Option<Option<wat::holon::HolonAST>>)
-          (:wat::kernel::recv reply-rx))
+         ((_g :())
+          (:wat::core::option::expect -> :() (:wat::kernel::send terminal-tx
+            (:wat::holon::lru::HologramCacheService::Request::Get k reply-tx)) "test send _g: peer disconnected"))
          ((_check :())
-          (:wat::core::match reply -> :()
+          (:wat::core::match (:wat::kernel::recv reply-rx) -> :()
             ((Some inner)
               (:wat::core::match inner -> :()
                 ((Some _val)
