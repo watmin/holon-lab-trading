@@ -150,6 +150,29 @@ references). Sorted by frequency:
    `:Some` / `:None` / `:Ok` / `:Err` (bare-feeling, but as
    keywords).
 
+## What the package CAN and CAN'T deliver — the colon stays
+
+Before sketching the surface, name the permanent boundary. The
+leading `:` on outer-position type annotations is wat's
+lexer-level distinction between keyword (global symbol table) and
+bare symbol (local binding). Permanent substrate requirement;
+flavor packages cannot remove it.
+
+| The package CAN | The package CAN'T |
+|---|---|
+| Drop the `wat::core::` namespace prefix via aliases (`:i64` for `:wat::core::i64`) | Drop the leading `:` on outer-position type annotations |
+| Rewrite operator heads in macro-controlled slots (`+` → `:wat::core::+` inside `defn` body) | Drop `:` from type annotations outside macro-controlled slots |
+| Provide Clojure-style `defn` / `fn` / `let` macros + container shortcuts | Erase the keyword/symbol distinction at the lexer level |
+| Re-register names like `:Some` / `:Vec<T>` as user-space aliases (post-arc-109) | Reclaim names under `:wat::*` |
+
+Bottom line: the package shrinks the FQDN namespace via aliases
+and rewrites operator heads via macros. The colon-prefix on
+outer-type annotations stays. It's the wat way.
+
+Canonical framing: see
+`~/work/holon/scratch/2026/04/009-substrate-fqdn-userspace-shorts/NOTES.md`
+§ "What's permanent vs what's temporary."
+
 ## Reading the wat-clojure-flavor preview
 
 Before:
