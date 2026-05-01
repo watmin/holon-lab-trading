@@ -219,14 +219,42 @@ on top.
 ## What the substrate decides
 
 We are intentional: wat-rs (the substrate) does NOT pick a
-flavor. It vendors FQDN. Multiple flavor packages can coexist:
+flavor. It vendors FQDN under `:wat::*` (substrate-reserved).
+**Flavor packages live under their own top-level keyword
+namespaces — NOT under `:wat::*`.** Each flavor claims its own
+prefix:
 
-- `wat-clojure-flavor` (this draft)
-- `wat-haskell-flavor` (`Maybe<T>`, `Either<E,T>`, `>>=`, etc.)
-- `wat-ml-flavor` (lowercase `option`, `result`, `list`, etc.)
+- `:clojure::*` — this package's namespace. `:clojure::Map<K,V>`,
+  `:clojure::defn`, `:clojure::reduce`, etc.
+- `:haskell::*` — Haskell-flavor package's namespace.
+  `:haskell::Maybe<T>`, `:haskell::Either<E,T>`.
+- `:ml::*` — ML-flavor namespace. `:ml::option`, `:ml::list`.
+- `:erlang::*` — Erlang-flavor namespace. `:erlang::receive`,
+  `:erlang::spawn`.
 
 Each user picks their favorite (or none) and writes wat code
-under that flavor's surface. Substrate stays canonical.
+under that flavor's prefix. Substrate stays canonical (`:wat::*`).
+
+**Cross-flavor function calls work without FFI** — once macros
+expand, the whole program is canonical wat AST and a Clojure-
+flavored function calling a Haskell-flavored helper inside an
+Erlang-flavored actor is just three ordinary function calls.
+See scratch
+`~/work/holon/scratch/2026/04/012-wat-as-polyglot-lowering-target/NOTES.md`
+§ "Cross-flavor calls — no FFI boundary" for the worked example.
+
+For the common-case "I'm a Clojure shop; give me bare `:Map`"
+ergonomics, users add a project-local typealias:
+
+```scheme
+;; In project prelude:
+(:wat::core::typealias :Map<K,V> :clojure::Map<K,V>)
+;; Now :Map<K,V> works at bare-keyword level, resolving via two
+;; alias hops to :wat::core::HashMap<K,V>.
+```
+
+When mixing flavors, code uses the flavor-prefixed forms
+explicitly (`:clojure::Map`, `:haskell::Map`).
 
 ## Cross-references
 
