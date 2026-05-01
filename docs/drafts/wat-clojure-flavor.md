@@ -1,7 +1,15 @@
-# wat-clojure-flavor — local short-name package for the lab
+# wat-clojure-flavor — the trading lab's flavor surface
 
-**Status: draft / planning.** Not yet a real package. Captured
-2026-05-01 mid-arc-109-slice-1f.
+**Status: committed plan.** Drafted 2026-05-01 mid-arc-109; commitment
+made same day after the polyglot architecture and namespace rules
+firmed up.
+
+The trading lab is the first concrete consumer of wat-rs's
+polyglot lowering architecture. The lab adopts the
+Clojure-flavored surface; the substrate stays FQDN-canonical.
+The pair becomes the proof that **wat earns its name** — wat
+hosts whatever surface a community wants, and this is the first
+demonstration in production code.
 
 ## User direction
 
@@ -15,6 +23,12 @@
 >
 > users rely on us being correct and they can compose on top of us...
 
+And later, after the polyglot framing settled (2026-05-01):
+
+> i think we're going to make the trading lab a clojure-style app...
+> ...
+> this is a compelling path.. the substrate earns it name
+
 ## The principle
 
 **The substrate (`wat-rs`) vendors only FQDN.** Verbose, honest,
@@ -22,17 +36,104 @@ correct. That's our contract with users — they know exactly what
 every name means, where it lives, what host it hits.
 
 **Ergonomic short names are user-space.** This package is the
-first proof-of-concept: the trading lab as a downstream consumer
-takes wat-rs's FQDN substrate AND its own lab-local short-name
-package, and the lab code becomes readable.
+**first proof-of-concept** of the polyglot lowering architecture
+captured in scratch
+`~/work/holon/scratch/2026/04/012-wat-as-polyglot-lowering-target/NOTES.md`:
+substrate is the canonical truth; ergonomic surfaces are layered;
+multiple flavor packages coexist via namespace separation; cross-
+flavor calls work without FFI.
 
-This validates the architectural position captured at
-`~/work/holon/scratch/2026/04/009-substrate-fqdn-userspace-shorts/NOTES.md`:
-substrate is the canonical truth; ergonomics is layered.
+The trading lab is the live demo. Once arc 109 closes, the lab's
+existing FQDN-canonical wat code migrates to the Clojure-flavored
+surface. **Same compiled output; different reading experience.**
 
-If this lab-local proof-of-concept proves itself, the package
-graduates to a vendable `wat-common-clojure-flavor` (or whatever
-name the community settles on).
+## The vision — strongly-typed Clojure as the forcing function
+
+User direction (2026-05-01):
+
+> i think the vision statement... we build the trading lab as a
+> strongly-typed-clojure -- this forces us to find gaps in the
+> substrate - this is a forcing function for completeness...
+
+**The lab is not a demo. It's the requirements engine.**
+
+Migrating the trading lab to a **strongly-typed Clojure** surface
+on top of wat-rs forces every substrate gap into the open. A real
+production-style multi-thousand-line codebase exercising the
+substrate at full breadth will surface what's missing — reader
+forms, typeclass dispatch, macro mechanics, diagnostic shapes,
+type-system corners. Each gap becomes a substrate arc.
+
+**Strongly-typed Clojure** is the framing — not just "Clojure
+ergonomics," but "Clojure expressive power on a static-type
+substrate." That's what wat uniquely offers. Most Clojure code
+is dynamically typed; most static-type FP languages don't have
+Clojure's threading-macro / data-literal / repl-friendly feel.
+The lab proves the combination is possible AND useful.
+
+The forcing-function dynamic:
+
+```
+lab module migrates → trips into substrate gap → gap becomes arc
+                                                     ↓
+substrate ships arc → lab module migration continues → next module
+```
+
+Each migrated module is a single requirements document for the
+substrate. By the time the lab is fully migrated, the substrate
+has absorbed every gap a working strongly-typed Clojure system
+encounters. **Substrate completeness measured by usage, not by
+spec.**
+
+## Why the polyglot architecture pays off here
+
+Other polyglot runtimes have FFI boundaries. JVM has JNI; .NET
+has P/Invoke; Node has N-API; WebAssembly modules have
+linear-memory ABIs. **wat has none of that.** Cross-flavor
+function calls are ordinary function calls because flavor markup
+vanishes at compile time.
+
+So the lab is more than just "wat code that reads Clojure-y."
+It demonstrates that:
+
+- The substrate's FQDN-canonical core can host multiple
+  ergonomic surfaces simultaneously
+- A team can pick the surface that matches each module's nature
+  (concurrency-heavy → Erlang flavor when that lands; pure
+  transforms → Haskell flavor; domain logic → Clojure flavor)
+- Cross-flavor interop is free — no marshalling, no boundary
+- Other communities (Erlang shops, Haskell shops, ML shops) can
+  follow the same architecture pattern when they adopt wat —
+  the lab provides the template
+
+The lab proves it for one flavor first; future labs/projects/
+external consumers can replicate the pattern for theirs.
+
+## How the lab claims its surface — namespaces
+
+**`:wat::*` is reserved for substrate** — one-way contract. The
+lab's flavor package lives under its own top-level namespace:
+
+```scheme
+;; wat-common-clojure-flavor's aliases live under :clojure::*:
+(:wat::core::typealias :clojure::Map<K,V>     :wat::core::HashMap<K,V>)
+(:wat::core::typealias :clojure::Set<T>       :wat::core::HashSet<T>)
+(:wat::core::typealias :clojure::Maybe<T>     :wat::core::Option<T>)
+
+;; Lab's project prelude pulls them up to bare-keyword level:
+(:wat::core::typealias :Map<K,V>              :clojure::Map<K,V>)
+(:wat::core::typealias :Set<T>                :clojure::Set<T>)
+(:wat::core::typealias :Maybe<T>              :clojure::Maybe<T>)
+
+;; Lab code reads:
+(defn (encode-tick (t :Tick) -> :Maybe<Vector>)
+  (let [(price :I64) (get t :price)
+        (qty   :I64) (get t :qty)]
+    (Some (encode (* price qty)))))
+```
+
+Substrate sees one canonical wat program. The lab sees Clojure-
+flavored source. Both are right, simultaneously.
 
 ## Where it lives
 
@@ -199,22 +300,68 @@ The substrate's truth doesn't change — both forms parse to the
 same internal AST. The package adds a layer of macros + aliases
 on top.
 
-## Lifecycle
+## Lifecycle — committed plan
 
-1. **Phase 0 — wait** (now). Arc 109 mid-flight; substrate isn't
-   stable yet for aliasing.
-2. **Phase 1 — lab-local prove-out.** Create
-   `holon-lab-trading/wat-clojure-flavor/` (or crates/) once arc
-   109 substantially closes. Implement the typealias + macro
-   layer. Migrate one lab subsystem (probably `wat/types/` or
-   `wat/encoding/`) to use the short forms; verify readability
-   improves; iterate.
-3. **Phase 2 — lab full migration.** Migrate all lab wat code to
-   the short forms. The lab becomes the proof-of-concept.
-4. **Phase 3 — graduation (maybe).** If the lab's experience is
-   compelling, the package graduates to `wat-common-clojure-flavor`
-   in the wat-rs ecosystem (separate repo or sibling crate).
-   Other consumers can depend on it.
+### Phase 0 — wait (now)
+
+Arc 109 mid-flight. Slices remaining: 1i (Result variants —
+in-flight), § D' (Option/Result method forms), § H (range move),
+plus three follow-ups (unit→Unit, Queue→Channel, let*→let).
+Substrate vocabulary still moving; flavor package premature.
+
+**Gate to leave Phase 0**: arc 109 substantially closes (slice
+1i ships + § D' lands + most follow-ups absorbed). FQDN
+canonical names settled. Walkers retired post-sweep.
+
+### Phase 1 — package scaffold + first lab module migration (committed)
+
+Create `holon-lab-trading/wat-clojure-flavor/` (pure-wat package,
+loaded via `(:wat::load!)` from the lab's main entry). Implement:
+
+- `:clojure::*` typealiases for the most-used substrate types
+  (`:Map<K,V>`, `:Set<T>`, `:Maybe<T>`, `:Either<E,T>`,
+  `:Vector<T>`, etc.)
+- `:clojure::*` macros for the high-level forms (`defn`, `fn`,
+  `let`, `case`, `cond`, threading macros if useful)
+- Operator alias macros (`:+`, `:-`, `:*`, `:/`, `:=`, `:<`,
+  `:>`, etc.) — keyword forms that expand to substrate FQDN
+  operator paths
+- The lab's project prelude pulls flavor aliases up to bare
+  keyword level (e.g., `(:wat::core::typealias :Map :clojure::Map)`)
+
+Migrate **one lab module** as the prove-out — probably
+`wat/types/` (smallest, most type-annotation-heavy). Verify
+readability improves; iterate on macro shapes.
+
+### Phase 2 — lab full migration (committed)
+
+Migrate every lab wat module to the Clojure-flavored surface.
+Same canonical wat output; different source experience. Lab
+runs the full trading system on the substrate via the flavor
+package.
+
+This is the **compelling-path proof**. A real production-style
+trading system with multi-thousand-line codebase running on
+wat-rs through the Clojure surface validates that the polyglot
+architecture works end-to-end.
+
+### Phase 3 — graduation (committed)
+
+Once the lab's experience matures, the package graduates to a
+vendable `wat-common-clojure-flavor` in the wat-rs ecosystem
+(separate repo or sibling crate). Other consumers depend on it.
+
+**This is also when other flavor packages become real targets.**
+The lab proves the pattern for Clojure; subsequent flavors
+(Erlang for Erlang shops, Haskell for typed-FP shops, ML for
+OCaml shops) follow the template the lab established.
+
+### Phase 4+ — community grows
+
+Each new flavor surfaces its own substrate gaps (per scratch
+012 § "Gaps from each language family"). The substrate roadmap
+becomes community-driven: which language wants to land on wat;
+which gap is cheapest to close; pick that arc.
 
 ## What the substrate decides
 
