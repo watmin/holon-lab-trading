@@ -52,18 +52,27 @@ lab gets the short forms.
 This package depends on:
 
 - **Arc 109 closing** (or substantially closing). The FQDN
-  canonical forms must be stable before we alias them. Today
-  arc 109 has shipped slices 1c (primitives), 1d (unit), 1e
-  (Option/Result/HashMap/HashSet); 1f (Vec/vec) in flight; § C
-  (Some/None/Ok/Err FQDN), § D' (Option/Result method forms),
-  § H (range move) ahead.
-- **Slice 1g** (Some/None/Ok/Err FQDN) before constructor short-
-  name macros land.
-- **Slice 1f closing** (which is mid-flight as of this draft)
-  before the `:Vec`/`:Vector` short-name aliases are stable.
+  canonical forms must be stable before we alias them.
+- **Variant constructor FQDN** (slices 1h Option / 1i Result, in
+  flight) before the macros for `Some`/`Nothing`/`Just`/etc.
+  land.
+- **Substrate parser extension for bracket-form reader macros**
+  (`[...]`, `{...}`, `#{...}`) — this is a **prerequisite arc**,
+  not yet scheduled. Without parser support, the user can't
+  write Clojure-style `(defn name [args] body)` because `[args]`
+  doesn't parse. See scratch
+  `~/work/holon/scratch/2026/04/012-wat-as-polyglot-lowering-target/NOTES.md`
+  § "Gaps from syntax — reader-level extensions" for the full
+  rationale. **One parser arc lights up the bracket forms for
+  all flavor packages** (Clojure, Haskell `[a]`, ML cons-pattern).
+
+Until the bracket-reader arc lands, this package's `defn` macro
+form will use lispier paren wrapping like `(defn (name (args ->
+:ret) body))` — still ergonomic, but less Clojure-feel than the
+final `[args]` shape.
 
 So this draft is captured now; the package gets built once arc
-109 substantially closes.
+109 substantially closes AND the bracket-reader arc ships.
 
 ## Top forms by lab-frequency (data-driven priority)
 
