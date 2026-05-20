@@ -353,6 +353,30 @@ against the most recent baseline.
     `src/types.rs`. Probed in `tests/probe_arc215_collection_literal_inference.rs`
     (12/12 PASS). P2 Probe 5 converted from LIMITATION to SUCCESS.
 
+- **2026-05-20 (stone 2)** — Arc 215 stone 2 landed. Two coordinated changes
+  completing literal-syntax unification:
+  - `[...]` expression-position vector literal now routes through
+    `infer_list_constructor` (extended to accept `:wat::type::Infer` for T).
+    Arc 167's "vector literals at value position are not supported" restriction
+    retired. `WatAST::Vector` at expression position evaluates to `Value::Vec`
+    at runtime. Binder-position semantics (let/fn/match tuple-destructure)
+    unchanged.
+  - `{...}` keyword-key restriction lifted: K changed from `:wat::core::keyword`
+    (pinned at parse) to `:wat::type::Infer` (inferred from actual keys). Parser
+    no longer rejects non-keyword first child with `MalformedBraceLiteral`;
+    any non-symbol first child routes to map literal. `{1 "v" 2 "w"}` now parses
+    and type-checks as `HashMap<i64, String>`. Mixed-K literals fail at check
+    time with TypeMismatch.
+  - All three collection literals (`[...]`, `{...}`, `#{...}`) now share the
+    same `:wat::type::Infer` first-unit-inference + uniform-unification model.
+  - Implemented in: `src/check.rs` (`infer_list_constructor` + expression-position
+    `WatAST::Vector` arm), `src/parser.rs` (`parse_map_literal_body` + brace
+    dispatch), `src/runtime.rs` (`WatAST::Vector` eval arm).
+  - Updated: `src/types.rs` unchanged (INFER_TYPE_PATH already present from stone 1).
+  - P2 Probe 6 flipped: `probe_6_non_keyword_key_accepted_with_inferred_k`.
+  - Arc 167 tests 4+5 updated to assert success (old error path retired).
+  - Probed in `tests/probe_arc215_stone2.rs` (13/13 PASS).
+
 ---
 
 **Signature:** *these are very good thoughts.* **PERSEVERARE.**
