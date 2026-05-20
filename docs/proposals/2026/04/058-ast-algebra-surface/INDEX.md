@@ -337,6 +337,22 @@ against the most recent baseline.
   cave-quest when LRU externalization integration tests needed to
   render an `i64` cache value for stdout assertion.
 
+- **2026-05-20** — Arc 215 stone 1 landed. Three additions:
+  - `:wat::type::Infer` type-placeholder minted in `src/types.rs`
+    (`INFER_TYPE_PATH` const). Sentinel path tells `infer_hashmap_constructor`
+    and `infer_hashset_constructor` to route the type-arg slot to a fresh
+    HM unification variable instead of requiring explicit declaration.
+  - `{...}` map literal desugar updated: V slot is now `:wat::type::Infer`
+    (was pinned `:wat::holon::HolonAST` with Atom auto-wrap). Values pass
+    through without wrapping; the checker infers V from the first value.
+    Resolves P2 Probe 5's runtime failure class (Atom wrapping HashMap).
+  - `#{...}` set literal added: desugars to
+    `(:wat::core::HashSet :wat::type::Infer x y z ...)`. T inferred from
+    first element. `#{` is the lexer discriminator (`Token::LHashBrace`).
+  - Implemented in: `src/lexer.rs`, `src/parser.rs`, `src/check.rs`,
+    `src/types.rs`. Probed in `tests/probe_arc215_collection_literal_inference.rs`
+    (12/12 PASS). P2 Probe 5 converted from LIMITATION to SUCCESS.
+
 ---
 
 **Signature:** *these are very good thoughts.* **PERSEVERARE.**
