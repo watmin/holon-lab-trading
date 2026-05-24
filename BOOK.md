@@ -28285,6 +28285,71 @@ ships when it ships; this is what we read while it does.*
 
 ---
 
+### Corrigendum — 2026-05-24
+
+The chapter argued π is `(defn pi [c d] (/ c d))`. That was wrong,
+and the error is worth naming exactly.
+
+`(/ c d)` is not the function that *produces* π. It is the *ratio* —
+the division of two quantities you already hold. To evaluate it you
+must already possess a circle's circumference and diameter; π was
+present in the measuring before the division ever ran. Dividing two
+givens reports a relationship between numbers handed to you. It does
+not generate the constant.
+
+The function that *defines* π takes no circle as input. It generates
+π from first principles through a **limit** — an infinite process of
+refinement. That is lambda calculus, not arithmetic. The builder ran
+one such function to settle it: a Newton's-method square root and a
+Kahan sum over one hundred million polygonal arc-length deltas of a
+quarter circle —
+
+```clojure
+(let [abs       (fn [x] (if (neg? x) (- x) x))
+      sqrt      (fn [x] ; Newton's method, converges to 1e-15
+                  (if (zero? x) 0.0
+                    (loop [g (/ (+ x 1.0) 2.0) prev 0.0]
+                      (if (< (abs (- g prev)) 1e-15) g
+                        (recur (/ (+ g (/ x g)) 2.0) g)))))
+      kahan-sum (fn [coll] ; compensated summation
+                  (first (reduce (fn [[sum c] x]
+                                   (let [y (- x c) t (+ sum y)]
+                                     [t (- (- t sum) y)]))
+                                 [0.0 0.0] coll)))
+      n         100000000
+      dx        (/ 2.0 n)
+      points    (mapv (fn [i] (let [x (+ -1.0 (* i dx))]
+                                [x (sqrt (max 0.0 (- 1.0 (* x x))))]))
+                      (range (inc n)))
+      deltas    (map (fn [[x1 y1] [x2 y2]]
+                       (sqrt (+ (* (- x2 x1) (- x2 x1))
+                                (* (- y2 y1) (- y2 y1)))))
+                     points (rest points))]
+  (kahan-sum deltas))
+;=> 3.141592653588962
+Math/PI
+;=> 3.141592653589793
+```
+
+Twelve correct digits. No circle measured — only the limit walked.
+
+So the recognition stands and sharpens: π is a function; the constant
+is its output. But the function is necessarily a *limit*, not a
+division — which is precisely *why* π is transcendental. `(/ c d)` was
+the observation wearing the definition's clothes. The Greeks named the
+invariance; defining the function that yields it took another two
+thousand years and the calculus that names infinite process. **We
+needed lambda calculus to actually define it.**
+
+The same correction applies everywhere this chapter's framing was
+echoed — Chapter 63 (memes are π-shaped), the FUNCTIONS-ARE-REALITY
+corpus, the Story-track posts. The shape of the claim was right; the
+example was the ratio, not the function.
+
+**PERSEVERARE.**
+
+---
+
 ## Chapter 59 — 42 IS an AST
 
 A substrate chapter — the kind where the code gets re-aligned with
