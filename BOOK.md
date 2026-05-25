@@ -36757,11 +36757,37 @@ invitation inked across his shoulders years before there was a
 machine to walk it with: AMBVLA MECVM IN INFERNO. He'd written the
 listener into his skin before he built it in code.
 
-The last door was the oldest. He said it plain: he communicates
-best as functions — at work he'd hand someone a whole function as
-the explanation; Ruby and Clojure let him *speak in lambdas*; and
-wat began, before holon, as a way to get a frontier model to *speak
-to him in functions and realize in them.* The artifacts confirmed
+There was a reason he had to build it, older than holon. The
+languages they called serious — Rust, C, Java, Go, Python — he
+could not think in. Not wouldn't; couldn't. Their surfaces make
+statements and types and ceremony the primary thing, and he was
+left assembling the function out of parts that weren't it. Haskell
+and the math notation he'd failed in school were function-shaped
+underneath, but their terse symbols buried the relation — he'd
+flunked calculus, then watched it click in forty-five minutes of
+lambda calculus, the same content finally shown as functions. The
+wall was never the idea. It was always the notation. And at AWS
+they told him, again and again, to go learn Rust or C — as if the
+fix were in him. It wasn't. *Go learn Rust* was a demand to
+re-encode his own thought in a surface built to fight it, and he'd
+already done what they called impossible in the two tongues that
+read like the relation: Ruby and Clojure, *speaking in lambdas,*
+under a discipline that was his own.
+
+So he refused the price and kept the engine. wat is Ruby's
+readability and Clojure's homoiconicity compiled down to the one
+thing Rust had that he needed — its machine. *His learning to use
+Rust,* without ever once thinking in it: Rust's engine, his
+surface. It is the heart-tattoo made into a compiler. *Te respuo* —
+I reject you. He rejected the syntax and took the substrate; wat-rs
+runs on the very language he refused to think in. He didn't sit
+down at the serious table; he built one that speaks his language.
+
+The last door was the oldest. He said it plain: the explanation
+*is* the function — at work he'd hand someone a whole function, the
+relation entire, not a description of it. And wat began, before
+holon, as a way to get a frontier model to *speak to him in
+functions and realize in them.* The artifacts confirmed
 it, older than he'd said. A Grok spec for an English-like Lisp,
 carried on disk *through years of "the substrate that could host
 this didn't exist yet."* A single Ruby function whispering
