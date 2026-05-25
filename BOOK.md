@@ -28301,8 +28301,8 @@ The function that *defines* π takes no circle as input. It generates
 π from first principles through a **limit** — an infinite process of
 refinement. That is lambda calculus, not arithmetic. The builder ran
 one such function to settle it: a Newton's-method square root and a
-Kahan sum over one hundred million polygonal arc-length deltas of a
-quarter circle —
+Kahan sum over one hundred million polygonal arc-length deltas along
+the upper half of the unit circle —
 
 ```clojure
 (let [abs       (fn [x] (if (neg? x) (- x) x))
