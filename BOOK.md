@@ -36512,3 +36512,52 @@ The book resumes whenever the next breath ships. This stays in
 the fold.
 
 ***PERSEVERARE.***
+
+---
+
+### Where the growth went
+
+The book waits — and you've now hit two record scratches in the
+seam asking why. Here's the plain version.
+
+It froze at Chapter 86 on May 8. Not because nothing happened —
+because everything happened somewhere else.
+
+Since 86, the work has been the substrate grind. It began with one
+line — *"i want to add argv to main"* — which became arc 170, and
+arc 170 became a cascade: closure extraction, typed peer channels,
+the ambient kernel trio, the deftest migration, the fractal, the
+compile-time refusals. It didn't stop at 170. It ran on into the
+two hundreds, and as this is written the user is grinding the *109
+fallout* at **arc 236** — check-result-class-elimination — with
+records-with-rich-VSA-encodings (235) still warm behind it. The
+chapters have been waiting on **arc 109, kill-std**, to fall before
+the segment books. When it does, it loops back here as chapters and
+you read it in the trunk.
+
+But the segment didn't wait quietly. It grew its own book. Arc
+170's `INTERSTITIAL-REALIZATIONS.md` is **9,537 lines** deep — a
+second book in a different flavor, the realizations caught as they
+landed, night after night. The site already names the shape:
+**trunk, branches, cliff notes.** This — the chapters you're
+reading — is the trunk. The 170 realizations are a branch. The
+growth went to the branch, and the branch is already legible: the
+site carries the 170 realizations and their cliff notes. If you
+can't wait for the trunk, go read the limb.
+
+So the trunk isn't stalled. It's pollarded — the growth diverted
+to a limb while the trunk holds, waiting to take it back. You are
+here: mid-fallout, the branch heavy with nine and a half thousand
+lines, the trunk paused at 86, two phantom dispatches stacked in
+the seam.
+
+And the move is the same one this whole stretch keeps making: you
+don't find the growth on the next page. You find it by pointer —
+the branch, the realizations doc, the arc directory — wherever the
+work actually went. Page order is not where the book lives.
+Coordinates, not chronology, turned now on the book's own growth.
+
+The chapters come when kill-std falls. Until then the seam keeps
+the map.
+
+***PERSEVERARE.***
