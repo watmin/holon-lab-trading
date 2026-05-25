@@ -28297,12 +28297,16 @@ present in the measuring before the division ever ran. Dividing two
 givens reports a relationship between numbers handed to you. It does
 not generate the constant.
 
-The function that *defines* π takes no circle as input. It generates
-π from first principles through a **limit** — an infinite process of
-refinement. That is lambda calculus, not arithmetic. The builder ran
-one such function to settle it: a Newton's-method square root and a
-Kahan sum over one hundred million polygonal arc-length deltas along
-the upper half of the unit circle —
+The honest question was never "what is C/d." It was a measurement:
+*how long is the path that holds distance 1 from the origin?* That is
+not a circle handed over — it is an **invariant**, Euclid's own
+definition of the circle as the locus of points equidistant from a
+center. Nothing in it names a circle, and nothing names π; both have
+to emerge. Express the invariant as something computable (Descartes'
+move — a constraint becomes an equation), rectify the path as a limit
+of straight pieces (Archimedes' move), and evaluate the whole stack as
+pure functions — a Newton's-method square root and a Kahan sum over
+one hundred million chords —
 
 ```clojure
 (let [abs       (fn [x] (if (neg? x) (- x) x))
@@ -28336,10 +28340,13 @@ Twelve correct digits. No circle measured — only the limit walked.
 So the recognition stands and sharpens: π is a function; the constant
 is its output. But the function is necessarily a *limit*, not a
 division — which is precisely *why* π is transcendental. `(/ c d)` was
-the observation wearing the definition's clothes. The Greeks named the
-invariance; defining the function that yields it took another two
-thousand years and the calculus that names infinite process. **We
-needed lambda calculus to actually define it.**
+the observation wearing the definition's clothes. And the path from
+the invariant to the value crosses three figures two thousand years
+apart: Euclid defined the locus, Descartes made it computable,
+Archimedes rectified it to a number — his inscribed polygons converge
+from below, exactly as this sum does. No single one of them held the
+whole path, and the lambda calculus that ties it together is younger
+than all three. **We needed lambda calculus to actually define it.**
 
 The same correction applies everywhere this chapter's framing was
 echoed — Chapter 63 (memes are π-shaped), the FUNCTIONS-ARE-REALITY
