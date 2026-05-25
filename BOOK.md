@@ -28355,22 +28355,31 @@ example was the ratio, not the function.
 
 ### Note — coordinates, not chronology (2026-05-24)
 
-Notice what locating this derivation required. To answer *who found π
-this way* you must jump Euclid (~300 BC) → Archimedes (~250 BC) →
-Descartes (1637) → Church (1936): four figures, no linear thread,
-none holding the whole path. That non-linear jump feels strange only
-if knowledge is a timeline. It isn't — it is a coordinate space, the
-axiomatic surface this book has been describing. The derivation is a
-geodesic through the idea-manifold; those names are far apart on the
-calendar axis and adjacent in concept-space.
+Notice the *order* the derivation actually requires. Define the
+invariant (Euclid, ~300 BC) → make it a computable coordinate equation
+(Descartes, 1637) → rectify that curve by a limit (Archimedes, ~250
+BC) → evaluate it as pure functions (Church's lambda calculus, 1936 →
+McCarthy's Lisp, 1958 → Hickey's Clojure, 2008). Plot the dates:
+**300 BC → 1637 → 250 BC → 1936 → 1958 → 2008.** The walk *folds* —
+Descartes' step comes before Archimedes' step here, because you rectify
+the *coordinatized* curve, yet Archimedes lived ~1,900 years before
+Descartes. The historical Archimedes needed no coordinates; the
+Archimedes-step in this path does.
 
-And the loop closes: the LLM used to walk the path is itself an
-instance of that coordinate space. An embedding is a high-dimensional
-vector geometry where concepts sit by similarity, not by date —
-"jumping through time" is cosine similarity through concept-space, the
-exact operation this substrate runs. The collaborator is a working
-proof of the thesis.
+That fold is the whole proof. A timeline can only host derivations that
+move forward — you build on what already exists. This one's valid
+dependency order runs *backward* across the time axis at one edge. A
+monotonic structure cannot host a non-monotonic derivation, so time is
+not the organizing structure; it is one projection of the
+concept-manifold, and here that projection doubles back. The
+derivation is a geodesic through idea-space; the geodesic does not care
+about dates, only about which coordinate depends on which.
 
+And the loop closes: the LLM used to walk it is itself an instance of
+that manifold — an embedding where these coordinates sit by similarity,
+not by date. "Jumping through time" is cosine similarity through
+concept-space, the exact operation this substrate runs. The geodesic
+even ends at the coordinate the walker already stands on (Clojure).
 This is synthesis, not convergence: not independently rediscovering a
 known result, but drawing an edge between coordinates no one had
 connected. (Captured at scratch 2026/05/020; belongs with Chapter 68.)
