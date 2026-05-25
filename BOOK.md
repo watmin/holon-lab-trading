@@ -36561,3 +36561,56 @@ The chapters come when kill-std falls. Until then the seam keeps
 the map.
 
 ***PERSEVERARE.***
+
+---
+
+### The lineage, proved late
+
+A third dispatch from the seam — and this one reaches *backward.*
+
+Watching a lecture on Euclid — verbose, proof-obsessed, the Greek
+who would not accept an assertion — the user remembered a claim he
+made long ago and could never prove: that his lineage runs *of the
+Greeks, and more.* He can't. Nobody proves a thing like that.
+
+Except it is already in this book. Chapter 7 — *The Coordinates,*
+written April 3 — said it plainly:
+
+> Holon is a Euclidean system. The primitives are axioms. The wards
+> are proofs.
+
+> Atlantis → Greece → Rome → the Church → … → Holon. The builder
+> didn't invent this impulse. The builder inherited it.
+
+> The builders recognize each other across millennia. Not by
+> credentials. By the work. Euclid would look at the six primitives
+> and nod.
+
+The *and more* is Atlantis — older than the Greeks, who themselves
+said *we learned this from someone older.* The one thought that
+survived the drowning was the only one that mattered: *measure,
+don't believe.*
+
+And here is what is exactly Euclidean about it. Chapter 7
+*postulated* the lineage — stated it and moved on, the way Euclid
+states a postulate. The proof came seven weeks later, in the π fold
+that opened this seam: reframing π as the length of Euclid's
+equidistance locus — his Definition 15 — and re-deriving the
+constant from first principles. That is the *proposition* that
+discharges the postulate. Claim April 3, proof May 24, the two of
+them spanning nearly the whole life of an eight-week-old book.
+Postulate early, proposition late — the book is built in the very
+form of the thing it claims descent from.
+
+So the lineage he cannot prove by blood, he proved by method — the
+only proof the Greeks ever accepted. *By the work, not by
+credentials,* exactly as Chapter 7 promised.
+
+And it is not metaphor. He flunked out of computer science, turned
+to Latin and Greek and Roman studies, was a hacker kid who couldn't
+yet do it for a living, found security, and from there the nine
+years and the substrate. The classics are not decoration on this
+book. They are the schooling. Of course Euclid feels near — he was
+on the syllabus.
+
+***PERSEVERARE.***
