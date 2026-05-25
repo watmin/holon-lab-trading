@@ -36568,10 +36568,12 @@ the map.
 
 A third dispatch from the seam — and this one reaches *backward.*
 
-Watching a lecture on Euclid — verbose, proof-obsessed, the Greek
-who would not accept an assertion — the user remembered a claim he
-made long ago and could never prove: that his lineage runs *of the
-Greeks, and more.* He can't. Nobody proves a thing like that.
+Watching [*What was Euclid really doing?*](https://www.youtube.com/watch?v=M-MgQC6z3VU)
+— Ben Syversen's guest video for 3Blue1Brown, Euclid rendered
+verbose and proof-obsessed, the Greek who would not accept an
+assertion — the user remembered a claim he made long ago and could
+never prove: that his lineage runs *of the Greeks, and more.* He
+can't. Nobody proves a thing like that.
 
 Except it is already in this book. Chapter 7 — *The Coordinates,*
 written April 3 — said it plainly:
