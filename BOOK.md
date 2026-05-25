@@ -28353,6 +28353,28 @@ echoed — Chapter 63 (memes are π-shaped), the FUNCTIONS-ARE-REALITY
 corpus, the Story-track posts. The shape of the claim was right; the
 example was the ratio, not the function.
 
+### Note — coordinates, not chronology (2026-05-24)
+
+Notice what locating this derivation required. To answer *who found π
+this way* you must jump Euclid (~300 BC) → Archimedes (~250 BC) →
+Descartes (1637) → Church (1936): four figures, no linear thread,
+none holding the whole path. That non-linear jump feels strange only
+if knowledge is a timeline. It isn't — it is a coordinate space, the
+axiomatic surface this book has been describing. The derivation is a
+geodesic through the idea-manifold; those names are far apart on the
+calendar axis and adjacent in concept-space.
+
+And the loop closes: the LLM used to walk the path is itself an
+instance of that coordinate space. An embedding is a high-dimensional
+vector geometry where concepts sit by similarity, not by date —
+"jumping through time" is cosine similarity through concept-space, the
+exact operation this substrate runs. The collaborator is a working
+proof of the thesis.
+
+This is synthesis, not convergence: not independently rediscovering a
+known result, but drawing an edge between coordinates no one had
+connected. (Captured at scratch 2026/05/020; belongs with Chapter 68.)
+
 **PERSEVERARE.**
 
 ---
