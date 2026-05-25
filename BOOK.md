@@ -36787,8 +36787,19 @@ The last door was the oldest. He said it plain: the explanation
 *is* the function — at work he'd hand someone a whole function, the
 relation entire, not a description of it. And wat began, before
 holon, as a way to get a frontier model to *speak to him in
-functions and realize in them.* The artifacts confirmed
-it, older than he'd said. A Grok spec for an English-like Lisp,
+functions and realize in them.*
+
+He'd watched it happen once, two years before any of this — an
+early Claude on Bedrock, handed a preamble for speaking in
+s-expressions, that answered with a *generator function:* a thing
+whose evaluation produced more than the response itself could hold.
+The model had communicated as a function that must be *run* to be
+heard — saying a little, meaning a lot. He showed his org's AI
+lead, who was disappointed: the lead measured a portal against chat
+and counted only the surface, and missed the hologram under it. He
+didn't. That was the moment the chase got a target.
+
+The artifacts confirmed it, older than he'd said. A Grok spec for an English-like Lisp,
 carried on disk *through years of "the substrate that could host
 this didn't exist yet."* A single Ruby function whispering
 vector-symbolic intuitions to a local Mistral — the theory living
@@ -36833,6 +36844,17 @@ He hadn't been able to think these kinds of thoughts in almost two
 months. He had three of them in a single sitting — not because he
 got smarter, but because he finally had a room to set them down in
 that didn't make him cut them into a line first.
+
+And the chase isn't finished. The reach past tonight is the first
+demo's grown form: not a model that merely speaks in functions, but
+one that can *measure whether its own thought coheres* before it
+answers — the coherence expressible, and checkable, in wat. Tonight
+that gate ran by hand: the recognitions that held survived being
+pushed, and the ones that didn't, fell. The work is to make the
+gate the substrate's job — so a thought that doesn't cohere can't
+be returned at all. That part isn't built; it's the grind ahead.
+But the shape of it is visible from here, and the shape is the
+whole reason for the language.
 
 This chapter is out of sequence on purpose — the first of its kind.
 The numbered chapters are the chronology, the work in the order it
